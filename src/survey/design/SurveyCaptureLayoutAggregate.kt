@@ -6,8 +6,9 @@ import java.util.*
 
 data class SurveyCaptureLayoutAggregate(
     override val aggregateId: UUID,
-    val sectionsForIntendedPurpose: Map<IntendedPurpose, List<Section>> = emptyMap<IntendedPurpose, List<Section>>().withDefault { emptyList() },
-    val demographicSectionsPlacement: DemographicSectionPosition = DemographicSectionPosition.bottom
+    val sectionsForIntendedPurpose: Map<IntendedPurpose, List<Section>> = emptyMap(),
+    val demographicSectionsPlacement: DemographicSectionPosition = DemographicSectionPosition.bottom,
+    val questions: List<UUID> = emptyList()
 ) : Aggregate<SurveyCaptureLayoutUpdateCommand, SurveyCaptureLayoutUpdateEvent, SurveyCaptureLayoutError, SurveyCaptureLayoutAggregate> {
 
     companion object : AggregateConstructor<Nothing, SurveyCaptureLayoutCreationEvent, SurveyCaptureLayoutError, SurveyCaptureLayoutAggregate> {
@@ -22,78 +23,107 @@ data class SurveyCaptureLayoutAggregate(
 
     override fun update(event: SurveyCaptureLayoutUpdateEvent): SurveyCaptureLayoutAggregate = when(event) {
         is SectionAdded -> with(event) {
-            moveSection(Section(sectionId, name.toMap(), shortDescription.toMap(), longDescription.toMap(), intendedPurpose, code), positionedAfterSectionId)
+            val section = Section(sectionId, name.toMap(), shortDescription.toMap(), longDescription.toMap(), intendedPurpose, code)
+            val positionedAfterSection = event.positionedAfterSectionId?.let { sectionFor(it) }
+            positionSection(section, positionedAfterSection)
         }
         is SectionMoved -> {
-            moveSection(sectionFor(event.sectionId), event.positionedAfterSectionId)
+            val section = sectionFor(event.sectionId)
+            val positionedAfterSection = event.positionedAfterSectionId?.let { sectionFor(it) }
+            positionSection(section, positionedAfterSection)
         }
         is SectionRemoved -> {
-            updateSection(sectionFor(event.sectionId).copy(
-                status = Status.removed
-            ))
+            val section = sectionFor(event.sectionId)
+            replaceSection(section, section.copy(status = Status.removed))
         }
         is SectionRestored -> {
-            updateSection(sectionFor(event.sectionId).copy(
-                status = Status.active
-            ))
+            val section = sectionFor(event.sectionId)
+            replaceSection(section, section.copy(status = Status.active))
         }
         is SectionRenamed -> {
             val section = sectionFor(event.sectionId)
-            updateSection(section.copy(
-                name = section.name + (event.locale to event.name)
-            ))
+            replaceSection(section, section.copy(name = section.name + (event.locale to event.name)))
         }
         is SectionShortDescriptionChanged -> {
             val section = sectionFor(event.sectionId)
-            updateSection(section.copy(shortDescription = section.shortDescription + (event.locale to event.text)))
+            replaceSection(section, section.copy(shortDescription = section.shortDescription + (event.locale to event.text)))
         }
         is SectionLongDescriptionChanged -> {
             val section = sectionFor(event.sectionId)
-            updateSection(section.copy(longDescription = section.longDescription + (event.locale to event.text)))
+            replaceSection(section, section.copy(longDescription = section.longDescription + (event.locale to event.text)))
         }
         is SectionDescriptionChanged -> {
             val section = sectionFor(event.sectionId)
-            updateSection(section.copy(
+            replaceSection(
+                section,
+                section.copy(
                 shortDescription = section.shortDescription + (event.locale to event.shortDescription),
                 longDescription = section.longDescription + (event.locale to event.longDescription)
             ))
         }
         is SectionDescriptionsRemoved -> {
             val section = sectionFor(event.sectionId)
-            updateSection(section.copy(
+            replaceSection(
+                section,
+                section.copy(
                 shortDescription = emptyMap(),
                 longDescription = emptyMap()
             ))
         }
-        is QuestionPositioned -> TODO()
+        is QuestionPositioned -> {
+            val section = sectionFor(event.sectionId)
+            positionQuestion(section, event.questionId, event.positionedAfterQuestionId)
+
+        }
         is DemographicSectionsPositionedAtTop -> {
             this.copy(demographicSectionsPlacement = DemographicSectionPosition.top)
         }
         is DemographicSectionsPositionedAtBottom  -> {
             this.copy(demographicSectionsPlacement = DemographicSectionPosition.bottom)
         }
-        is QuestionHiddenFromCaptureCommand -> TODO()
+        is QuestionHiddenFromCaptureCommand -> {
+            val section = sectionFor { it.questions.contains(event.questionId) }
+            replaceSection(
+                section,
+                section.copy(
+                    questions = questions - event.questionId
+                ))
+        }
     }
 
     private fun sectionFor(sectionId: UUID): Section {
-        return sectionsForIntendedPurpose.values.flatten().first { it.sectionId == sectionId }
+        return sectionFor { it.sectionId == sectionId }
     }
 
-    // TODO do this as extension functions
-    private fun updateSection(section: Section): SurveyCaptureLayoutAggregate {
+    private fun sectionFor(predicate: (Section) -> Boolean): Section {
+        return sectionsForIntendedPurpose.values.flatten().first(predicate)
+    }
+
+    private fun replaceSection(section: Section, replacement: Section): SurveyCaptureLayoutAggregate {
         val sections = sectionsForIntendedPurpose.getValue(section.intendedPurpose)
-        val index = sections.indexOfFirst { it.sectionId == section.sectionId }
-        val positionedAfterSectionId = if (index == 0) null else sections[index].sectionId
-        return moveSection(section, positionedAfterSectionId)
+        val updated = sections.replace(section, replacement)
+        return this.copy(
+            sectionsForIntendedPurpose = sectionsForIntendedPurpose + (section.intendedPurpose to updated)
+        )
     }
 
-    // TODO do this as extension functions
-    private fun moveSection(section: Section, positionedAfterSectionId: UUID?): SurveyCaptureLayoutAggregate {
-        val sections = sectionsForIntendedPurpose.getValue(section.intendedPurpose).filter { it.sectionId == section.sectionId }
-        val index = sections.indexOfFirst { it.sectionId == positionedAfterSectionId } + 1
-        val updated = sections.subList(0, index) + section + sections.subList(index + 1, sections.size)
+    private fun positionSection(section: Section, positionedAfterSection: Section?): SurveyCaptureLayoutAggregate {
+        val sections = sectionsForIntendedPurpose.getOrDefault(section.intendedPurpose, emptyList())
+        val updated = sections.moveAfter(section, positionedAfterSection)
         return this.copy(
-            sectionsForIntendedPurpose = (sectionsForIntendedPurpose + (section.intendedPurpose to updated)).withDefault { emptyList() }
+            sectionsForIntendedPurpose = sectionsForIntendedPurpose + (section.intendedPurpose to updated)
+        )
+    }
+
+    private fun positionQuestion(section: Section, questionId: UUID, positionedAfterQuestionId: UUID?): SurveyCaptureLayoutAggregate {
+        val sections = sectionsForIntendedPurpose.getOrDefault(section.intendedPurpose, emptyList())
+        val updated = sections.replace(
+            section,
+            section.copy(questions = section.questions.moveAfter(questionId, positionedAfterQuestionId))
+        )
+        return this.copy(
+            sectionsForIntendedPurpose = sectionsForIntendedPurpose + (section.intendedPurpose to updated),
+            questions = questions + questionId
         )
     }
 
@@ -329,6 +359,22 @@ data class LocalizedText(val text: String, val locale: Locale) {
 }
 
 fun List<LocalizedText>.toMap(): Map<Locale, String> = this.map { it.locale to it.text }.toMap()
+
+fun <T> List<T>.moveAfter(item: T, after: T?): List<T> {
+    val removed = this - item
+    val index = if (after != null) removed.indexOf(after) + 1 else 0
+    return removed.insertAt(item, index)
+}
+
+fun <T> List<T>.replace(item: T, replacement: T): List<T> {
+    val index = this.indexOf(item)
+    val removed = this - item
+    return removed.insertAt(replacement, index)
+}
+
+fun <T> List<T>.insertAt(item: T, index: Int): List<T> {
+    return this.subList(0, index) + item + this.subList(index + 1, this.size)
+}
 
 const val MAX_TEXT_SIZE = 2000
 
