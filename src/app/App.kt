@@ -3,10 +3,10 @@ package app
 import eventsourcing.AggregateConstructor
 import eventsourcing.AggregateRootRegistry
 import eventsourcing.Error
-import survey.SurveyAggregate
-import survey.SurveyCreationCommand
-import survey.SurveyCreationEvent
-import survey.SurveyError
+import survey.design.SurveyAggregate
+import survey.design.SurveyCreationCommand
+import survey.design.SurveyCreationEvent
+import survey.design.SurveyError
 import thing.CreateThing
 import thing.ThingAggregate
 import thing.ThingCreationCommand
