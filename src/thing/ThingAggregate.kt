@@ -17,13 +17,13 @@ sealed class ThingUpdateEvent : UpdateEvent
 data class Tweaked(val tweak: String) : ThingUpdateEvent()
 object Bopped : ThingUpdateEvent()
 
-data class ThingAggregate(override val aggregateId: UUID, val tweaks: List<String> = emptyList(), val bops: List<Bopped> = emptyList()) : Aggregate<ThingUpdateCommand, ThingUpdateEvent, Error, ThingAggregate> {
-    companion object : AggregateConstructor<ThingCreationCommand, ThingCreationEvent, Error, ThingAggregate> {
+data class ThingAggregate(override val aggregateId: UUID, val tweaks: List<String> = emptyList(), val bops: List<Bopped> = emptyList()) : Aggregate<ThingUpdateCommand, ThingUpdateEvent, CommandError, ThingAggregate> {
+    companion object : AggregateConstructor<ThingCreationCommand, ThingCreationEvent, CommandError, ThingAggregate> {
         override fun create(event: ThingCreationEvent): ThingAggregate = when(event) {
             is ThingCreated -> ThingAggregate(event.aggregateId)
         }
 
-        override fun handle(command: ThingCreationCommand): Result<CreationEvent, Error> = when(command) {
+        override fun handle(command: ThingCreationCommand): Result<CreationEvent, CommandError> = when(command) {
             is CreateThing -> Result.Success(ThingCreated(command.aggregateId))
         }
     }
@@ -33,7 +33,7 @@ data class ThingAggregate(override val aggregateId: UUID, val tweaks: List<Strin
         Bopped -> this.copy(bops = bops + Bopped)
     }
 
-    override fun handle(command: ThingUpdateCommand): Result<ThingUpdateEvent, Error> = when(command) {
+    override fun handle(command: ThingUpdateCommand): Result<ThingUpdateEvent, CommandError> = when(command) {
         is Tweak -> Result.Success(Tweaked(command.tweak))
         is Bop -> Result.Success(Bopped)
     }

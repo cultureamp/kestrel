@@ -1,23 +1,32 @@
 package survey.design
 
-import eventsourcing.*
-import java.lang.RuntimeException
-import java.util.*
+import eventsourcing.Aggregate
+import eventsourcing.AggregateConstructor
+import eventsourcing.CreationEvent
+import eventsourcing.Either
+import eventsourcing.Right
+import eventsourcing.UpdateCommand
+import eventsourcing.UpdateEvent
+import eventsourcing.CommandError
+import java.util.Date
+import java.util.UUID
+
 
 data class SurveyCaptureLayoutAggregate(
     override val aggregateId: UUID,
     val sectionsForIntendedPurpose: Map<IntendedPurpose, List<Section>> = emptyMap(),
     val demographicSectionsPlacement: DemographicSectionPosition = DemographicSectionPosition.bottom,
     val questions: List<UUID> = emptyList()
-) : Aggregate<SurveyCaptureLayoutUpdateCommand, SurveyCaptureLayoutUpdateEvent, SurveyCaptureLayoutError, SurveyCaptureLayoutAggregate> {
+) : Aggregate<SurveyCaptureLayoutUpdateCommand, SurveyCaptureLayoutUpdateEvent, SurveyCaptureLayoutCommandError, SurveyCaptureLayoutAggregate> {
 
-    companion object : AggregateConstructor<Nothing, SurveyCaptureLayoutCreationEvent, SurveyCaptureLayoutError, SurveyCaptureLayoutAggregate> {
+    companion object :
+        AggregateConstructor<SurveyCreationCommand, SurveyCaptureLayoutCreationEvent, SurveyCaptureLayoutCommandError, SurveyCaptureLayoutAggregate> {
         override fun create(event: SurveyCaptureLayoutCreationEvent): SurveyCaptureLayoutAggregate = when(event) {
             is Generated -> SurveyCaptureLayoutAggregate(event.aggregateId)
         }
 
-        override fun handle(command: Nothing): Result<CreationEvent, SurveyCaptureLayoutError> {
-            throw RuntimeException("Figure out how this is created")
+        override fun handle(command: SurveyCreationCommand): Either<SurveyCaptureLayoutCommandError, List<SurveyCaptureLayoutCreationEvent>> = when(command) {
+            is Create -> Right.list(Generated(command.surveyCaptureLayoutAggregateId, command.aggregateId, command.createdAt))
         }
     }
 
@@ -127,7 +136,7 @@ data class SurveyCaptureLayoutAggregate(
         )
     }
 
-    override fun handle(command: SurveyCaptureLayoutUpdateCommand): Result<SurveyCaptureLayoutUpdateEvent, SurveyCaptureLayoutError> = when(command) {
+    override fun handle(command: SurveyCaptureLayoutUpdateCommand): Either<SurveyCaptureLayoutCommandError, List<SurveyCaptureLayoutUpdateEvent>> = when(command) {
         is AddSection -> TODO()
         is MoveSection -> TODO()
         is RemoveSection -> TODO()
@@ -325,27 +334,27 @@ data class QuestionHiddenFromCaptureCommand(
     val hiddenAt: Date
 ) : SurveyCaptureLayoutUpdateEvent()
 
-sealed class SurveyCaptureLayoutError : Error
-sealed class AlreadyActionedError : SurveyCaptureLayoutError()
-object DemographicSectionsAlreadyPositioned : SurveyCaptureLayoutError()
-object DescriptionsAlreadyChangedException :  AlreadyActionedError()
-object ShortDescriptionAlreadyChangedException :  AlreadyActionedError()
-object LongDescriptionAlreadyChangedException :  AlreadyActionedError()
-object InvalidOrderForSectionsException :  SurveyCaptureLayoutError()
-object InvalidSectionIdException :  SurveyCaptureLayoutError()
-object RenameAlreadyActionedException :  AlreadyActionedError()
-object SectionAlreadyAddedException :  AlreadyActionedError()
-object SectionAlreadyMoved :  AlreadyActionedError()
-object SectionAlreadyRemovedException :  AlreadyActionedError()
-object SectionAlreadyRestoredException :  AlreadyActionedError()
-object SectionCodeNotUniqueException :  SurveyCaptureLayoutError()
-object SectionDescriptionsAlreadyRemoved :  AlreadyActionedError()
-object SectionNotFoundException :  SurveyCaptureLayoutError()
-object SectionHasDifferentIntendedPurpose :  SurveyCaptureLayoutError()
-object QuestionAlreadyInPosition :  AlreadyActionedError()
-object QuestionNotFoundException :  SurveyCaptureLayoutError()
-object QuestionAlreadyRemovedFromSectionException :  AlreadyActionedError()
-object PositionedAfterQuestionInWrongSection :  SurveyCaptureLayoutError()
+sealed class SurveyCaptureLayoutCommandError : CommandError
+sealed class AlreadyActionedCommandError : SurveyCaptureLayoutCommandError()
+object DemographicSectionsAlreadyPositioned : SurveyCaptureLayoutCommandError()
+object DescriptionsAlreadyChangedException :  AlreadyActionedCommandError()
+object ShortDescriptionAlreadyChangedException :  AlreadyActionedCommandError()
+object LongDescriptionAlreadyChangedException :  AlreadyActionedCommandError()
+object InvalidOrderForSectionsException :  SurveyCaptureLayoutCommandError()
+object InvalidSectionIdException :  SurveyCaptureLayoutCommandError()
+object RenameAlreadyActionedException :  AlreadyActionedCommandError()
+object SectionAlreadyAddedException :  AlreadyActionedCommandError()
+object SectionAlreadyMoved :  AlreadyActionedCommandError()
+object SectionAlreadyRemovedException :  AlreadyActionedCommandError()
+object SectionAlreadyRestoredException :  AlreadyActionedCommandError()
+object SectionCodeNotUniqueException :  SurveyCaptureLayoutCommandError()
+object SectionDescriptionsAlreadyRemoved :  AlreadyActionedCommandError()
+object SectionNotFoundException :  SurveyCaptureLayoutCommandError()
+object SectionHasDifferentIntendedPurpose :  SurveyCaptureLayoutCommandError()
+object QuestionAlreadyInPosition :  AlreadyActionedCommandError()
+object QuestionNotFoundException :  SurveyCaptureLayoutCommandError()
+object QuestionAlreadyRemovedFromSectionException :  AlreadyActionedCommandError()
+object PositionedAfterQuestionInWrongSection :  SurveyCaptureLayoutCommandError()
 
 enum class IntendedPurpose {
     standard, demographic

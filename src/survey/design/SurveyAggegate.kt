@@ -1,18 +1,28 @@
 package survey.design
 
-import eventsourcing.*
+import eventsourcing.Aggregate
+import eventsourcing.AggregateConstructor
+import eventsourcing.CommandError
+import eventsourcing.CreationCommand
+import eventsourcing.CreationEvent
+import eventsourcing.Either
+import eventsourcing.Left
+import eventsourcing.Right
+import eventsourcing.UpdateCommand
+import eventsourcing.UpdateEvent
 import java.util.UUID
 import java.util.Date
 
-data class SurveyAggregate(override val aggregateId: UUID, val name: Map<Locale, String>, val accountId: UUID, val deleted: Boolean = false) : Aggregate<SurveyUpdateCommand, SurveyUpdateEvent, SurveyError, SurveyAggregate> {
+data class SurveyAggregate(override val aggregateId: UUID, val name: Map<Locale, String>, val accountId: UUID, val deleted: Boolean = false) :
+    Aggregate<SurveyUpdateCommand, SurveyUpdateEvent, SurveyError, SurveyAggregate> {
     companion object : AggregateConstructor<SurveyCreationCommand, SurveyCreationEvent, SurveyError, SurveyAggregate> {
         override fun create(event: SurveyCreationEvent): SurveyAggregate = when (event) {
             is Created -> SurveyAggregate(event.aggregateId, event.name, event.accountId)
             is Snapshot -> SurveyAggregate(event.aggregateId, event.name, event.accountId, event.deleted)
         }
 
-        override fun handle(command: SurveyCreationCommand): Result<SurveyCreationEvent, SurveyError> = when (command) {
-            is Create -> Result.Success(Created(command.aggregateId, command.name, command.accountId, command.createdAt))
+        override fun handle(command: SurveyCreationCommand): Either<SurveyError, List<SurveyCreationEvent>> = when (command) {
+            is Create -> Right.list(Created(command.aggregateId, command.name, command.accountId, command.createdAt))
         }
     }
 
@@ -22,18 +32,18 @@ data class SurveyAggregate(override val aggregateId: UUID, val name: Map<Locale,
         is Restored -> this.copy(deleted = false)
     }
 
-    override fun handle(command: SurveyUpdateCommand): Result<SurveyUpdateEvent, SurveyError> = when (command) {
+    override fun handle(command: SurveyUpdateCommand): Either<SurveyError, List<SurveyUpdateEvent>> = when (command) {
         is Rename -> when (name.get(command.locale)) {
-            command.newName -> Result.Failure(AlreadyRenamed)
-            else -> Result.Success(Renamed(command.newName, command.locale, command.renamedAt))
+            command.newName -> Left(AlreadyRenamed)
+            else -> Right.list(Renamed(command.newName, command.locale, command.renamedAt))
         }
         is Delete -> when (deleted) {
-            true -> Result.Failure(AlreadyDeleted)
-            false -> Result.Success(Deleted(command.deletedAt))
+            true -> Left(AlreadyDeleted)
+            false -> Right.list(Deleted(command.deletedAt))
         }
         is Restore -> when (deleted) {
-            true -> Result.Success(Restored(command.restoredAt))
-            false -> Result.Failure(NotDeleted)
+            true -> Right.list(Restored(command.restoredAt))
+            false -> Left(NotDeleted)
         }
     }
 }
@@ -41,7 +51,13 @@ data class SurveyAggregate(override val aggregateId: UUID, val name: Map<Locale,
 sealed class SurveyCommand
 
 sealed class SurveyCreationCommand : SurveyCommand(), CreationCommand
-data class Create(override val aggregateId: UUID, val name: Map<Locale, String>, val accountId: UUID, val createdAt: Date) : SurveyCreationCommand()
+data class Create(
+    override val aggregateId: UUID,
+    val surveyCaptureLayoutAggregateId: UUID,
+    val name: Map<Locale, String>,
+    val accountId: UUID,
+    val createdAt: Date
+) : SurveyCreationCommand()
 
 sealed class SurveyUpdateCommand : SurveyCommand(), UpdateCommand
 data class Rename(override val aggregateId: UUID, val newName: String, val locale: Locale, val renamedAt: Date) : SurveyUpdateCommand()
@@ -61,7 +77,7 @@ data class Deleted(val deletedAt: Date) : SurveyUpdateEvent()
 data class Restored(val restoredAt: Date) : SurveyUpdateEvent()
 
 
-sealed class SurveyError : Error
+sealed class SurveyError : CommandError
 object AlreadyRenamed : SurveyError()
 object AlreadyDeleted : SurveyError()
 object NotDeleted : SurveyError()
