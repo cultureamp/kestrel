@@ -33,13 +33,13 @@ data class SurveyCaptureLayoutAggregate(
     override fun update(event: SurveyCaptureLayoutUpdateEvent): SurveyCaptureLayoutAggregate = when(event) {
         is SectionAdded -> {
             val section = with(event) { Section(sectionId, name.toMap(), shortDescription.toMap(), longDescription.toMap(), intendedPurpose, code) }
-            val positionedAfterSection = event.positionedAfterSectionId?.let { sectionFor(it) }
-            positionSection(section, positionedAfterSection)
+            val previous = event.positionedAfterSectionId?.let { sectionFor(it) }
+            positionSection(section, previous)
         }
         is SectionMoved -> {
             val section = sectionFor(event.sectionId)
-            val positionedAfterSection = event.positionedAfterSectionId?.let { sectionFor(it) }
-            positionSection(section, positionedAfterSection)
+            val previous = event.positionedAfterSectionId?.let { sectionFor(it) }
+            positionSection(section, previous)
         }
         is SectionRemoved -> {
             val section = sectionFor(event.sectionId)
@@ -116,9 +116,9 @@ data class SurveyCaptureLayoutAggregate(
         )
     }
 
-    private fun positionSection(section: Section, positionedAfterSection: Section?): SurveyCaptureLayoutAggregate {
+    private fun positionSection(section: Section, previous: Section?): SurveyCaptureLayoutAggregate {
         val sections = sectionsForIntendedPurpose.getOrDefault(section.intendedPurpose, emptyList())
-        val updated = sections.moveAfter(section, positionedAfterSection)
+        val updated = sections.moveAfter(section, previous)
         return this.copy(
             sectionsForIntendedPurpose = sectionsForIntendedPurpose + (section.intendedPurpose to updated)
         )
@@ -369,9 +369,9 @@ data class LocalizedText(val text: String, val locale: Locale) {
 
 fun List<LocalizedText>.toMap(): Map<Locale, String> = this.map { it.locale to it.text }.toMap()
 
-fun <T> List<T>.moveAfter(item: T, after: T?): List<T> {
+fun <T> List<T>.moveAfter(item: T, previous: T?): List<T> {
     val removed = this - item
-    val index = if (after != null) removed.indexOf(after) + 1 else 0
+    val index = if (previous != null) removed.indexOf(previous) + 1 else 0
     return removed.subList(0, index) + item + removed.subList(index + 1, removed.size)
 }
 
