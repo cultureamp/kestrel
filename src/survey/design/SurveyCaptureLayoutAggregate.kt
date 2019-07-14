@@ -22,8 +22,8 @@ data class SurveyCaptureLayoutAggregate(
     }
 
     override fun update(event: SurveyCaptureLayoutUpdateEvent): SurveyCaptureLayoutAggregate = when(event) {
-        is SectionAdded -> with(event) {
-            val section = Section(sectionId, name.toMap(), shortDescription.toMap(), longDescription.toMap(), intendedPurpose, code)
+        is SectionAdded -> {
+            val section = with(event) { Section(sectionId, name.toMap(), shortDescription.toMap(), longDescription.toMap(), intendedPurpose, code) }
             val positionedAfterSection = event.positionedAfterSectionId?.let { sectionFor(it) }
             positionSection(section, positionedAfterSection)
         }
@@ -363,17 +363,11 @@ fun List<LocalizedText>.toMap(): Map<Locale, String> = this.map { it.locale to i
 fun <T> List<T>.moveAfter(item: T, after: T?): List<T> {
     val removed = this - item
     val index = if (after != null) removed.indexOf(after) + 1 else 0
-    return removed.insertAt(item, index)
+    return removed.subList(0, index) + item + removed.subList(index + 1, removed.size)
 }
 
-fun <T> List<T>.replace(item: T, replacement: T): List<T> {
-    val index = this.indexOf(item)
-    val removed = this - item
-    return removed.insertAt(replacement, index)
-}
-
-fun <T> List<T>.insertAt(item: T, index: Int): List<T> {
-    return this.subList(0, index) + item + this.subList(index + 1, this.size)
+fun <T> List<T>.replace(old: T, new: T): List<T> {
+    return this.map { if (it == old) new else it }
 }
 
 const val MAX_TEXT_SIZE = 2000
