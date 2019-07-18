@@ -35,14 +35,14 @@ data class SurveyAggregate(override val aggregateId: UUID, val name: Map<Locale,
     override fun handle(command: SurveyUpdateCommand): Either<SurveyError, List<SurveyUpdateEvent>> = when (command) {
         is Rename -> when (name.get(command.locale)) {
             command.newName -> Left(AlreadyRenamed)
-            else -> Right.list(Renamed(command.newName, command.locale, command.renamedAt))
+            else -> Right.list(Renamed(command.aggregateId, command.newName, command.locale, command.renamedAt))
         }
         is Delete -> when (deleted) {
             true -> Left(AlreadyDeleted)
-            false -> Right.list(Deleted(command.deletedAt))
+            false -> Right.list(Deleted(command.aggregateId, command.deletedAt))
         }
         is Restore -> when (deleted) {
-            true -> Right.list(Restored(command.restoredAt))
+            true -> Right.list(Restored(command.aggregateId, command.restoredAt))
             false -> Left(NotDeleted)
         }
     }
@@ -72,9 +72,9 @@ data class Created(override val aggregateId: UUID, val name: Map<Locale, String>
 data class Snapshot(override val aggregateId: UUID, val name: Map<Locale, String>, val accountId: UUID, val deleted: Boolean, val snapshottedAt: Date) : SurveyCreationEvent()
 
 sealed class SurveyUpdateEvent : SurveyEvent(), UpdateEvent
-data class Renamed(val name: String, val locale: Locale, val namedAt: Date) : SurveyUpdateEvent()
-data class Deleted(val deletedAt: Date) : SurveyUpdateEvent()
-data class Restored(val restoredAt: Date) : SurveyUpdateEvent()
+data class Renamed(override val aggregateId: UUID, val name: String, val locale: Locale, val namedAt: Date) : SurveyUpdateEvent()
+data class Deleted(override val aggregateId: UUID, val deletedAt: Date) : SurveyUpdateEvent()
+data class Restored(override val aggregateId: UUID, val restoredAt: Date) : SurveyUpdateEvent()
 
 
 sealed class SurveyError : CommandError

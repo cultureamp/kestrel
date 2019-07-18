@@ -29,11 +29,11 @@ interface UpdateCommand : Command {
     override val aggregateId: UUID
 }
 
-interface Event
-
-interface CreationEvent : Event {
+interface Event {
     val aggregateId: UUID
 }
+
+interface CreationEvent : Event
 
 interface UpdateEvent : Event
 
@@ -52,7 +52,7 @@ sealed class Either<out E, out V>
 data class Left<E>(val error: E) : Either<E, Nothing>()
 data class Right<V>(val value: V) : Either<Nothing, V>() {
     companion object {
-        fun <E,V> list(vararg values: V): Either<E,List<V>> = Right(listOf(*values))
+        fun <V> list(vararg values: V): Either<Nothing, List<V>> = Right(listOf(*values))
     }
 }
 
