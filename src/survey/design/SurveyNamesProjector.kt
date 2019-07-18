@@ -27,5 +27,9 @@ class SurveyNamesProjector : Projector<SurveyEvent> {
 
 data class SurveyRow(val aggregateId: UUID, val accountId: UUID, val locale: Locale, val name: String)
 
-
+class SurveyNamesProjection {
+    fun nameExistsFor(accountId: UUID, name: String, locale: Locale): Boolean {
+        TODO("Find in the database")
+    }
+}
 

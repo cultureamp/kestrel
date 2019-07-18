@@ -23,9 +23,20 @@ interface Aggregate<C: UpdateCommand, E: UpdateEvent, CE: CommandError, Self : A
     fun update(command: C): Either<CE, List<E>>
 }
 
+interface AggregateWithProjection<C: UpdateCommand, E: UpdateEvent, CE: CommandError, P, Self : AggregateWithProjection<C, E, CE, P, Self>> {
+    val aggregateId: UUID
+    fun update(event: E): Self
+    fun update(projection: P, command: C): Either<CE, List<E>>
+}
+
 interface AggregateConstructor<C: CreationCommand, E: CreationEvent, CE: CommandError, AggregateType> {
     fun create(event: E): AggregateType
     fun create(command: C): Either<CE, List<E>>
+}
+
+interface AggregateConstructorWithProjection<C: CreationCommand, E: CreationEvent, CE: CommandError, P, AggregateType> {
+    fun create(event: E): AggregateType
+    fun create(projection: P, command: C): Either<CE, List<E>>
 }
 
 //interface AggregateRootRepository {
