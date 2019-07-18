@@ -17,23 +17,23 @@ import java.util.Date
 
 data class SurveyAggregate(override val aggregateId: UUID, val name: Map<Locale, String>, val accountId: UUID, val deleted: Boolean = false) : Aggregate<SurveyUpdateCommand, SurveyUpdateEvent, SurveyError, SurveyAggregate> {
     companion object : AggregateConstructor<SurveyCreationCommand, SurveyCreationEvent, SurveyError, SurveyAggregate> {
-        override fun handle(event: SurveyCreationEvent): SurveyAggregate = when (event) {
+        override fun create(event: SurveyCreationEvent): SurveyAggregate = when (event) {
             is Created -> SurveyAggregate(event.aggregateId, event.name, event.accountId)
             is Snapshot -> SurveyAggregate(event.aggregateId, event.name, event.accountId, event.deleted)
         }
 
-        override fun handle(command: SurveyCreationCommand): Either<SurveyError, List<SurveyCreationEvent>> = when (command) {
+        override fun create(command: SurveyCreationCommand): Either<SurveyError, List<SurveyCreationEvent>> = when (command) {
             is Create -> Right.list(Created(command.aggregateId, command.name, command.accountId, command.createdAt))
         }
     }
 
-    override fun handle(event: SurveyUpdateEvent): SurveyAggregate = when (event) {
+    override fun update(event: SurveyUpdateEvent): SurveyAggregate = when (event) {
         is Renamed -> this.copy(name = name + (event.locale to event.name))
         is Deleted -> this.copy(deleted = true)
         is Restored -> this.copy(deleted = false)
     }
 
-    override fun handle(command: SurveyUpdateCommand): Either<SurveyError, List<SurveyUpdateEvent>> = when (command) {
+    override fun update(command: SurveyUpdateCommand): Either<SurveyError, List<SurveyUpdateEvent>> = when (command) {
         is Rename -> when (name.get(command.locale)) {
             command.newName -> Left(AlreadyRenamed)
             else -> Right.list(Renamed(command.aggregateId, command.newName, command.locale, command.renamedAt))

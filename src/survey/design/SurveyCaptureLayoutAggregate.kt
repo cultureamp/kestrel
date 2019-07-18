@@ -24,11 +24,11 @@ data class SurveyCaptureLayoutAggregate(
 
     companion object :
         AggregateConstructor<SurveyCreationCommand, SurveyCaptureLayoutCreationEvent, SurveyCaptureLayoutCommandError, SurveyCaptureLayoutAggregate> {
-        override fun handle(event: SurveyCaptureLayoutCreationEvent): SurveyCaptureLayoutAggregate = when (event) {
+        override fun create(event: SurveyCaptureLayoutCreationEvent): SurveyCaptureLayoutAggregate = when (event) {
             is Generated -> SurveyCaptureLayoutAggregate(event.aggregateId)
         }
 
-        override fun handle(command: SurveyCreationCommand): Either<SurveyCaptureLayoutCommandError, List<SurveyCaptureLayoutCreationEvent>> =
+        override fun create(command: SurveyCreationCommand): Either<SurveyCaptureLayoutCommandError, List<SurveyCaptureLayoutCreationEvent>> =
             when (command) {
                 is Create -> Right.list(
                     Generated(
@@ -40,7 +40,7 @@ data class SurveyCaptureLayoutAggregate(
             }
     }
 
-    override fun handle(event: SurveyCaptureLayoutUpdateEvent): SurveyCaptureLayoutAggregate = when (event) {
+    override fun update(event: SurveyCaptureLayoutUpdateEvent): SurveyCaptureLayoutAggregate = when (event) {
         is SectionAdded -> {
             val section = with(event) {
                 Section(
@@ -178,7 +178,7 @@ data class SurveyCaptureLayoutAggregate(
         )
     }
 
-    override fun handle(command: SurveyCaptureLayoutUpdateCommand): Either<SurveyCaptureLayoutCommandError, List<SurveyCaptureLayoutUpdateEvent>> =
+    override fun update(command: SurveyCaptureLayoutUpdateCommand): Either<SurveyCaptureLayoutCommandError, List<SurveyCaptureLayoutUpdateEvent>> =
         when (command) {
             is AddSection -> with(command) {
                 when {

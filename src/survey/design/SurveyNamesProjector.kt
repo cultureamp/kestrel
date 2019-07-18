@@ -1,9 +1,9 @@
 package survey.design
 
-import eventsourcing.EventHandler
+import eventsourcing.Projector
 import java.util.*
 
-class SurveyNamesProjector : EventHandler<SurveyEvent, Unit> {
+class SurveyNamesProjector : Projector<SurveyEvent> {
     override fun handle(event: SurveyEvent) = when (event) {
         is Created -> event.name.forEach { locale, name ->
             upsert(SurveyRow(event.aggregateId, event.accountId, locale, name))

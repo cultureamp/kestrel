@@ -2,23 +2,31 @@ package eventsourcing
 
 import java.util.UUID
 
-interface CommandHandler<C: Command, E: Event, CE: CommandError> {
-    fun handle(command: C): Either<CE, List<E>>
+interface Projector<E: Event> {
+    fun handle(event: E)
 }
 
-interface EventHandler<E: Event, T> {
-    fun handle(event: E): T
+interface DoubleProjector<A: Event, B: Event> {
+    fun first(event: A)
+    fun second(event: B)
 }
 
-interface Aggregate<C: UpdateCommand, E: UpdateEvent, CE: CommandError, Self : Aggregate<C, E, CE, Self>> :
-    CommandHandler<C, E, CE>,
-    EventHandler<E, Self> {
+interface TripleProjector<A: Event, B: Event, C: Event> {
+    fun first(event: A)
+    fun second(event: B)
+    fun third(event: C)
+}
+
+interface Aggregate<C: UpdateCommand, E: UpdateEvent, CE: CommandError, Self : Aggregate<C, E, CE, Self>> {
     val aggregateId: UUID
+    fun update(event: E): Self
+    fun update(command: C): Either<CE, List<E>>
 }
 
-interface AggregateConstructor<C: CreationCommand, E: CreationEvent, CE: CommandError, AggregateType> :
-    CommandHandler<C, E, CE>,
-    EventHandler<E, AggregateType>
+interface AggregateConstructor<C: CreationCommand, E: CreationEvent, CE: CommandError, AggregateType> {
+    fun create(event: E): AggregateType
+    fun create(command: C): Either<CE, List<E>>
+}
 
 //interface AggregateRootRepository {
 //    fun <UC: UpdateCommand, UE: UpdateEvent, CommandError, Self : Aggregate<UC, UE, CommandError, Self>> get(aggregateId: UUID): Aggregate<UC, UE, CommandError, Aggregate<UC, UE, CommandError>>
