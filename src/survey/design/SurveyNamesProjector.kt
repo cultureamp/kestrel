@@ -1,9 +1,10 @@
 package survey.design
 
+import eventsourcing.EventHandler
 import java.util.*
 
-class SurveyNamesProjector {
-    fun handle(event: SurveyEvent): Unit = when (event) {
+class SurveyNamesProjector : EventHandler<SurveyEvent, Unit> {
+    override fun handle(event: SurveyEvent) = when (event) {
         is Created -> event.name.forEach { locale, name ->
             upsert(SurveyRow(event.aggregateId, event.accountId, locale, name))
         }
@@ -19,7 +20,7 @@ class SurveyNamesProjector {
         TODO("Find in the database")
     }
 
-    private fun upsert(surveyRow: SurveyRow): Unit {
+    private fun upsert(surveyRow: SurveyRow) {
         TODO("Insert in the database")
     }
 }

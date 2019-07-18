@@ -2,16 +2,23 @@ package eventsourcing
 
 import java.util.UUID
 
-interface Aggregate<UC: UpdateCommand, UE: UpdateEvent, E: CommandError, Self : Aggregate<UC, UE, E, Self>> {
-    val aggregateId: UUID
-    fun update(event: UE): Self
-    fun handle(command: UC): Either<E, List<UE>>
+interface CommandHandler<C: Command, E: Event, CE: CommandError> {
+    fun handle(command: C): Either<CE, List<E>>
 }
 
-interface AggregateConstructor<CC: CreationCommand, CE: CreationEvent, E: CommandError, AggregateType> {
-    fun create(event: CE): AggregateType
-    fun handle(command: CC): Either<E, List<CE>>
+interface EventHandler<E: Event, T> {
+    fun handle(event: E): T
 }
+
+interface Aggregate<C: UpdateCommand, E: UpdateEvent, CE: CommandError, Self : Aggregate<C, E, CE, Self>> :
+    CommandHandler<C, E, CE>,
+    EventHandler<E, Self> {
+    val aggregateId: UUID
+}
+
+interface AggregateConstructor<C: CreationCommand, E: CreationEvent, CE: CommandError, AggregateType> :
+    CommandHandler<C, E, CE>,
+    EventHandler<E, AggregateType>
 
 //interface AggregateRootRepository {
 //    fun <UC: UpdateCommand, UE: UpdateEvent, CommandError, Self : Aggregate<UC, UE, CommandError, Self>> get(aggregateId: UUID): Aggregate<UC, UE, CommandError, Aggregate<UC, UE, CommandError>>

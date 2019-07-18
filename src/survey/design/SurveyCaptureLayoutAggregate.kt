@@ -2,12 +2,14 @@ package survey.design
 
 import eventsourcing.Aggregate
 import eventsourcing.AggregateConstructor
+import eventsourcing.Command
 import eventsourcing.CreationEvent
 import eventsourcing.Either
 import eventsourcing.Right
 import eventsourcing.UpdateCommand
 import eventsourcing.UpdateEvent
 import eventsourcing.CommandError
+import eventsourcing.Event
 import eventsourcing.Left
 import java.util.Date
 import java.util.UUID
@@ -22,7 +24,7 @@ data class SurveyCaptureLayoutAggregate(
 
     companion object :
         AggregateConstructor<SurveyCreationCommand, SurveyCaptureLayoutCreationEvent, SurveyCaptureLayoutCommandError, SurveyCaptureLayoutAggregate> {
-        override fun create(event: SurveyCaptureLayoutCreationEvent): SurveyCaptureLayoutAggregate = when (event) {
+        override fun handle(event: SurveyCaptureLayoutCreationEvent): SurveyCaptureLayoutAggregate = when (event) {
             is Generated -> SurveyCaptureLayoutAggregate(event.aggregateId)
         }
 
@@ -38,7 +40,7 @@ data class SurveyCaptureLayoutAggregate(
             }
     }
 
-    override fun update(event: SurveyCaptureLayoutUpdateEvent): SurveyCaptureLayoutAggregate = when (event) {
+    override fun handle(event: SurveyCaptureLayoutUpdateEvent): SurveyCaptureLayoutAggregate = when (event) {
         is SectionAdded -> {
             val section = with(event) {
                 Section(
@@ -241,7 +243,7 @@ enum class Status {
     active, removed
 }
 
-sealed class SurveyCaptureLayoutCommand
+sealed class SurveyCaptureLayoutCommand : Command
 sealed class SurveyCaptureLayoutUpdateCommand : SurveyCaptureLayoutCommand(), UpdateCommand
 data class AddSection(
     override val aggregateId: UUID,
@@ -340,7 +342,7 @@ data class HideQuestionFromCapture(
     val hiddenAt: Date
 ) : SurveyCaptureLayoutUpdateCommand()
 
-sealed class SurveyCaptureLayoutEvent
+sealed class SurveyCaptureLayoutEvent : Event
 sealed class SurveyCaptureLayoutCreationEvent : SurveyCaptureLayoutEvent(), CreationEvent
 data class Generated(
     override val aggregateId: UUID,

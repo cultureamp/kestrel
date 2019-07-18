@@ -2,10 +2,12 @@ package survey.design
 
 import eventsourcing.Aggregate
 import eventsourcing.AggregateConstructor
+import eventsourcing.Command
 import eventsourcing.CommandError
 import eventsourcing.CreationCommand
 import eventsourcing.CreationEvent
 import eventsourcing.Either
+import eventsourcing.Event
 import eventsourcing.Left
 import eventsourcing.Right
 import eventsourcing.UpdateCommand
@@ -15,7 +17,7 @@ import java.util.Date
 
 data class SurveyAggregate(override val aggregateId: UUID, val name: Map<Locale, String>, val accountId: UUID, val deleted: Boolean = false) : Aggregate<SurveyUpdateCommand, SurveyUpdateEvent, SurveyError, SurveyAggregate> {
     companion object : AggregateConstructor<SurveyCreationCommand, SurveyCreationEvent, SurveyError, SurveyAggregate> {
-        override fun create(event: SurveyCreationEvent): SurveyAggregate = when (event) {
+        override fun handle(event: SurveyCreationEvent): SurveyAggregate = when (event) {
             is Created -> SurveyAggregate(event.aggregateId, event.name, event.accountId)
             is Snapshot -> SurveyAggregate(event.aggregateId, event.name, event.accountId, event.deleted)
         }
@@ -25,7 +27,7 @@ data class SurveyAggregate(override val aggregateId: UUID, val name: Map<Locale,
         }
     }
 
-    override fun update(event: SurveyUpdateEvent): SurveyAggregate = when (event) {
+    override fun handle(event: SurveyUpdateEvent): SurveyAggregate = when (event) {
         is Renamed -> this.copy(name = name + (event.locale to event.name))
         is Deleted -> this.copy(deleted = true)
         is Restored -> this.copy(deleted = false)
@@ -47,7 +49,7 @@ data class SurveyAggregate(override val aggregateId: UUID, val name: Map<Locale,
     }
 }
 
-sealed class SurveyCommand
+sealed class SurveyCommand : Command
 
 sealed class SurveyCreationCommand : SurveyCommand(), CreationCommand
 data class Create(
@@ -63,7 +65,7 @@ data class Delete(override val aggregateId: UUID, val deletedAt: Date) : SurveyU
 data class Restore(override val aggregateId: UUID, val restoredAt: Date) : SurveyUpdateCommand()
 
 
-sealed class SurveyEvent
+sealed class SurveyEvent : Event
 
 sealed class SurveyCreationEvent : SurveyEvent(), CreationEvent
 data class Created(override val aggregateId: UUID, val name: Map<Locale, String>, val accountId: UUID, val createdAt: Date) : SurveyCreationEvent()
