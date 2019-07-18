@@ -10,6 +10,9 @@ class SurveyNamesProjector {
         is Renamed -> {
             upsert(find(event.aggregateId).copy(locale = event.locale, name = event.name))
         }
+        is Snapshot -> TODO()
+        is Deleted -> TODO()
+        is Restored -> TODO()
     }
 
     private fun find(aggregateId: UUID): SurveyRow {

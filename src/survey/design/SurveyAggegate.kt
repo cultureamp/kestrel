@@ -13,8 +13,7 @@ import eventsourcing.UpdateEvent
 import java.util.UUID
 import java.util.Date
 
-data class SurveyAggregate(override val aggregateId: UUID, val name: Map<Locale, String>, val accountId: UUID, val deleted: Boolean = false) :
-    Aggregate<SurveyUpdateCommand, SurveyUpdateEvent, SurveyError, SurveyAggregate> {
+data class SurveyAggregate(override val aggregateId: UUID, val name: Map<Locale, String>, val accountId: UUID, val deleted: Boolean = false) : Aggregate<SurveyUpdateCommand, SurveyUpdateEvent, SurveyError, SurveyAggregate> {
     companion object : AggregateConstructor<SurveyCreationCommand, SurveyCreationEvent, SurveyError, SurveyAggregate> {
         override fun create(event: SurveyCreationEvent): SurveyAggregate = when (event) {
             is Created -> SurveyAggregate(event.aggregateId, event.name, event.accountId)
@@ -58,7 +57,6 @@ data class Create(
     val accountId: UUID,
     val createdAt: Date
 ) : SurveyCreationCommand()
-
 sealed class SurveyUpdateCommand : SurveyCommand(), UpdateCommand
 data class Rename(override val aggregateId: UUID, val newName: String, val locale: Locale, val renamedAt: Date) : SurveyUpdateCommand()
 data class Delete(override val aggregateId: UUID, val deletedAt: Date) : SurveyUpdateCommand()
