@@ -22,69 +22,46 @@ data class SurveyCaptureLayoutAggregate(
     val questions: Set<UUID> = emptySet()
 ) : Aggregate<SurveyCaptureLayoutUpdateCommand, SurveyCaptureLayoutUpdateEvent, SurveyCaptureLayoutCommandError, SurveyCaptureLayoutAggregate> {
 
-    companion object :
-        AggregateConstructor<SurveyCreationCommand, SurveyCaptureLayoutCreationEvent, SurveyCaptureLayoutCommandError, SurveyCaptureLayoutAggregate> {
+    companion object : AggregateConstructor<SurveyCreationCommand, SurveyCaptureLayoutCreationEvent, SurveyCaptureLayoutCommandError, SurveyCaptureLayoutAggregate> {
         override fun create(event: SurveyCaptureLayoutCreationEvent): SurveyCaptureLayoutAggregate = when (event) {
             is Generated -> SurveyCaptureLayoutAggregate(event.aggregateId)
         }
 
-        override fun create(command: SurveyCreationCommand): Either<SurveyCaptureLayoutCommandError, List<SurveyCaptureLayoutCreationEvent>> =
-            when (command) {
-                is Create -> Right.list(
-                    Generated(
-                        command.surveyCaptureLayoutAggregateId,
-                        command.aggregateId,
-                        command.createdAt
-                    )
-                )
-            }
+        override fun create(command: SurveyCreationCommand): Either<SurveyCaptureLayoutCommandError, List<SurveyCaptureLayoutCreationEvent>> = when (command) {
+            is Create -> with(command) { Right.list(Generated(surveyCaptureLayoutAggregateId, aggregateId, createdAt)) }
+        }
     }
 
     override fun update(event: SurveyCaptureLayoutUpdateEvent): SurveyCaptureLayoutAggregate = when (event) {
-        is SectionAdded -> {
-            val section = with(event) {
-                Section(
-                    sectionId,
-                    name.toMap(),
-                    shortDescription.toMap(),
-                    longDescription.toMap(),
-                    intendedPurpose,
-                    code
-                )
-            }
-            val previous = event.positionedAfterSectionId?.let { sectionFor(it) }
+        is SectionAdded -> with(event) {
+            val section = Section(sectionId, name.toMap(), shortDescription.toMap(), longDescription.toMap(), intendedPurpose, code)
+            val previous = positionedAfterSectionId?.let { sectionFor(it) }
             positionSection(section, previous)
         }
-        is SectionMoved -> {
-            val section = sectionFor(event.sectionId)
-            val previous = event.positionedAfterSectionId?.let { sectionFor(it) }
+        is SectionMoved -> with(event) {
+            val section = sectionFor(sectionId)
+            val previous = positionedAfterSectionId?.let { sectionFor(it) }
             positionSection(section, previous)
         }
-        is SectionRemoved -> {
-            val section = sectionFor(event.sectionId)
+        is SectionRemoved -> with(event) {
+            val section = sectionFor(sectionId)
             replaceSection(section, section.copy(status = Status.removed))
         }
-        is SectionRestored -> {
-            val section = sectionFor(event.sectionId)
+        is SectionRestored -> with(event) {
+            val section = sectionFor(sectionId)
             replaceSection(section, section.copy(status = Status.active))
         }
-        is SectionRenamed -> {
-            val section = sectionFor(event.sectionId)
-            replaceSection(section, section.copy(name = section.name + (event.locale to event.name)))
+        is SectionRenamed -> with(event) {
+            val section = sectionFor(sectionId)
+            replaceSection(section, section.copy(name = section.name + (locale to name)))
         }
-        is SectionShortDescriptionChanged -> {
-            val section = sectionFor(event.sectionId)
-            replaceSection(
-                section,
-                section.copy(shortDescription = section.shortDescription + (event.locale to event.text))
-            )
+        is SectionShortDescriptionChanged -> with(event) {
+            val section = sectionFor(sectionId)
+            replaceSection(section, section.copy(shortDescription = section.shortDescription + (locale to text)))
         }
-        is SectionLongDescriptionChanged -> {
-            val section = sectionFor(event.sectionId)
-            replaceSection(
-                section,
-                section.copy(longDescription = section.longDescription + (event.locale to event.text))
-            )
+        is SectionLongDescriptionChanged -> with(event) {
+            val section = sectionFor(sectionId)
+            replaceSection(section, section.copy(longDescription = section.longDescription + (locale to text)))
         }
         is SectionDescriptionChanged -> {
             val section = sectionFor(event.sectionId)
@@ -98,18 +75,11 @@ data class SurveyCaptureLayoutAggregate(
         }
         is SectionDescriptionsRemoved -> {
             val section = sectionFor(event.sectionId)
-            replaceSection(
-                section,
-                section.copy(
-                    shortDescription = emptyMap(),
-                    longDescription = emptyMap()
-                )
-            )
+            replaceSection(section, section.copy(shortDescription = emptyMap(), longDescription = emptyMap()))
         }
         is QuestionPositioned -> {
             val section = sectionFor(event.sectionId)
             positionQuestion(section, event.questionId, event.positionedAfterQuestionId)
-
         }
         is DemographicSectionsPositionedAtTop -> {
             this.copy(demographicSectionsPlacement = DemographicSectionPosition.top)
@@ -126,6 +96,37 @@ data class SurveyCaptureLayoutAggregate(
                 )
             )
         }
+    }
+
+    override fun update(command: SurveyCaptureLayoutUpdateCommand): Either<SurveyCaptureLayoutCommandError, List<SurveyCaptureLayoutUpdateEvent>> = when (command) {
+        is AddSection -> with(command) {
+            when {
+                hasSection(sectionId) -> Left(SectionAlreadyAdded)
+                hasSectionCode(code) -> Left(SectionCodeNotUnique)
+                hasDifferentIntendedPurpose(positionedAfterSectionId, intendedPurpose) -> Left(SectionHasDifferentIntendedPurpose)
+                else -> Right.list(SectionAdded(aggregateId, sectionId, name, shortDescription, longDescription, intendedPurpose, code, positionedAfterSectionId, addedAt))
+            }
+        }
+        is MoveSection -> with(command) {
+            val section = sectionFor { it.sectionId == sectionId }
+            val positionedAfterSection = positionedAfterSectionId?.let { sectionFor { it.sectionId == positionedAfterSectionId } }
+            when {
+                section == null -> Left(SectionNotFound)
+                positionedAfterSectionId != null && positionedAfterSection == null -> Left(SectionNotFound)
+                positionedAfterSection != null && section.intendedPurpose != positionedAfterSection.intendedPurpose -> Left(SectionHasDifferentIntendedPurpose)
+                indexOf(section) == indexOf(positionedAfterSection) + 1 -> Left(SectionAlreadyMoved)
+                else -> Right.list(SectionMoved(aggregateId, sectionId, positionedAfterSectionId, movedAt))
+            }
+        }
+        is RemoveSection -> TODO()
+        is RestoreSection -> TODO()
+        is RenameSection -> TODO()
+        is ChangeSectionShortDescription -> TODO()
+        is ChangeSectionLongDescription -> TODO()
+        is RemoveSectionDescriptions -> TODO()
+        is PositionQuestion -> TODO()
+        is PositionDemographicSections -> TODO()
+        is HideQuestionFromCapture -> TODO()
     }
 
     private fun sectionFor(sectionId: UUID) = sectionFor { it.sectionId == sectionId }!!
@@ -162,11 +163,7 @@ data class SurveyCaptureLayoutAggregate(
         )
     }
 
-    private fun positionQuestion(
-        section: Section,
-        questionId: UUID,
-        positionedAfterQuestionId: UUID?
-    ): SurveyCaptureLayoutAggregate {
+    private fun positionQuestion(section: Section, questionId: UUID, positionedAfterQuestionId: UUID?): SurveyCaptureLayoutAggregate {
         val sections = sectionsForIntendedPurpose.getOrDefault(section.intendedPurpose, emptyList())
         val updated = sections.replace(
             section,
@@ -177,55 +174,6 @@ data class SurveyCaptureLayoutAggregate(
             questions = questions + questionId
         )
     }
-
-    override fun update(command: SurveyCaptureLayoutUpdateCommand): Either<SurveyCaptureLayoutCommandError, List<SurveyCaptureLayoutUpdateEvent>> =
-        when (command) {
-            is AddSection -> with(command) {
-                when {
-                    hasSection(sectionId) -> Left(SectionAlreadyAdded)
-                    hasSectionCode(code) -> Left(SectionCodeNotUnique)
-                    hasDifferentIntendedPurpose(positionedAfterSectionId, intendedPurpose) -> Left(
-                        SectionHasDifferentIntendedPurpose
-                    )
-                    else -> Right.list(
-                        SectionAdded(
-                            aggregateId,
-                            sectionId,
-                            name,
-                            shortDescription,
-                            longDescription,
-                            intendedPurpose,
-                            code,
-                            positionedAfterSectionId,
-                            addedAt
-                        )
-                    )
-                }
-            }
-            is MoveSection -> with(command) {
-                val section = sectionFor { it.sectionId == sectionId }
-                val positionedAfterSection =
-                    positionedAfterSectionId?.let { sectionFor { it.sectionId == positionedAfterSectionId } }
-                when {
-                    section == null -> Left(SectionNotFound)
-                    positionedAfterSectionId != null && positionedAfterSection == null -> Left(SectionNotFound)
-                    positionedAfterSection != null && section.intendedPurpose != positionedAfterSection.intendedPurpose -> Left(
-                        SectionHasDifferentIntendedPurpose
-                    )
-                    indexOf(section) == indexOf(positionedAfterSection) + 1 -> Left(SectionAlreadyMoved)
-                    else -> Right.list(SectionMoved(aggregateId, sectionId, positionedAfterSectionId, movedAt))
-                }
-            }
-            is RemoveSection -> TODO()
-            is RestoreSection -> TODO()
-            is RenameSection -> TODO()
-            is ChangeSectionShortDescription -> TODO()
-            is ChangeSectionLongDescription -> TODO()
-            is RemoveSectionDescriptions -> TODO()
-            is PositionQuestion -> TODO()
-            is PositionDemographicSections -> TODO()
-            is HideQuestionFromCapture -> TODO()
-        }
 }
 
 data class Section(
