@@ -108,13 +108,14 @@ data class SurveyCaptureLayoutAggregate(
             }
         }
         is MoveSection -> with(command) {
-            val section = sectionFor { it.sectionId == sectionId }
-            val positionedAfterSection = positionedAfterSectionId?.let { sectionFor { it.sectionId == positionedAfterSectionId } }
-            when {
-                section == null -> Left(SectionNotFound)
-                positionedAfterSectionId != null && positionedAfterSection == null -> Left(SectionNotFound)
-                positionedAfterSection != null && section.intendedPurpose != positionedAfterSection.intendedPurpose -> Left(SectionHasDifferentIntendedPurpose)
-                indexOf(section) == indexOf(positionedAfterSection) + 1 -> Left(SectionAlreadyMoved)
+            if (positionedAfterSectionId != null) when {
+                !hasSection(sectionId) || !hasSection(positionedAfterSectionId) -> Left(SectionNotFound)
+                indexOf(sectionId) == indexOf(positionedAfterSectionId) + 1 -> Left(SectionAlreadyMoved)
+                sectionFor(sectionId).intendedPurpose != sectionFor(positionedAfterSectionId).intendedPurpose -> Left(SectionHasDifferentIntendedPurpose)
+                else -> Right.list(SectionMoved(aggregateId, sectionId, positionedAfterSectionId, movedAt))
+            } else when {
+                !hasSection(sectionId) -> Left(SectionNotFound)
+                indexOf(sectionId) == 0 -> Left(SectionAlreadyMoved)
                 else -> Right.list(SectionMoved(aggregateId, sectionId, positionedAfterSectionId, movedAt))
             }
         }
@@ -139,8 +140,8 @@ data class SurveyCaptureLayoutAggregate(
         return sectionId?.let { sectionFor(it).intendedPurpose } == intendedPurpose
     }
 
-    private fun indexOf(section: Section?): Int {
-        TODO()
+    private fun indexOf(sectionId: UUID): Int {
+        return sectionsForIntendedPurpose.values.flatten().map { it.sectionId }.indexOf(sectionId)
     }
 
     private fun sectionFor(predicate: (Section) -> Boolean): Section? {
