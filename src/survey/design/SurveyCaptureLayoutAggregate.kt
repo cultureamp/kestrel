@@ -88,36 +88,27 @@ data class SurveyCaptureLayoutAggregate(
             this.copy(demographicSectionsPlacement = DemographicSectionPosition.bottom)
         }
         is QuestionHiddenFromCaptureCommand -> {
-            val section = sectionFor { it.questions.contains(event.questionId) }!!
-            replaceSection(
-                section,
-                section.copy(
-                    questions = section.questions - event.questionId
-                )
-            )
+            val section = sectionForQuestionId(event.questionId)
+            replaceSection(section, section.copy(questions = section.questions - event.questionId))
         }
     }
 
     override fun update(command: SurveyCaptureLayoutUpdateCommand): Either<SurveyCaptureLayoutCommandError, List<SurveyCaptureLayoutUpdateEvent>> = when (command) {
-        is AddSection -> with(command) {
-            when {
-                hasSection(sectionId) -> Left(SectionAlreadyAdded)
-                hasSectionCode(code) -> Left(SectionCodeNotUnique)
-                hasDifferentIntendedPurpose(positionedAfterSectionId, intendedPurpose) -> Left(SectionHasDifferentIntendedPurpose)
-                else -> Right.list(SectionAdded(aggregateId, sectionId, name, shortDescription, longDescription, intendedPurpose, code, positionedAfterSectionId, addedAt))
-            }
+        is AddSection -> when {
+            hasSection(command.sectionId) -> Left(SectionAlreadyAdded)
+            hasSectionCode(command.code) -> Left(SectionCodeNotUnique)
+            command.positionedAfterSectionId != null && sectionFor(command.positionedAfterSectionId).intendedPurpose != command.intendedPurpose -> Left(SectionHasDifferentIntendedPurpose)
+            else -> with(command) { Right.list(SectionAdded(aggregateId, sectionId, name, shortDescription, longDescription, intendedPurpose, code, positionedAfterSectionId, addedAt)) }
         }
-        is MoveSection -> with(command) {
-            if (positionedAfterSectionId != null) when {
-                !hasSection(sectionId) || !hasSection(positionedAfterSectionId) -> Left(SectionNotFound)
-                indexOf(sectionId) == indexOf(positionedAfterSectionId) + 1 -> Left(SectionAlreadyMoved)
-                sectionFor(sectionId).intendedPurpose != sectionFor(positionedAfterSectionId).intendedPurpose -> Left(SectionHasDifferentIntendedPurpose)
-                else -> Right.list(SectionMoved(aggregateId, sectionId, positionedAfterSectionId, movedAt))
-            } else when {
-                !hasSection(sectionId) -> Left(SectionNotFound)
-                indexOf(sectionId) == 0 -> Left(SectionAlreadyMoved)
-                else -> Right.list(SectionMoved(aggregateId, sectionId, positionedAfterSectionId, movedAt))
-            }
+        is MoveSection -> if (command.positionedAfterSectionId != null) when {
+            !hasSection(command.sectionId) || !hasSection(command.positionedAfterSectionId) -> Left(SectionNotFound)
+            indexOf(command.sectionId) == indexOf(command.positionedAfterSectionId) + 1 -> Left(SectionAlreadyMoved)
+            sectionFor(command.sectionId).intendedPurpose != sectionFor(command.positionedAfterSectionId).intendedPurpose -> Left(SectionHasDifferentIntendedPurpose)
+            else -> with(command) { Right.list(SectionMoved(aggregateId, sectionId, positionedAfterSectionId, movedAt)) }
+        } else when {
+            !hasSection(command.sectionId) -> Left(SectionNotFound)
+            indexOf(command.sectionId) == 0 -> Left(SectionAlreadyMoved)
+            else -> with(command) { Right.list(SectionMoved(aggregateId, sectionId, positionedAfterSectionId, movedAt)) }
         }
         is RemoveSection -> when {
             !hasSection(command.sectionId) -> Left(SectionNotFound)
@@ -129,10 +120,26 @@ data class SurveyCaptureLayoutAggregate(
             sectionFor(command.sectionId).status == Status.active -> Left(SectionAlreadyRestored)
             else -> with(command) { Right.list(SectionRestored(aggregateId, sectionId, restoredAt)) }
         }
-        is RenameSection -> TODO()
-        is ChangeSectionShortDescription -> TODO()
-        is ChangeSectionLongDescription -> TODO()
-        is RemoveSectionDescriptions -> TODO()
+        is RenameSection -> when {
+            !hasSection(command.sectionId) -> Left(SectionNotFound)
+            sectionFor(command.sectionId).name[command.locale] == command.name -> Left(RenameAlreadyActioned)
+            else -> with(command) { Right.list(SectionRenamed(aggregateId, sectionId, name, locale, renamedAt)) }
+        }
+        is ChangeSectionShortDescription -> when {
+            !hasSection(command.sectionId) -> Left(SectionNotFound)
+            sectionFor(command.sectionId).shortDescription[command.locale] == command.text -> Left(ShortDescriptionAlreadyChanged)
+            else -> with(command) { Right.list(SectionShortDescriptionChanged(aggregateId, sectionId, text, locale, changedAt)) }
+        }
+        is ChangeSectionLongDescription -> when {
+            !hasSection(command.sectionId) -> Left(SectionNotFound)
+            sectionFor(command.sectionId).longDescription[command.locale] == command.text -> Left(LongDescriptionAlreadyChanged)
+            else -> with(command) { Right.list(SectionLongDescriptionChanged(aggregateId, sectionId, text, locale, changedAt)) }
+        }
+        is RemoveSectionDescriptions -> when {
+            !hasSection(command.sectionId) -> Left(SectionNotFound)
+            sectionFor(command.sectionId).let { it.shortDescription.isEmpty() || it.longDescription.isEmpty()} -> Left(SectionDescriptionsAlreadyRemoved)
+            else -> with(command) { Right.list(SectionDescriptionsRemoved(aggregateId, sectionId, removedAt)) }
+        }
         is PositionQuestion -> TODO()
         is PositionDemographicSections -> TODO()
         is HideQuestionFromCapture -> TODO()
@@ -140,13 +147,11 @@ data class SurveyCaptureLayoutAggregate(
 
     private fun sectionFor(sectionId: UUID) = sectionFor { it.sectionId == sectionId }!!
 
+    private fun sectionForQuestionId(questionId: UUID) = sectionFor { it.questions.contains(questionId) }!!
+
     private fun hasSection(sectionId: UUID) = sectionFor { it.sectionId == sectionId } != null
 
     private fun hasSectionCode(code: String) = sectionFor { it.code == code } != null
-
-    private fun hasDifferentIntendedPurpose(sectionId: UUID?, intendedPurpose: IntendedPurpose): Boolean {
-        return sectionId?.let { sectionFor(it).intendedPurpose } == intendedPurpose
-    }
 
     private fun indexOf(sectionId: UUID): Int {
         return sectionsForIntendedPurpose.values.flatten().map { it.sectionId }.indexOf(sectionId)
