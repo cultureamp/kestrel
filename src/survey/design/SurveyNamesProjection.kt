@@ -1,10 +1,12 @@
 package survey.design
 
 import eventsourcing.Projector
-import java.util.*
+import eventsourcing.ReadOnlyDatabase
+import eventsourcing.ReadWriteDatabase
+import java.util.UUID
 
-class SurveyNamesProjector : Projector<SurveyEvent> {
-    override fun handle(event: SurveyEvent) = when (event) {
+class SurveyNamesProjector(database: ReadWriteDatabase) : Projector<SurveyEvent> {
+    override fun project(event: SurveyEvent) = when (event) {
         is Created -> event.name.forEach { locale, name ->
             upsert(SurveyRow(event.aggregateId, event.accountId, locale, name))
         }
@@ -27,7 +29,7 @@ class SurveyNamesProjector : Projector<SurveyEvent> {
 
 data class SurveyRow(val aggregateId: UUID, val accountId: UUID, val locale: Locale, val name: String)
 
-class SurveyNamesProjection {
+class SurveyNamesProjection(database: ReadOnlyDatabase) {
     fun nameExistsFor(accountId: UUID, name: String, locale: Locale): Boolean {
         TODO("Find in the database")
     }

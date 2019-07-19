@@ -15,6 +15,7 @@ import eventsourcing.UpdateEvent
 import java.util.*
 
 data class SurveyAggregate(override val aggregateId: UUID, val name: Map<Locale, String>, val accountId: UUID, val deleted: Boolean = false) : AggregateWithProjection<SurveyUpdateCommand, SurveyUpdateEvent, SurveyError, SurveyNamesProjection, SurveyAggregate> {
+
     companion object : AggregateConstructorWithProjection<SurveyCreationCommand, SurveyCreationEvent, SurveyError, SurveyNamesProjection, SurveyAggregate> {
         override fun create(event: SurveyCreationEvent): SurveyAggregate = when (event) {
             is Created -> SurveyAggregate(event.aggregateId, event.name, event.accountId)
@@ -53,7 +54,6 @@ data class SurveyAggregate(override val aggregateId: UUID, val name: Map<Locale,
 }
 
 sealed class SurveyCommand : Command
-
 sealed class SurveyCreationCommand : SurveyCommand(), CreationCommand
 data class Create(
     override val aggregateId: UUID,
@@ -69,16 +69,13 @@ data class Restore(override val aggregateId: UUID, val restoredAt: Date) : Surve
 
 
 sealed class SurveyEvent : Event
-
 sealed class SurveyCreationEvent : SurveyEvent(), CreationEvent
 data class Created(override val aggregateId: UUID, val name: Map<Locale, String>, val accountId: UUID, val createdAt: Date) : SurveyCreationEvent()
 data class Snapshot(override val aggregateId: UUID, val name: Map<Locale, String>, val accountId: UUID, val deleted: Boolean, val snapshottedAt: Date) : SurveyCreationEvent()
-
 sealed class SurveyUpdateEvent : SurveyEvent(), UpdateEvent
 data class Renamed(override val aggregateId: UUID, val name: String, val locale: Locale, val namedAt: Date) : SurveyUpdateEvent()
 data class Deleted(override val aggregateId: UUID, val deletedAt: Date) : SurveyUpdateEvent()
 data class Restored(override val aggregateId: UUID, val restoredAt: Date) : SurveyUpdateEvent()
-
 
 sealed class SurveyError : CommandError
 object AlreadyRenamed : SurveyError()
@@ -89,4 +86,3 @@ object NotDeleted : SurveyError()
 enum class Locale {
     en, de
 }
-

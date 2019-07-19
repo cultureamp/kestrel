@@ -3,7 +3,7 @@ package eventsourcing
 import java.util.UUID
 
 interface Projector<E: Event> {
-    fun handle(event: E)
+    fun project(event: E)
 }
 
 interface DoubleProjector<A: Event, B: Event> {
@@ -16,6 +16,9 @@ interface TripleProjector<A: Event, B: Event, C: Event> {
     fun second(event: B)
     fun third(event: C)
 }
+
+interface ReadOnlyDatabase
+interface ReadWriteDatabase
 
 interface Aggregate<C: UpdateCommand, E: UpdateEvent, CE: CommandError, Self : Aggregate<C, E, CE, Self>> {
     val aggregateId: UUID
