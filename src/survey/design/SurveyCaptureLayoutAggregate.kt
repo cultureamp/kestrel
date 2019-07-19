@@ -119,8 +119,16 @@ data class SurveyCaptureLayoutAggregate(
                 else -> Right.list(SectionMoved(aggregateId, sectionId, positionedAfterSectionId, movedAt))
             }
         }
-        is RemoveSection -> TODO()
-        is RestoreSection -> TODO()
+        is RemoveSection -> when {
+            !hasSection(command.sectionId) -> Left(SectionNotFound)
+            sectionFor(command.sectionId).status == Status.removed -> Left(SectionAlreadyRemoved)
+            else -> with(command) { Right.list(SectionRemoved(aggregateId, sectionId, removedAt)) }
+        }
+        is RestoreSection -> when {
+            !hasSection(command.sectionId) -> Left(SectionNotFound)
+            sectionFor(command.sectionId).status == Status.active -> Left(SectionAlreadyRestored)
+            else -> with(command) { Right.list(SectionRestored(aggregateId, sectionId, restoredAt)) }
+        }
         is RenameSection -> TODO()
         is ChangeSectionShortDescription -> TODO()
         is ChangeSectionLongDescription -> TODO()
