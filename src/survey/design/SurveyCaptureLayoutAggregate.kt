@@ -11,6 +11,8 @@ import eventsourcing.UpdateEvent
 import eventsourcing.CommandError
 import eventsourcing.Event
 import eventsourcing.Left
+import survey.design.DemographicSectionPosition.bottom
+import survey.design.DemographicSectionPosition.top
 import java.util.Date
 import java.util.UUID
 
@@ -18,7 +20,7 @@ import java.util.UUID
 data class SurveyCaptureLayoutAggregate(
     override val aggregateId: UUID,
     val sectionsForIntendedPurpose: Map<IntendedPurpose, List<Section>> = emptyMap(),
-    val demographicSectionsPlacement: DemographicSectionPosition = DemographicSectionPosition.bottom,
+    val demographicSectionsPlacement: DemographicSectionPosition = bottom,
     val questions: Set<UUID> = emptySet()
 ) : Aggregate<SurveyCaptureLayoutUpdateCommand, SurveyCaptureLayoutUpdateEvent, SurveyCaptureLayoutCommandError, SurveyCaptureLayoutAggregate> {
 
@@ -65,13 +67,10 @@ data class SurveyCaptureLayoutAggregate(
         }
         is SectionDescriptionChanged -> {
             val section = sectionFor(event.sectionId)
-            replaceSection(
-                section,
-                section.copy(
-                    shortDescription = section.shortDescription + (event.locale to event.shortDescription),
-                    longDescription = section.longDescription + (event.locale to event.longDescription)
-                )
-            )
+            replaceSection(section, section.copy(
+                shortDescription = section.shortDescription + (event.locale to event.shortDescription),
+                longDescription = section.longDescription + (event.locale to event.longDescription)
+            ))
         }
         is SectionDescriptionsRemoved -> {
             val section = sectionFor(event.sectionId)
@@ -82,12 +81,12 @@ data class SurveyCaptureLayoutAggregate(
             positionQuestion(section, event.questionId, event.positionedAfterQuestionId)
         }
         is DemographicSectionsPositionedAtTop -> {
-            this.copy(demographicSectionsPlacement = DemographicSectionPosition.top)
+            this.copy(demographicSectionsPlacement = top)
         }
         is DemographicSectionsPositionedAtBottom -> {
-            this.copy(demographicSectionsPlacement = DemographicSectionPosition.bottom)
+            this.copy(demographicSectionsPlacement = bottom)
         }
-        is QuestionHiddenFromCaptureCommand -> {
+        is QuestionHiddenFromCapture -> {
             val section = sectionForQuestionId(event.questionId)
             replaceSection(section, section.copy(questions = section.questions - event.questionId))
         }
@@ -140,25 +139,45 @@ data class SurveyCaptureLayoutAggregate(
             sectionFor(command.sectionId).let { it.shortDescription.isEmpty() || it.longDescription.isEmpty()} -> Left(SectionDescriptionsAlreadyRemoved)
             else -> with(command) { Right.list(SectionDescriptionsRemoved(aggregateId, sectionId, removedAt)) }
         }
-        is PositionQuestion -> TODO()
-        is PositionDemographicSections -> TODO()
-        is HideQuestionFromCapture -> TODO()
+        is PositionQuestion -> if (command.positionedAfterQuestionId != null) when {
+            !hasSection(command.sectionId) -> Left(SectionNotFound)
+            !questionExistsInSection(command.positionedAfterQuestionId) -> Left(QuestionNotFound)
+            sectionFor(command.sectionId) != sectionForQuestionId(command.positionedAfterQuestionId) -> Left(PositionedAfterQuestionInWrongSection)
+            sectionFor(command.sectionId).questions.let { it.indexOf(command.questionId) == it.indexOf(command.positionedAfterQuestionId) + 1 } -> Left(QuestionAlreadyInPosition)
+            else -> with(command) { Right.list(QuestionPositioned(aggregateId, questionId, positionedAfterQuestionId, sectionId, positionedAt)) }
+        } else when {
+            !hasSection(command.sectionId) -> Left(SectionNotFound)
+            sectionFor(command.sectionId).questions.first() != command.questionId -> Left(QuestionAlreadyInPosition)
+            else -> with(command) { Right.list(QuestionPositioned(aggregateId, questionId, positionedAfterQuestionId, sectionId, positionedAt)) }
+        }
+        is PositionDemographicSections -> when(command.placement) {
+            demographicSectionsPlacement -> Left(DemographicSectionsAlreadyPositioned)
+            top -> with(command) { Right.list(DemographicSectionsPositionedAtTop(aggregateId, positionedAt)) }
+            bottom -> with(command) { Right.list(DemographicSectionsPositionedAtTop(aggregateId, positionedAt)) }
+        }
+        is HideQuestionFromCapture -> when {
+            !questions.contains(command.questionId) -> Left(QuestionNotFound)
+            !questionExistsInSection(command.questionId) -> Left(QuestionAlreadyRemovedFromSection)
+            else -> with(command) { Right.list(QuestionHiddenFromCapture(aggregateId, questionId, hiddenAt)) }
+        }
     }
 
-    private fun sectionFor(sectionId: UUID) = sectionFor { it.sectionId == sectionId }!!
-
     private fun sectionForQuestionId(questionId: UUID) = sectionFor { it.questions.contains(questionId) }!!
+
+    private fun questionExistsInSection(questionId: UUID) = sectionFor { it.questions.contains(questionId) } != null
+
+    private fun sectionFor(sectionId: UUID) = sectionFor { it.sectionId == sectionId }!!
 
     private fun hasSection(sectionId: UUID) = sectionFor { it.sectionId == sectionId } != null
 
     private fun hasSectionCode(code: String) = sectionFor { it.code == code } != null
 
-    private fun indexOf(sectionId: UUID): Int {
-        return sectionsForIntendedPurpose.values.flatten().map { it.sectionId }.indexOf(sectionId)
-    }
-
     private fun sectionFor(predicate: (Section) -> Boolean): Section? {
         return sectionsForIntendedPurpose.values.flatten().find(predicate)
+    }
+
+    private fun indexOf(sectionId: UUID): Int {
+        return sectionsForIntendedPurpose.values.flatten().map { it.sectionId }.indexOf(sectionId)
     }
 
     private fun replaceSection(section: Section, replacement: Section): SurveyCaptureLayoutAggregate {
@@ -294,7 +313,7 @@ data class PositionQuestion(
 
 data class PositionDemographicSections(
     override val aggregateId: UUID,
-    val placement: UUID,
+    val placement: DemographicSectionPosition,
     val positionedAt: Date
 ) : SurveyCaptureLayoutUpdateCommand()
 
@@ -401,7 +420,7 @@ data class DemographicSectionsPositionedAtBottom(
     val positionedAt: Date
 ) : SurveyCaptureLayoutUpdateEvent()
 
-data class QuestionHiddenFromCaptureCommand(
+data class QuestionHiddenFromCapture(
     override val aggregateId: UUID,
     val questionId: UUID,
     val hiddenAt: Date
