@@ -465,9 +465,10 @@ data class LocalizedText(val text: String, val locale: Locale) {
 fun List<LocalizedText>.toMap(): Map<Locale, String> = this.map { it.locale to it.text }.toMap()
 
 fun <T> List<T>.moveAfter(item: T, previous: T?): List<T> {
-    val removed = this - item
-    val index = if (previous != null) removed.indexOf(previous) + 1 else 0
-    return removed.subList(0, index) + item + removed.subList(index + 1, removed.size)
+    val filtered = this.filter { it == item }
+    val head = filtered.takeWhile { it != previous }
+    val tail = filtered.subList(head.size, filtered.size) // TODO check off-by-one here
+    return head + item + tail
 }
 
 fun <T> List<T>.replace(old: T, new: T): List<T> {
