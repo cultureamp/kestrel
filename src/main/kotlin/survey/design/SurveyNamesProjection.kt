@@ -1,8 +1,8 @@
 package survey.design
 
-import eventsourcing.Projector
-import eventsourcing.ReadOnlyDatabase
-import eventsourcing.ReadWriteDatabase
+import survey.eventsourcing.Projector
+import survey.eventsourcing.ReadOnlyDatabase
+import survey.eventsourcing.ReadWriteDatabase
 import java.util.UUID
 
 class SurveyNamesProjector(database: ReadWriteDatabase) : Projector<SurveyEvent> {

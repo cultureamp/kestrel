@@ -1,17 +1,17 @@
 package survey.design
 
-import eventsourcing.AggregateConstructorWithProjection
-import eventsourcing.AggregateWithProjection
-import eventsourcing.Command
-import eventsourcing.CommandError
-import eventsourcing.CreationCommand
-import eventsourcing.CreationEvent
-import eventsourcing.Either
-import eventsourcing.Event
-import eventsourcing.Left
-import eventsourcing.Right
-import eventsourcing.UpdateCommand
-import eventsourcing.UpdateEvent
+import survey.eventsourcing.AggregateConstructorWithProjection
+import survey.eventsourcing.AggregateWithProjection
+import survey.eventsourcing.Command
+import survey.eventsourcing.CommandError
+import survey.eventsourcing.CreationCommand
+import survey.eventsourcing.CreationEvent
+import survey.eventsourcing.Either
+import survey.eventsourcing.Event
+import survey.eventsourcing.Left
+import survey.eventsourcing.Right
+import survey.eventsourcing.UpdateCommand
+import survey.eventsourcing.UpdateEvent
 import java.util.*
 
 data class SurveyAggregate(override val aggregateId: UUID, val name: Map<Locale, String>, val accountId: UUID, val deleted: Boolean = false) : AggregateWithProjection<SurveyUpdateCommand, SurveyUpdateEvent, SurveyError, SurveyNamesProjection, SurveyAggregate> {

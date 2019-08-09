@@ -1,4 +1,4 @@
-package eventsourcing
+package survey.eventsourcing
 
 import java.util.UUID
 
