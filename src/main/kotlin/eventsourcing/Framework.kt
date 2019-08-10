@@ -1,4 +1,4 @@
-package survey.eventsourcing
+package eventsourcing
 
 import java.util.UUID
 
@@ -29,7 +29,7 @@ interface Aggregate<C: UpdateCommand, E: UpdateEvent, CE: CommandError, Self : A
 interface AggregateWithProjection<C: UpdateCommand, E: UpdateEvent, CE: CommandError, P, Self : AggregateWithProjection<C, E, CE, P, Self>> {
     val aggregateId: UUID
     fun update(event: E): Self
-    fun update(projection: P, command: C): Either<CE, List<E>>
+    fun update(command: C, projection: P): Either<CE, List<E>>
 }
 
 interface AggregateConstructor<C: CreationCommand, E: CreationEvent, CE: CommandError, AggregateType> {
@@ -39,7 +39,7 @@ interface AggregateConstructor<C: CreationCommand, E: CreationEvent, CE: Command
 
 interface AggregateConstructorWithProjection<C: CreationCommand, E: CreationEvent, CE: CommandError, P, AggregateType> {
     fun create(event: E): AggregateType
-    fun create(projection: P, command: C): Either<CE, List<E>>
+    fun create(command: C, projection: P): Either<CE, List<E>>
 }
 
 //interface AggregateRootRepository {

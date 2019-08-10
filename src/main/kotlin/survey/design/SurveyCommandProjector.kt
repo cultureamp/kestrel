@@ -1,6 +1,6 @@
 package survey.design
 
-import survey.eventsourcing.DoubleProjector
+import eventsourcing.DoubleProjector
 
 class SurveyCommandProjector : DoubleProjector<SurveyEvent, SurveyCaptureLayoutEvent> {
     override fun first(event: SurveyEvent) {

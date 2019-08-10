@@ -1,6 +1,6 @@
 //package survey.thing
 //
-//import survey.eventsourcing.*
+//import eventsourcing.*
 //import java.util.UUID
 //
 //sealed class ThingCreationCommand : CreationCommand

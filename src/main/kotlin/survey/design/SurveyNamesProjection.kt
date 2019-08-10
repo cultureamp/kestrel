@@ -1,8 +1,8 @@
 package survey.design
 
-import survey.eventsourcing.Projector
-import survey.eventsourcing.ReadOnlyDatabase
-import survey.eventsourcing.ReadWriteDatabase
+import eventsourcing.Projector
+import eventsourcing.ReadOnlyDatabase
+import eventsourcing.ReadWriteDatabase
 import java.util.UUID
 
 class SurveyNamesProjector(database: ReadWriteDatabase) : Projector<SurveyEvent> {
@@ -29,8 +29,8 @@ class SurveyNamesProjector(database: ReadWriteDatabase) : Projector<SurveyEvent>
 
 data class SurveyRow(val aggregateId: UUID, val accountId: UUID, val locale: Locale, val name: String)
 
-class SurveyNamesProjection(database: ReadOnlyDatabase) {
-    fun nameExistsFor(accountId: UUID, name: String, locale: Locale): Boolean {
+open class SurveyNamesProjection(database: ReadOnlyDatabase) {
+    open fun nameExistsFor(accountId: UUID, name: String, locale: Locale): Boolean {
         TODO("Find in the database")
     }
 }

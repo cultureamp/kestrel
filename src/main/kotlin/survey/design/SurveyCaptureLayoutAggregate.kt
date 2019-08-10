@@ -1,16 +1,16 @@
 package survey.design
 
-import survey.eventsourcing.Aggregate
-import survey.eventsourcing.AggregateConstructor
-import survey.eventsourcing.Command
-import survey.eventsourcing.CreationEvent
-import survey.eventsourcing.Either
-import survey.eventsourcing.Right
-import survey.eventsourcing.UpdateCommand
-import survey.eventsourcing.UpdateEvent
-import survey.eventsourcing.CommandError
-import survey.eventsourcing.Event
-import survey.eventsourcing.Left
+import eventsourcing.Aggregate
+import eventsourcing.AggregateConstructor
+import eventsourcing.Command
+import eventsourcing.CreationEvent
+import eventsourcing.Either
+import eventsourcing.Right
+import eventsourcing.UpdateCommand
+import eventsourcing.UpdateEvent
+import eventsourcing.CommandError
+import eventsourcing.Event
+import eventsourcing.Left
 import survey.design.DemographicSectionPosition.bottom
 import survey.design.DemographicSectionPosition.top
 import java.util.Date

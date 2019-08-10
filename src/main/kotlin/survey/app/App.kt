@@ -1,11 +1,8 @@
 package survey.app
 
-import survey.eventsourcing.AggregateRootRegistry
-import survey.design.SurveyAggregate
-import survey.design.SurveyCaptureLayoutAggregate
 //import survey.thing.CreateThing
 //import survey.thing.ThingAggregate
-import java.util.UUID
+
 //
 //class App {
 //    companion object {
