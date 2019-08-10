@@ -19,7 +19,7 @@
 //
 //data class ThingAggregate(override val aggregateId: UUID, val tweaks: List<String> = emptyList(), val bops: List<Bopped> = emptyList()) : Aggregate<ThingUpdateCommand, ThingUpdateEvent, CommandError, ThingAggregate> {
 //    companion object : AggregateConstructor<ThingCreationCommand, ThingCreationEvent, CommandError, ThingAggregate> {
-//        override fun create(event: ThingCreationEvent): ThingAggregate = when(event) {
+//        override fun created(event: ThingCreationEvent): ThingAggregate = when(event) {
 //            is ThingCreated -> ThingAggregate(event.aggregateId)
 //        }
 //
@@ -28,7 +28,7 @@
 //        }
 //    }
 //
-//    override fun update(event: ThingUpdateEvent): ThingAggregate = when(event){
+//    override fun updated(event: ThingUpdateEvent): ThingAggregate = when(event){
 //        is Tweaked -> this.copy(tweaks = tweaks + event.tweak)
 //        Bopped -> this.copy(bops = bops + Bopped)
 //    }

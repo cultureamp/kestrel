@@ -24,8 +24,8 @@ data class SurveyCaptureLayoutAggregate(
     val questions: Set<UUID> = emptySet()
 ) : Aggregate<SurveyCaptureLayoutUpdateCommand, SurveyCaptureLayoutUpdateEvent, SurveyCaptureLayoutCommandError, SurveyCaptureLayoutAggregate> {
 
-    companion object : AggregateConstructor<SurveyCreationCommand, SurveyCaptureLayoutCreationEvent, SurveyCaptureLayoutCommandError, SurveyCaptureLayoutAggregate> {
-        override fun create(event: SurveyCaptureLayoutCreationEvent): SurveyCaptureLayoutAggregate = when (event) {
+    companion object : AggregateConstructor<SurveyCreationCommand, SurveyCaptureLayoutCreationEvent, SurveyCaptureLayoutCommandError, SurveyCaptureLayoutUpdateCommand, SurveyCaptureLayoutUpdateEvent, SurveyCaptureLayoutAggregate> {
+        override fun created(event: SurveyCaptureLayoutCreationEvent): SurveyCaptureLayoutAggregate = when (event) {
             is Generated -> SurveyCaptureLayoutAggregate(event.aggregateId)
         }
 
@@ -34,7 +34,7 @@ data class SurveyCaptureLayoutAggregate(
         }
     }
 
-    override fun update(event: SurveyCaptureLayoutUpdateEvent): SurveyCaptureLayoutAggregate = when (event) {
+    override fun updated(event: SurveyCaptureLayoutUpdateEvent): SurveyCaptureLayoutAggregate = when (event) {
         is SectionAdded -> with(event) {
             val section = Section(sectionId, name.toMap(), shortDescription.toMap(), longDescription.toMap(), intendedPurpose, code)
             val previous = positionedAfterSectionId?.let { sectionFor(it) }

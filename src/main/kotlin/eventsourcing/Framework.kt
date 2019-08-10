@@ -20,26 +20,32 @@ interface TripleProjector<A: Event, B: Event, C: Event> {
 interface ReadOnlyDatabase
 interface ReadWriteDatabase
 
-interface Aggregate<C: UpdateCommand, E: UpdateEvent, CE: CommandError, Self : Aggregate<C, E, CE, Self>> {
+interface Aggregate<UC: UpdateCommand, UE: UpdateEvent, Err: CommandError, Self : Aggregate<UC, UE, Err, Self>> {
     val aggregateId: UUID
-    fun update(event: E): Self
-    fun update(command: C): Either<CE, List<E>>
+    fun updated(event: UE): Self
+    fun update(command: UC): Either<Err, List<UE>>
 }
 
-interface AggregateWithProjection<C: UpdateCommand, E: UpdateEvent, CE: CommandError, P, Self : AggregateWithProjection<C, E, CE, P, Self>> {
+interface AggregateWithProjection<UC: UpdateCommand, UE: UpdateEvent, Err: CommandError, P, Self : AggregateWithProjection<UC, UE, Err, P, Self>> {
     val aggregateId: UUID
-    fun update(event: E): Self
-    fun update(command: C, projection: P): Either<CE, List<E>>
+    fun updated(event: UE): Self
+    fun update(command: UC, projection: P): Either<Err, List<UE>>
 }
 
-interface AggregateConstructor<C: CreationCommand, E: CreationEvent, CE: CommandError, AggregateType> {
-    fun create(event: E): AggregateType
-    fun create(command: C): Either<CE, List<E>>
+interface AggregateConstructor<CC: CreationCommand, CE: CreationEvent, Err: CommandError, UC: UpdateCommand, UE: UpdateEvent, Self: Aggregate<UC, UE, Err, Self>> {
+    fun created(event: CE): Self
+    fun create(command: CC): Either<Err, List<CE>>
+    fun rehydrated(creationEvent: CE, vararg updateEvents: UE): Self {
+        return updateEvents.fold(created(creationEvent)) { aggregate, updateEvent -> aggregate.updated(updateEvent) }
+    }
 }
 
-interface AggregateConstructorWithProjection<C: CreationCommand, E: CreationEvent, CE: CommandError, P, AggregateType> {
-    fun create(event: E): AggregateType
-    fun create(command: C, projection: P): Either<CE, List<E>>
+interface AggregateConstructorWithProjection<C: CreationCommand, CE: CreationEvent, Err: CommandError, UC: UpdateCommand, UE: UpdateEvent, P, Self : AggregateWithProjection<UC, UE, Err, P, Self>> {
+    fun created(event: CE): Self
+    fun create(command: C, projection: P): Either<Err, List<CE>>
+    fun rehydrated(creationEvent: CE, vararg updateEvents: UE): Self {
+        return updateEvents.fold(created(creationEvent)) { aggregate, updateEvent -> aggregate.updated(updateEvent) }
+    }
 }
 
 //interface AggregateRootRepository {
@@ -68,14 +74,14 @@ interface UpdateEvent : Event
 
 interface CommandError
 
-class AggregateRootRegistry(val list: List<AggregateConstructor<out CreationCommand, out CreationEvent, out CommandError, out Aggregate<out UpdateCommand, out UpdateEvent, out CommandError, *>>>) {
-    val commandToAggregateConstructor: Map<CreationCommand, AggregateConstructor<out CreationCommand, out CreationEvent, out CommandError, out Aggregate<out UpdateCommand, out UpdateEvent, out CommandError, *>>> =
-        TODO()
-
-    fun <CC : CreationCommand>aggregateRootConstructorFor(creationCommand: CC): AggregateConstructor<CC, *, *, *>? {
-        return null
-    }
-}
+//class AggregateRootRegistry(val list: List<AggregateConstructor<out CreationCommand, out CreationEvent, out CommandError, out Aggregate<out UpdateCommand, out UpdateEvent, out CommandError, *>>>) {
+//    val commandToAggregateConstructor: Map<CreationCommand, AggregateConstructor<out CreationCommand, out CreationEvent, out CommandError, out Aggregate<out UpdateCommand, out UpdateEvent, out CommandError, *>>> =
+//        TODO()
+//
+//    fun <CC : CreationCommand>aggregateRootConstructorFor(creationCommand: CC): AggregateConstructor<CC, *, *, *>? {
+//        return null
+//    }
+//}
 
 sealed class Either<out E, out V>
 data class Left<E>(val error: E) : Either<E, Nothing>()

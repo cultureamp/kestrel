@@ -15,9 +15,8 @@ import eventsourcing.UpdateEvent
 import java.util.*
 
 data class SurveyAggregate(override val aggregateId: UUID, val name: Map<Locale, String>, val accountId: UUID, val deleted: Boolean = false) : AggregateWithProjection<SurveyUpdateCommand, SurveyUpdateEvent, SurveyError, SurveyNamesProjection, SurveyAggregate> {
-
-    companion object : AggregateConstructorWithProjection<SurveyCreationCommand, SurveyCreationEvent, SurveyError, SurveyNamesProjection, SurveyAggregate> {
-        override fun create(event: SurveyCreationEvent): SurveyAggregate = when (event) {
+    companion object : AggregateConstructorWithProjection<SurveyCreationCommand, SurveyCreationEvent, SurveyError, SurveyUpdateCommand, SurveyUpdateEvent, SurveyNamesProjection, SurveyAggregate> {
+        override fun created(event: SurveyCreationEvent): SurveyAggregate = when (event) {
             is Created -> SurveyAggregate(event.aggregateId, event.name, event.accountId)
             is Snapshot -> SurveyAggregate(event.aggregateId, event.name, event.accountId, event.deleted)
         }
@@ -33,7 +32,7 @@ data class SurveyAggregate(override val aggregateId: UUID, val name: Map<Locale,
         }
     }
 
-    override fun update(event: SurveyUpdateEvent): SurveyAggregate = when (event) {
+    override fun updated(event: SurveyUpdateEvent): SurveyAggregate = when (event) {
         is Renamed -> this.copy(name = name + (event.locale to event.name))
         is Deleted -> this.copy(deleted = true)
         is Restored -> this.copy(deleted = false)
