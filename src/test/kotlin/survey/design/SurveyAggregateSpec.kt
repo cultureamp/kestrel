@@ -72,7 +72,7 @@ class SurveyAggregateSpec : ShouldSpec({
 			SurveyAggregate.create(
 				Create(aggregateId, surveyCaptureLayoutAggregateId, name, accountId, createdAt), NameTaken(false)
 			) shouldBe
-				Right.list(Created(aggregateId, name, accountId, createdAt))
+				Right(Created(aggregateId, name, accountId, createdAt))
 		}
 
 		"when Survey name already taken" {
@@ -162,6 +162,13 @@ class SurveyAggregateSpec : ShouldSpec({
 					Right.list(Restored(aggregateId, restoredAt))
 			}
 		}
+	}
+
+	"Constructor aggregateType" {
+		should("be the aggregate class name including package") {
+			SurveyAggregate.aggregateType() shouldBe "survey.design.SurveyAggregate"
+		}
+
 	}
 })
 
