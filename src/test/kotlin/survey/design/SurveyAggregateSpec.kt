@@ -163,13 +163,6 @@ class SurveyAggregateSpec : ShouldSpec({
 			}
 		}
 	}
-
-	"Constructor aggregateType" {
-		should("be the aggregate class name including package") {
-			SurveyAggregate.aggregateType() shouldBe "survey.design.SurveyAggregate"
-		}
-
-	}
 })
 
 class Stub : SurveyNamesProjection(StubReadOnlyDatabase()) {

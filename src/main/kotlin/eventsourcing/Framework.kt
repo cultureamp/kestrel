@@ -38,7 +38,6 @@ interface AggregateConstructor<CC: CreationCommand, CE: CreationEvent, Err: Comm
     fun rehydrated(creationEvent: CE, vararg updateEvents: UE): Self {
         return updateEvents.fold(created(creationEvent)) { aggregate, updateEvent -> aggregate.updated(updateEvent) }
     }
-    fun aggregateType(): String = this.javaClass.typeName.substringBeforeLast('$')
 }
 
 interface AggregateConstructorWithProjection<C: CreationCommand, CE: CreationEvent, Err: CommandError, UC: UpdateCommand, UE: UpdateEvent, P, Self : AggregateWithProjection<UC, UE, Err, P, Self>> {
@@ -47,7 +46,6 @@ interface AggregateConstructorWithProjection<C: CreationCommand, CE: CreationEve
     fun rehydrated(creationEvent: CE, vararg updateEvents: UE): Self {
         return updateEvents.fold(created(creationEvent)) { aggregate, updateEvent -> aggregate.updated(updateEvent) }
     }
-    fun aggregateType(): String = this.javaClass.typeName.substringBeforeLast('$')
 }
 
 interface Command {
@@ -71,78 +69,6 @@ interface CreationEvent : Event
 interface UpdateEvent : Event
 
 interface CommandError
-
-//class AggregateRootRegistry(val list: List<AggregateConstructor<out CreationCommand, out CreationEvent, out CommandError, out Aggregate<out UpdateCommand, out UpdateEvent, out CommandError, *>>>) {
-//    val commandToAggregateConstructor: Map<CreationCommand, AggregateConstructor<out CreationCommand, out CreationEvent, out CommandError, out Aggregate<out UpdateCommand, out UpdateEvent, out CommandError, *>>> =
-//        TODO()
-//
-//    fun <CC : CreationCommand>aggregateRootConstructorFor(creationCommand: CC): AggregateConstructor<CC, *, *, *>? {
-//        return null
-//    }
-//}
-
-class CommandDispatcher(val constructorRepository: ConstructorRepository, val eventStore: EventStore) {
-    fun dispatch(command: Command): Boolean = when(command){
-        is CreationCommand -> construct(command)
-        is UpdateCommand -> update(command)
-        else -> TODO("Handle the case where command is both Update and Create type")
-    }
-
-    private fun construct(command: CreationCommand): Boolean { // TODO return proper error codes
-        return constructorRepository.findFor(command)?.let { constructor -> // TODO case where a command can be used in two aggregates. Or otherwise re-implement as a Saga
-            val result = constructor.create(command)
-            when (result) {
-                is Left -> false
-                is Right -> {
-                    // TODO verify that id doesn't already exist
-                    eventStore.sink(constructor.aggregateType(), listOf(result.value))
-                    true
-                }
-            }
-        } ?: false
-    }
-
-    private fun update(command: UpdateCommand): Boolean { // TODO return proper error codes
-        val (aggregateType, events) = eventStore.eventsFor(command.aggregateId)
-        val (creationEvent, updateEvents) = events
-        val constructor = constructorRepository.findFor(aggregateType)
-        val initial = constructor.created(creationEvent)
-        val aggregate = updateEvents.fold<UpdateEvent, Aggregate<UpdateCommand, UpdateEvent, CommandError, Aggregate<UpdateCommand, UpdateEvent, CommandError, *>>>(initial) { aggregate, updateEvent -> aggregate.updated(updateEvent) }
-        val result = aggregate.update(command)
-        return when (result) {
-            is Left -> false
-            is Right -> {
-                // TODO verify that id doesn't already exist
-                eventStore.sink(constructor.aggregateType(), result.value)
-                true
-            }
-        }
-    }
-
-}
-
-class EventStore {
-    fun sink(aggregateType: String, events: List<Event>): Unit {
-        TODO("not implemented") //To change body of created functions use File | Settings | File Templates.
-    }
-
-    fun eventsFor(aggregateId: UUID): Pair<String, Pair<CreationEvent, List<UpdateEvent>>> {
-        TODO("not implemented") //To change body of created functions use File | Settings | File Templates.
-    }
-
-}
-
-// TODO how to handle aggregates with projections. Need to function-curry or something to inject dependencies
-class ConstructorRepository {
-    fun findFor(command: CreationCommand): AggregateConstructor<CreationCommand, CreationEvent, CommandError, UpdateCommand, UpdateEvent, Aggregate<UpdateCommand, UpdateEvent, CommandError, *>>? {
-        TODO("not implemented") //To change body of created functions use File | Settings | File Templates.
-    }
-
-    fun findFor(aggregateType: String): AggregateConstructor<CreationCommand, CreationEvent, CommandError, UpdateCommand, UpdateEvent, Aggregate<UpdateCommand, UpdateEvent, CommandError, *>> {
-        TODO("not implemented") //To change body of created functions use File | Settings | File Templates.
-    }
-
-}
 
 sealed class Either<out E, out V>
 data class Left<E>(val error: E) : Either<E, Nothing>()
