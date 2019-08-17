@@ -7,12 +7,12 @@ import java.util.*
 class GenericsSpec : ShouldSpec({
     "creation" {
         should("work") {
-            val registry = mapOf(
+            val constructorRegistry = mapOf(
                 FooCommand::class to FooAggregateConstructor,
                 QuuxCommand::class to QuuxAggregateConstructor
             )
             val fooCommand = FooBar(UUID.randomUUID())
-            val constructor = registry.entries.find { entry -> entry.key.isInstance(fooCommand) }?.value
+            val constructor = constructorRegistry.entries.find { entry -> entry.key.isInstance(fooCommand) }?.value as AggregateConstructor<Command, *, *>?
             val result = constructor?.create(fooCommand)?.let { event ->
                 EventStore.save(event)
                 true
@@ -20,26 +20,26 @@ class GenericsSpec : ShouldSpec({
             result shouldBe true
         }
     }
-//
-//    "update" {
-//        should("work") {
-//            val commandRegistry = mapOf(
-//                FooCommand::class to FooAggregateConstructor,
-//                QuuxCommand::class to QuuxAggregateConstructor
-//            )
-//            val eventRegistry = mapOf(
-//                FooEvent::class to FooAggregateConstructor,
-//                QuuxEvent::class to QuuxAggregateConstructor
-//            )
-//            val fooCommand = FooBar(UUID.randomUUID())
-//            val constructor = eventRegistry.entries.find { entry -> entry.key.isInstance(fooCommand) }?.value
-//            val result = constructor?.create(fooCommand)?.let { event ->
-//                EventStore.save(event)
-//                true
-//            } ?: false
-//            result shouldBe true
-//        }
-//    }
+
+    "update" {
+        should("work") {
+            val constructorRegistry = mapOf(
+                FooCommand::class to FooAggregateConstructor,
+                QuuxCommand::class to QuuxAggregateConstructor
+            )
+            val fooCommand = FooBar(UUID.randomUUID())
+            val events: List<Event> = listOf(BarFooed(UUID.randomUUID()))//EventStore.eventsFor(fooCommand.aggregateId)
+            // TODO bring back the ?
+            val constructor = constructorRegistry.entries.find { entry -> entry.key.isInstance(fooCommand) }?.value as AggregateConstructor<*, Event, *>
+            val fooEvent = events.first()
+            val agg1 = constructor.created(fooEvent) as Aggregate<*, Event, *>
+            val agg2 = events.fold(agg1) { aggregate, updateEvent -> aggregate.updated(updateEvent) as Aggregate<*, Event, *> }
+            val agg3 = agg2 as Aggregate<Command, *, *>
+            val event = agg2.update(fooCommand)
+            EventStore.save(event)
+            true shouldBe true
+        }
+    }
 })
 
 interface Command {
@@ -51,12 +51,16 @@ interface Event {
 }
 
 interface Aggregate<in C : Command, E : Event, Self : Aggregate<C, E, Self>> {
+    fun updated(event: E): Self
     fun update(command: C): E
 }
 
-interface CreationCommandHandler<in C: Command, E: Event, Self : Aggregate<C, E, Self>> {
+interface AggregateConstructor<C: Command, E: Event, Self : Aggregate<C, E, Self>> {
     fun created(event: E): Self
     fun create(command: C): E
+    fun rehydrated(creationEvent: E, vararg updateEvents: E): Self {
+        return updateEvents.fold(created(creationEvent)) { aggregate, updateEvent -> aggregate.updated(updateEvent) }
+    }
 }
 
 sealed class FooCommand : Command
@@ -75,7 +79,7 @@ sealed class QuuxEvent : Event
 data class BarQuuxed(override val aggregateId: UUID) : QuuxEvent()
 data class BazQuuxed(override val aggregateId: UUID) : QuuxEvent()
 
-object FooAggregateConstructor : CreationCommandHandler<FooCommand, FooEvent, FooAggregate> {
+object FooAggregateConstructor : AggregateConstructor<FooCommand, FooEvent, FooAggregate> {
     override fun created(event: FooEvent): FooAggregate {
         return FooAggregate(event.aggregateId)
     }
@@ -85,7 +89,7 @@ object FooAggregateConstructor : CreationCommandHandler<FooCommand, FooEvent, Fo
     }
 }
 
-object QuuxAggregateConstructor : CreationCommandHandler<QuuxCommand, QuuxEvent, QuuxAggregate> {
+object QuuxAggregateConstructor : AggregateConstructor<QuuxCommand, QuuxEvent, QuuxAggregate> {
     override fun created(event: QuuxEvent): QuuxAggregate {
         return QuuxAggregate(event.aggregateId)
     }
@@ -96,16 +100,23 @@ object QuuxAggregateConstructor : CreationCommandHandler<QuuxCommand, QuuxEvent,
 }
 
 data class FooAggregate(val aggregateId: UUID) : Aggregate<FooCommand, FooEvent, FooAggregate> {
+    override fun updated(event: FooEvent): FooAggregate {
+        return FooAggregate(event.aggregateId)
+    }
+
     override fun update(command: FooCommand): FooEvent {
         return BarFooed(command.aggregateId)
     }
 }
 
 data class QuuxAggregate(val aggregateId: UUID) : Aggregate<QuuxCommand, QuuxEvent, QuuxAggregate> {
+    override fun updated(event: QuuxEvent): QuuxAggregate {
+        return QuuxAggregate(event.aggregateId)
+    }
+
     override fun update(command: QuuxCommand): QuuxEvent {
         return BarQuuxed(command.aggregateId)
     }
-
 }
 
 object EventStore {
