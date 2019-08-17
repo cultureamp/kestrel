@@ -1,11 +1,9 @@
 package survey.thing
 
 import eventsourcing.*
-import survey.design.SurveyCaptureLayoutAggregate
-import survey.design.SurveyCaptureLayoutCommandError
-import survey.design.SurveyCaptureLayoutCreationEvent
-import survey.design.SurveyCreationCommand
 import java.util.UUID
+
+sealed class ThingCommand : Event
 
 sealed class ThingCreationCommand : CreationCommand
 data class CreateThing(override val aggregateId: UUID) : ThingCreationCommand()
