@@ -4,7 +4,6 @@ import survey.design.*
 import survey.design.Locale
 import java.util.*
 
-
 class CommandController(val commandGateway: CommandGateway) {
     fun handle(request: Request): Boolean {
         val command = Jackson().commandFrom(request)
