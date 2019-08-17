@@ -5,12 +5,10 @@ import survey.design.Locale
 import java.util.*
 
 
-class CommandController {
-    val commandDispatcher = CommandDispatcher(ConstructorRepository(), EventStore())
-
+class CommandController(val commandGateway: CommandGateway) {
     fun handle(request: Request): Boolean {
         val command = Jackson().commandFrom(request)
-        return commandDispatcher.dispatch(command)
+        return commandGateway.dispatch(command)
     }
 }
 
