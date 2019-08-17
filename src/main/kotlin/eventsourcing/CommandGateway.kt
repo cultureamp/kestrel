@@ -5,6 +5,7 @@ import survey.design.SurveyCaptureLayoutCommand
 import survey.thing.ThingAggregate
 import survey.thing.ThingCommand
 
+@Suppress("UNCHECKED_CAST")
 class CommandGateway(val eventStore: EventStore) {
     val constructorRegistry = mapOf(
         ThingCommand::class to ThingAggregate,
@@ -41,9 +42,9 @@ class CommandGateway(val eventStore: EventStore) {
             when (result) {
                 is Left -> false
                 is Right -> {
-                    val updateEvents = result.value
-                    val updated = updated(aggregate, updateEvents)
-                    eventStore.sink(updated::class.simpleName!!, updateEvents)
+                    val events = result.value
+                    val updated = updated(aggregate, events)
+                    eventStore.sink(updated::class.simpleName!!, events)
                     true
                 }
             }
@@ -55,7 +56,6 @@ class CommandGateway(val eventStore: EventStore) {
             aggregate.updated(updateEvent) as Aggregate<*, UpdateEvent, *, *>
         }
     }
-
 
     private fun constructorFor(command: Command) = constructorRegistry.entries.find { entry -> entry.key.isInstance(command) }?.value
 }
