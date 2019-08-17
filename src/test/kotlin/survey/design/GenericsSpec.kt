@@ -29,15 +29,18 @@ class GenericsSpec : ShouldSpec({
             )
             val fooCommand = FooBar(UUID.randomUUID())
             val events: List<Event> = listOf(BarFooed(UUID.randomUUID()))//EventStore.eventsFor(fooCommand.aggregateId)
-            // TODO bring back the ?
-            val constructor = constructorRegistry.entries.find { entry -> entry.key.isInstance(fooCommand) }?.value as AggregateConstructor<*, Event, *>
             val fooEvent = events.first()
-            val agg1 = constructor.created(fooEvent) as Aggregate<*, Event, *>
-            val agg2 = events.fold(agg1) { aggregate, updateEvent -> aggregate.updated(updateEvent) as Aggregate<*, Event, *> }
-            val agg3 = agg2 as Aggregate<Command, *, *>
-            val event = agg2.update(fooCommand)
-            EventStore.save(event)
-            true shouldBe true
+            // TODO bring back the ?
+            val constructor = constructorRegistry.entries.find { entry -> entry.key.isInstance(fooCommand) }?.value as AggregateConstructor<*, Event, *>?
+            val result = constructor?.let {
+                val aggregate = events.fold((constructor).created(fooEvent) as Aggregate<*, Event, *>) { aggregate, updateEvent ->
+                    aggregate.updated(updateEvent) as Aggregate<*, Event, *>
+                }
+                val event = (aggregate as Aggregate<Command, *, *>).update(fooCommand)
+                EventStore.save(event)
+                true
+            } ?: false
+            result shouldBe true
         }
     }
 })
