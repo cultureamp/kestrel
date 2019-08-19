@@ -8,8 +8,9 @@ import io.ktor.server.netty.*
 fun main(args: Array<String>) {
     embeddedServer(Netty, 8080) {
         routing {
-            get("/") {
-                call.respondText("My Example Blog", ContentType.Text.Html)
+            post("/command/{command}") {
+                val command = call.parameters["command"]
+                call.respond(status = HttpStatusCode.Created, message = "boobar")
             }
         }
     }.start(wait = true)
