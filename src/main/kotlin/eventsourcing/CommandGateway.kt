@@ -28,7 +28,7 @@ class CommandGateway(private val eventStore: EventStore, surveyNamesProjection: 
                 is Right -> {
                     val creationEvent = result.value
                     val aggregate = (constructor as AggregateConstructor<*, CreationEvent, *, *, *, *>).created(creationEvent)
-                    eventStore.sink(aggregate::class.simpleName!!, listOf(creationEvent))
+                    eventStore.sink(aggregate.aggregateType(), listOf(creationEvent))
                     true
                 }
             }
@@ -46,7 +46,7 @@ class CommandGateway(private val eventStore: EventStore, surveyNamesProjection: 
                 is Right -> {
                     val events = result.value
                     val updated = updated(aggregate, events)
-                    eventStore.sink(updated::class.simpleName!!, events)
+                    eventStore.sink(updated.aggregateType(), events)
                     true
                 }
             }

@@ -24,12 +24,14 @@ interface Aggregate<UC: UpdateCommand, UE: UpdateEvent, Err: CommandError, out S
     val aggregateId: UUID
     fun updated(event: UE): Self
     fun update(command: UC): Either<Err, List<UE>> // TODO this should probably be NonEmptyList<UE>
+    fun aggregateType(): String = this::class.simpleName!!
 }
 
 interface AggregateWithProjection<UC: UpdateCommand, UE: UpdateEvent, Err: CommandError, P, Self : AggregateWithProjection<UC, UE, Err, P, Self>> {
     val aggregateId: UUID
     fun updated(event: UE): Self
     fun update(command: UC, projection: P): Either<Err, List<UE>> // TODO this should probably be NonEmptyList<UE>
+    fun aggregateType(): String = this::class.simpleName!!
 
     fun curried(projection: P): Aggregate<UC, UE, Err, Aggregate<UC, UE, Err, *>> {
         return object:Aggregate<UC, UE, Err, Aggregate<UC, UE, Err, *>> {
@@ -42,6 +44,8 @@ interface AggregateWithProjection<UC: UpdateCommand, UE: UpdateEvent, Err: Comma
             override fun update(command: UC): Either<Err, List<UE>> {
                 return update(command, projection)
             }
+
+            override fun aggregateType(): String = this@AggregateWithProjection.aggregateType()
         }
     }
 }
