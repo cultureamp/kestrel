@@ -35,3 +35,6 @@ open class SurveyNamesProjection(database: ReadOnlyDatabase) {
     }
 }
 
+object StubSurveyNamesProjection : SurveyNamesProjection(object:ReadOnlyDatabase {}) {
+    override fun nameExistsFor(accountId: UUID, name: String, locale: Locale): Boolean = false
+}
