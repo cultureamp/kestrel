@@ -20,6 +20,7 @@ class CommandGateway(private val eventStore: EventStore, surveyNamesProjection: 
     }
 
     private fun construct(creationCommand: CreationCommand): Boolean { // TODO return proper error codes
+        // TODO fail if aggregate already exists
         val constructor = constructorFor(creationCommand) as AggregateConstructor<CreationCommand, *, *, *, *, *>?
         return constructor?.create(creationCommand)?.let { result ->
             when (result) {

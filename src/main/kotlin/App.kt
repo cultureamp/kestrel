@@ -1,5 +1,6 @@
 import eventsourcing.CommandController
 import eventsourcing.CommandGateway
+import eventsourcing.EventStore
 import eventsourcing.InMemoryEventStore
 import io.ktor.application.call
 import io.ktor.application.install
@@ -32,8 +33,8 @@ fun main() {
             post("/command/{command}") {
                 val commandClass = call.parameters["command"]!!
                 val command = call.receive<CreateThing>()
-//                val statusCode = if (commandController.handle(command)) HttpStatusCode.Created else HttpStatusCode.InternalServerError
-                val statusCode = HttpStatusCode.Created
+                val statusCode = if (commandController.handle(command)) HttpStatusCode.Created else HttpStatusCode.InternalServerError
+                eventStore.eventsFor(command.aggregateId)
                 call.respond(status = statusCode, message = commandClass)
             }
         }

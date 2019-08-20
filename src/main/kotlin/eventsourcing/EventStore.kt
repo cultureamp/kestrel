@@ -9,10 +9,12 @@ interface EventStore {
 }
 
 object InMemoryEventStore : EventStore {
-    val eventStore: MutableMap<UUID, MutableList<Event>> = mutableMapOf<UUID, MutableList<Event>>().withDefault { mutableListOf() }
+    val eventStore: HashMap<UUID, List<Event>> = hashMapOf()
 
-    override fun sink(aggregateType: String, events: List<Event>) {
-        eventStore.getValue(events.first().aggregateId).addAll(events)
+    override fun sink(aggregateType: String, newEvents: List<Event>) {
+        val uuid = newEvents.first().aggregateId
+        val oldEvents = eventStore[uuid] ?: emptyList()
+        eventStore[uuid] = oldEvents + newEvents
     }
 
     override fun eventsFor(aggregateId: UUID): Pair<CreationEvent, List<UpdateEvent>> {
