@@ -3,19 +3,21 @@ package survey.thing
 import eventsourcing.*
 import java.util.UUID
 
-sealed class ThingCommand : Event
+sealed class ThingCommand : Command
 
-sealed class ThingCreationCommand : CreationCommand
+sealed class ThingCreationCommand : ThingCommand(), CreationCommand
 data class CreateThing(override val aggregateId: UUID) : ThingCreationCommand()
 
-sealed class ThingUpdateCommand : UpdateCommand
+sealed class ThingUpdateCommand :ThingCommand(), UpdateCommand
 data class Tweak(override val aggregateId: UUID, val tweak: String) : ThingUpdateCommand()
 data class Bop(override val aggregateId: UUID) : ThingUpdateCommand()
 
-sealed class ThingCreationEvent : CreationEvent
+sealed class ThingEvent : Event
+
+sealed class ThingCreationEvent : ThingEvent(), CreationEvent
 data class ThingCreated(override val aggregateId: UUID) : ThingCreationEvent()
 
-sealed class ThingUpdateEvent : UpdateEvent
+sealed class ThingUpdateEvent : ThingEvent(), UpdateEvent
 data class Tweaked(override val aggregateId: UUID, val tweak: String) : ThingUpdateEvent()
 data class Bopped(override val aggregateId: UUID) : ThingUpdateEvent()
 

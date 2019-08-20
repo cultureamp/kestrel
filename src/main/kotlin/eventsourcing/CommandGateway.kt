@@ -1,15 +1,16 @@
 package eventsourcing
 
-import survey.design.SurveyCaptureLayoutAggregate
-import survey.design.SurveyCaptureLayoutCommand
+import survey.design.*
 import survey.thing.ThingAggregate
 import survey.thing.ThingCommand
+import kotlin.reflect.KClass
 
 @Suppress("UNCHECKED_CAST")
-class CommandGateway(val eventStore: EventStore) {
-    val constructorRegistry = mapOf(
+class CommandGateway(private val eventStore: EventStore, surveyNamesProjection: SurveyNamesProjection) {
+    val constructorRegistry: Map<KClass<out Command>, AggregateConstructor<*, *, *, *, *, *>> = mapOf(
         ThingCommand::class to ThingAggregate,
-        SurveyCaptureLayoutCommand::class to SurveyCaptureLayoutAggregate
+        SurveyCaptureLayoutCommand::class to SurveyCaptureLayoutAggregate,
+        SurveyCommand::class to SurveyAggregate.curried(surveyNamesProjection)
     )
 
     fun dispatch(command: Command): Boolean = when (command) {
@@ -51,8 +52,8 @@ class CommandGateway(val eventStore: EventStore) {
         } ?: false
     }
 
-    private fun updated(aggregate: Aggregate<*, *, *, *>, updateEvents: List<UpdateEvent>): Aggregate<*, UpdateEvent, *, *> {
-        return updateEvents.fold(aggregate as Aggregate<*, UpdateEvent, *, *>) { aggregate, updateEvent ->
+    private fun updated(initial: Aggregate<*, *, *, *>, updateEvents: List<UpdateEvent>): Aggregate<*, UpdateEvent, *, *> {
+        return updateEvents.fold(initial as Aggregate<*, UpdateEvent, *, *>) { aggregate, updateEvent ->
             aggregate.updated(updateEvent) as Aggregate<*, UpdateEvent, *, *>
         }
     }

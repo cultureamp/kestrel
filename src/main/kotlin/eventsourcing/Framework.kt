@@ -30,6 +30,20 @@ interface AggregateWithProjection<UC: UpdateCommand, UE: UpdateEvent, Err: Comma
     val aggregateId: UUID
     fun updated(event: UE): Self
     fun update(command: UC, projection: P): Either<Err, List<UE>> // TODO this should probably be NonEmptyList<UE>
+
+    fun curried(projection: P): Aggregate<UC, UE, Err, Aggregate<UC, UE, Err, *>> {
+        return object:Aggregate<UC, UE, Err, Aggregate<UC, UE, Err, *>> {
+            override val aggregateId = this@AggregateWithProjection.aggregateId
+
+            override fun updated(event: UE): Aggregate<UC, UE, Err, *> {
+                return this@AggregateWithProjection.updated(event).curried(projection)
+            }
+
+            override fun update(command: UC): Either<Err, List<UE>> {
+                return update(command, projection)
+            }
+        }
+    }
 }
 
 interface AggregateConstructor<CC: CreationCommand, CE: CreationEvent, Err: CommandError, UC: UpdateCommand, UE: UpdateEvent, Self: Aggregate<UC, UE, Err, Self>> {
@@ -40,11 +54,22 @@ interface AggregateConstructor<CC: CreationCommand, CE: CreationEvent, Err: Comm
     }
 }
 
-interface AggregateConstructorWithProjection<C: CreationCommand, CE: CreationEvent, Err: CommandError, UC: UpdateCommand, UE: UpdateEvent, P, Self : AggregateWithProjection<UC, UE, Err, P, Self>> {
+interface AggregateConstructorWithProjection<CC: CreationCommand, CE: CreationEvent, Err: CommandError, UC: UpdateCommand, UE: UpdateEvent, P, Self : AggregateWithProjection<UC, UE, Err, P, Self>> {
     fun created(event: CE): Self
-    fun create(command: C, projection: P): Either<Err, CE> // TODO this should probably be Pair<CE, MaybeEmptyList<UE>>
+    fun create(command: CC, projection: P): Either<Err, CE> // TODO this should probably be Pair<CE, MaybeEmptyList<UE>>
     fun rehydrated(creationEvent: CE, vararg updateEvents: UE): Self {
         return updateEvents.fold(created(creationEvent)) { aggregate, updateEvent -> aggregate.updated(updateEvent) }
+    }
+    fun curried(projection: P): AggregateConstructor<CC, CE, Err, UC, UE, Aggregate<UC, UE, Err, *>> {
+        return object:AggregateConstructor<CC, CE, Err, UC, UE, Aggregate<UC, UE, Err, *>> {
+            override fun created(event: CE): Aggregate<UC, UE, Err, *> {
+                return this@AggregateConstructorWithProjection.created(event).curried(projection)
+            }
+
+            override fun create(command: CC): Either<Err, CE> {
+                return create(command, projection)
+            }
+        }
     }
 }
 
