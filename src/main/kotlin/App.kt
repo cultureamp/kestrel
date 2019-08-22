@@ -1,10 +1,8 @@
 import com.fasterxml.jackson.core.json.ReaderBasedJsonParser
 import com.fasterxml.jackson.databind.exc.MismatchedInputException
 import com.fasterxml.jackson.module.kotlin.MissingKotlinParameterException
-import eventsourcing.Command
-import eventsourcing.CommandController
-import eventsourcing.CommandGateway
-import eventsourcing.InMemoryEventStore
+import eventsourcing.*
+import io.ktor.application.ApplicationCall
 import io.ktor.application.call
 import io.ktor.application.install
 import io.ktor.features.ContentNegotiation
@@ -12,11 +10,11 @@ import io.ktor.http.HttpStatusCode
 import io.ktor.jackson.jackson
 import io.ktor.request.receive
 import io.ktor.response.respond
-import io.ktor.response.respondText
 import io.ktor.routing.post
 import io.ktor.routing.routing
 import io.ktor.server.engine.embeddedServer
 import io.ktor.server.netty.Netty
+import io.ktor.util.pipeline.PipelineContext
 import survey.design.StubSurveyNamesProjection
 import java.io.PrintWriter
 import java.io.StringWriter
@@ -33,30 +31,55 @@ fun main() {
         }
         routing {
             post("/command/{command}") {
-                try {
-                    val commandClassName = call.parameters["command"]!!
-                    val commandClass = Class.forName(commandClassName).kotlin as KClass<Command>
-                    val command = call.receive(commandClass)
-                    val statusCode = if (commandController.handle(command)) HttpStatusCode.Created else HttpStatusCode.InternalServerError
-                    eventStore.eventsFor(command.aggregateId)
-                    call.respondText(status = statusCode, text = commandClassName)
-                } catch (e: MismatchedInputException) {
-                    val field = e.path.first().fieldName
-                    val value = (e.processor as ReaderBasedJsonParser).text
-                    call.respond(status = HttpStatusCode.BadRequest, message = BadData(field, value))
-                } catch (e: MissingKotlinParameterException) {
-                    val field = e.path.first().fieldName
-                    call.respond(status = HttpStatusCode.BadRequest, message = BadData(field, null))
-                } catch (e: Exception) {
-                    logStacktrace(e)
-                    call.respondText(status = HttpStatusCode.InternalServerError, text = "Something went wrong")
+                // TODO handle command missing
+                val commandClassName = call.parameters["command"]!!
+                // TODO handle unrecognised name
+                val commandClass = Class.forName(commandClassName).kotlin as KClass<Command>
+                val command: Either<BadData?, Command> = parseCommandFromJson(commandClass)
+                when (command) {
+                    is Left -> call.respond(
+                        status = HttpStatusCode.BadRequest,
+                        message = command.error ?: "Something went wrong"
+                    )
+                    is Right -> when (commandController.handle(command.value)) {
+                        false -> call.respond(
+                            status = HttpStatusCode.InternalServerError, // TODO error code breakdown
+                            message = command
+                        )
+                        true -> {
+                            val (created, updated) = eventStore.eventsFor(command.value.aggregateId)
+                            val events = listOf(created) + updated
+                            val eventData = events.map { EventData(it::class.simpleName!!, it) }
+                            call.respond(
+                                status = HttpStatusCode.Created,
+                                message = eventData
+                            )
+                        }
+                    }
                 }
             }
         }
     }.start(wait = true)
 }
 
+data class EventData(val type: String, val data: Event)
 data class BadData(val field: String, val invalidValue: String?)
+
+private suspend fun PipelineContext<Unit, ApplicationCall>.parseCommandFromJson(commandClass: KClass<Command>): Either<BadData?, Command> {
+    return try {
+        Right(call.receive(commandClass))
+    } catch (e: MismatchedInputException) {
+        val field = e.path.first().fieldName
+        val value = (e.processor as ReaderBasedJsonParser).text
+        Left(BadData(field, value))
+    } catch (e: MissingKotlinParameterException) {
+        val field = e.path.first().fieldName
+        Left(BadData(field, null))
+    } catch (e: Exception) {
+        logStacktrace(e)
+        Left(null)
+    }
+}
 
 fun logStacktrace(e: Exception) {
     val sw = StringWriter()
