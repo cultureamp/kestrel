@@ -1,16 +1,6 @@
 package survey.design
 
-import eventsourcing.Aggregate
-import eventsourcing.AggregateConstructor
-import eventsourcing.Command
-import eventsourcing.CreationEvent
-import eventsourcing.Either
-import eventsourcing.Right
-import eventsourcing.UpdateCommand
-import eventsourcing.UpdateEvent
-import eventsourcing.CommandError
-import eventsourcing.Event
-import eventsourcing.Left
+import eventsourcing.*
 import survey.design.DemographicSectionPosition.bottom
 import survey.design.DemographicSectionPosition.top
 import java.util.Date
@@ -427,25 +417,24 @@ data class QuestionHiddenFromCapture(
 ) : SurveyCaptureLayoutUpdateEvent()
 
 sealed class SurveyCaptureLayoutCommandError : CommandError
-sealed class AlreadyActionedCommandError : SurveyCaptureLayoutCommandError()
 object DemographicSectionsAlreadyPositioned : SurveyCaptureLayoutCommandError()
-object DescriptionsAlreadyChanged : AlreadyActionedCommandError()
-object ShortDescriptionAlreadyChanged : AlreadyActionedCommandError()
-object LongDescriptionAlreadyChanged : AlreadyActionedCommandError()
+object DescriptionsAlreadyChanged : SurveyCaptureLayoutCommandError(), AlreadyActionedCommandError
+object ShortDescriptionAlreadyChanged : SurveyCaptureLayoutCommandError(), AlreadyActionedCommandError
+object LongDescriptionAlreadyChanged : SurveyCaptureLayoutCommandError(), AlreadyActionedCommandError
 object InvalidOrderForSections : SurveyCaptureLayoutCommandError()
 object InvalidSectionId : SurveyCaptureLayoutCommandError()
-object RenameAlreadyActioned : AlreadyActionedCommandError()
-object SectionAlreadyAdded : AlreadyActionedCommandError()
-object SectionAlreadyMoved : AlreadyActionedCommandError()
-object SectionAlreadyRemoved : AlreadyActionedCommandError()
-object SectionAlreadyRestored : AlreadyActionedCommandError()
+object RenameAlreadyActioned : SurveyCaptureLayoutCommandError(), AlreadyActionedCommandError
+object SectionAlreadyAdded : SurveyCaptureLayoutCommandError(), AlreadyActionedCommandError
+object SectionAlreadyMoved : SurveyCaptureLayoutCommandError(), AlreadyActionedCommandError
+object SectionAlreadyRemoved : SurveyCaptureLayoutCommandError(), AlreadyActionedCommandError
+object SectionAlreadyRestored : SurveyCaptureLayoutCommandError(), AlreadyActionedCommandError
 object SectionCodeNotUnique : SurveyCaptureLayoutCommandError()
-object SectionDescriptionsAlreadyRemoved : AlreadyActionedCommandError()
+object SectionDescriptionsAlreadyRemoved : SurveyCaptureLayoutCommandError(), AlreadyActionedCommandError
 object SectionNotFound : SurveyCaptureLayoutCommandError()
 object SectionHasDifferentIntendedPurpose : SurveyCaptureLayoutCommandError()
-object QuestionAlreadyInPosition : AlreadyActionedCommandError()
+object QuestionAlreadyInPosition : SurveyCaptureLayoutCommandError(), AlreadyActionedCommandError
 object QuestionNotFound : SurveyCaptureLayoutCommandError()
-object QuestionAlreadyRemovedFromSection : AlreadyActionedCommandError()
+object QuestionAlreadyRemovedFromSection : SurveyCaptureLayoutCommandError(), AlreadyActionedCommandError
 object PositionedAfterQuestionInWrongSection : SurveyCaptureLayoutCommandError()
 
 enum class IntendedPurpose {

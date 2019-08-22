@@ -1,17 +1,6 @@
 package survey.design
 
-import eventsourcing.AggregateConstructorWithProjection
-import eventsourcing.AggregateWithProjection
-import eventsourcing.Command
-import eventsourcing.CommandError
-import eventsourcing.CreationCommand
-import eventsourcing.CreationEvent
-import eventsourcing.Either
-import eventsourcing.Event
-import eventsourcing.Left
-import eventsourcing.Right
-import eventsourcing.UpdateCommand
-import eventsourcing.UpdateEvent
+import eventsourcing.*
 import java.util.*
 
 data class SurveyAggregate(override val aggregateId: UUID, val name: Map<Locale, String>, val accountId: UUID, val deleted: Boolean = false) : AggregateWithProjection<SurveyUpdateCommand, SurveyUpdateEvent, SurveyError, SurveyNamesProjection, SurveyAggregate> {
@@ -80,10 +69,10 @@ data class Deleted(override val aggregateId: UUID, val deletedAt: Date) : Survey
 data class Restored(override val aggregateId: UUID, val restoredAt: Date) : SurveyUpdateEvent()
 
 sealed class SurveyError : CommandError
-object AlreadyRenamed : SurveyError()
 object SurveyNameNotUnique : SurveyError()
-object AlreadyDeleted : SurveyError()
-object NotDeleted : SurveyError()
+object AlreadyRenamed : SurveyError(), AlreadyActionedCommandError
+object AlreadyDeleted : SurveyError(), AlreadyActionedCommandError
+object NotDeleted : SurveyError(), AlreadyActionedCommandError
 
 enum class Locale {
     en, de

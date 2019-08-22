@@ -99,6 +99,10 @@ interface UpdateEvent : Event
 
 interface CommandError
 
+interface AlreadyActionedCommandError : CommandError
+
+interface AuthorizationCommandError : CommandError
+
 sealed class Either<out E, out V>
 data class Left<E>(val error: E) : Either<E, Nothing>()
 data class Right<V>(val value: V) : Either<Nothing, V>() {

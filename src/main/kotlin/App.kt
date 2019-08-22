@@ -15,18 +15,26 @@ import io.ktor.routing.routing
 import io.ktor.server.engine.embeddedServer
 import io.ktor.server.netty.Netty
 import io.ktor.util.pipeline.PipelineContext
-import survey.design.StubSurveyNamesProjection
+import survey.design.*
+import survey.thing.ThingAggregate
+import survey.thing.ThingCommand
 import java.io.PrintWriter
 import java.io.StringWriter
 import java.lang.ClassCastException
 import kotlin.reflect.KClass
 
-fun main() {
-    val surveyNamesProjection = StubSurveyNamesProjection
-    val eventStore = InMemoryEventStore
-    val commandGateway = CommandGateway(eventStore, surveyNamesProjection)
-    val commandController = CommandController(commandGateway)
+// custom app wiring
+val surveyNamesProjection = StubSurveyNamesProjection
+val commandToConstructor: Map<KClass<out Command>, AggregateConstructor<*, *, *, *, *, *>> = mapOf(
+    ThingCommand::class to ThingAggregate,
+    SurveyCaptureLayoutCommand::class to SurveyCaptureLayoutAggregate,
+    SurveyCommand::class to SurveyAggregate.curried(surveyNamesProjection)
+)
+val eventStore = InMemoryEventStore
 
+// 100% generic server
+fun main() {
+    val commandGateway = CommandGateway(eventStore, commandToConstructor)
     embeddedServer(Netty, 8080) {
         install(ContentNegotiation) {
             jackson {}
@@ -39,20 +47,21 @@ fun main() {
                         status = HttpStatusCode.BadRequest,
                         message = command.error ?: "Something went wrong"
                     )
-                    is Right -> when (commandController.handle(command.value)) {
-                        false -> call.respond(
-                            status = HttpStatusCode.InternalServerError, // TODO error code breakdown
-                            message = command
-                        )
-                        true -> {
-                            val (created, updated) = eventStore.eventsFor(command.value.aggregateId)
-                            val events = listOf(created) + updated
-                            val eventData = events.map { EventData(it::class.simpleName!!, it) }
-                            call.respond(
-                                status = HttpStatusCode.Created,
-                                message = eventData
-                            )
+                    is Right -> {
+                        val statusCode = commandGateway.dispatch(command.value)
+                        val message: Any = when (statusCode) {
+                            HttpStatusCode.Created, HttpStatusCode.OK  -> {
+                                val (created, updated) = eventStore.eventsFor(command.value.aggregateId)
+                                val events = listOf(created) + updated
+                                events.map { EventData(it::class.simpleName!!, it) }
+                            }
+                            else -> command
+
                         }
+                        call.respond(
+                            status = statusCode,
+                            message = message
+                        )
                     }
                 }
             }
