@@ -14,13 +14,14 @@ data class SurveyCaptureLayoutAggregate(
     val questions: Set<UUID> = emptySet()
 ) : Aggregate<SurveyCaptureLayoutUpdateCommand, SurveyCaptureLayoutUpdateEvent, SurveyCaptureLayoutCommandError, SurveyCaptureLayoutAggregate> {
 
-    companion object : AggregateConstructor<SurveyCreationCommand, SurveyCaptureLayoutCreationEvent, SurveyCaptureLayoutCommandError, SurveyCaptureLayoutUpdateCommand, SurveyCaptureLayoutUpdateEvent, SurveyCaptureLayoutAggregate> {
+    companion object :
+        AggregateConstructor<SurveyCaptureLayoutCreationCommand, SurveyCaptureLayoutCreationEvent, SurveyCaptureLayoutCommandError, SurveyCaptureLayoutUpdateCommand, SurveyCaptureLayoutUpdateEvent, SurveyCaptureLayoutAggregate> {
         override fun created(event: SurveyCaptureLayoutCreationEvent): SurveyCaptureLayoutAggregate = when (event) {
             is Generated -> SurveyCaptureLayoutAggregate(event.aggregateId)
         }
 
-        override fun create(command: SurveyCreationCommand): Either<SurveyCaptureLayoutCommandError, SurveyCaptureLayoutCreationEvent> = when (command) {
-            is Create -> with(command) { Right(Generated(surveyCaptureLayoutAggregateId, aggregateId, createdAt)) }
+        override fun create(command: SurveyCaptureLayoutCreationCommand): Either<SurveyCaptureLayoutCommandError, SurveyCaptureLayoutCreationEvent> = when (command) {
+            is Generate -> with(command) { Right(Generated(aggregateId, surveyId, generatedAt)) }
         }
     }
 
@@ -215,6 +216,10 @@ enum class Status {
 }
 
 sealed class SurveyCaptureLayoutCommand : Command
+
+sealed class SurveyCaptureLayoutCreationCommand : SurveyCaptureLayoutCommand(), CreationCommand
+data class Generate(override val aggregateId: UUID, val surveyId: UUID, val generatedAt: Date) : SurveyCaptureLayoutCreationCommand()
+
 sealed class SurveyCaptureLayoutUpdateCommand : SurveyCaptureLayoutCommand(), UpdateCommand
 data class AddSection(
     override val aggregateId: UUID,

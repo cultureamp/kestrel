@@ -67,10 +67,10 @@ class SurveyAggregateSpec : ShouldSpec({
 		}
 	}
 
-	"Create" {
+	"CreateSurvey" {
 		should("return Created event") {
 			SurveyAggregate.create(
-				Create(aggregateId, surveyCaptureLayoutAggregateId, name, accountId, createdAt), NameTaken(false)
+				CreateSurvey(aggregateId, surveyCaptureLayoutAggregateId, name, accountId, createdAt), NameTaken(false)
 			) shouldBe
 				Right(Created(aggregateId, name, accountId, createdAt))
 		}
@@ -78,7 +78,7 @@ class SurveyAggregateSpec : ShouldSpec({
 		"when Survey name already taken" {
 			should("fail with SurveyNameNotUnique") {
 				SurveyAggregate.create(
-					Create(aggregateId, surveyCaptureLayoutAggregateId, name, accountId, createdAt), NameTaken(true)
+					CreateSurvey(aggregateId, surveyCaptureLayoutAggregateId, name, accountId, createdAt), NameTaken(true)
 				) shouldBe
 					Left(SurveyNameNotUnique)
 			}
