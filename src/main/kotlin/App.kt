@@ -1,12 +1,13 @@
-import eventsourcing.*
+import eventsourcing.CommandGateway
+import eventsourcing.InMemoryEventStore
+import eventsourcing.Ktor
 import survey.design.*
 import survey.thing.ThingAggregate
 import survey.thing.ThingCommand
-import kotlin.reflect.KClass
 
 fun main() {
     val surveyNamesProjection = StubSurveyNamesProjection
-    val commandToConstructor: Map<KClass<out Command>, AggregateConstructor<*, *, *, *, *, *>> = mapOf(
+    val commandToConstructor = mapOf(
         ThingCommand::class to ThingAggregate,
         SurveyCaptureLayoutCommand::class to SurveyCaptureLayoutAggregate,
         SurveyCommand::class to SurveyAggregate.curried(surveyNamesProjection)
