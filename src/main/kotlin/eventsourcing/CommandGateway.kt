@@ -12,26 +12,22 @@ class CommandGateway(private val eventStore: EventStore, val commandToConstructo
     }
 
     private fun construct(creationCommand: CreationCommand): HttpStatusCode {
-        // TODO fail if aggregate already exists and fail with HttpStatusCode.Conflict
-        val constructor = constructorFor(creationCommand) as AggregateConstructor<CreationCommand, *, *, *, *, *>?
-        return constructor?.create(creationCommand)?.let { result ->
-            when (result) {
-                is Left -> errorToStatusCode(result)
-                is Right -> {
-                    val creationEvent = result.value
-                    val aggregate = (constructor as AggregateConstructor<*, CreationEvent, *, *, *, *>).created(creationEvent)
-                    eventStore.sink(aggregate.aggregateType(), listOf(creationEvent))
-                    HttpStatusCode.Created
-                }
+        return when (eventStore.isTaken(creationCommand.aggregateId)) {
+            true -> HttpStatusCode.Conflict
+            false -> {
+                val constructor = constructorFor(creationCommand) as AggregateConstructor<CreationCommand, *, *, *, *, *>?
+                return constructor?.create(creationCommand)?.let { result ->
+                    when (result) {
+                        is Left -> errorToStatusCode(result.error)
+                        is Right -> {
+                            val creationEvent = result.value
+                            val aggregate = (constructor as AggregateConstructor<*, CreationEvent, *, *, *, *>).created(creationEvent)
+                            eventStore.sink(aggregate.aggregateType(), listOf(creationEvent))
+                            HttpStatusCode.Created
+                        }
+                    }
+                } ?: HttpStatusCode.InternalServerError
             }
-        } ?: HttpStatusCode.InternalServerError
-    }
-
-    private fun errorToStatusCode(result: Left<CommandError>): HttpStatusCode {
-        return when (result.error) {
-            is AlreadyActionedCommandError -> HttpStatusCode.NotModified
-            is AuthorizationCommandError -> HttpStatusCode.Forbidden
-            else -> HttpStatusCode.BadRequest
         }
     }
 
@@ -42,7 +38,7 @@ class CommandGateway(private val eventStore: EventStore, val commandToConstructo
             val aggregate = updated(constructor.created(creationEvent), updateEvents)
             val result = (aggregate as Aggregate<UpdateCommand, *, *, *>).update(updateCommand)
             when (result) {
-                is Left -> errorToStatusCode(result)
+                is Left -> errorToStatusCode(result.error)
                 is Right -> {
                     val events = result.value
                     val updated = updated(aggregate, events)
@@ -51,6 +47,14 @@ class CommandGateway(private val eventStore: EventStore, val commandToConstructo
                 }
             }
         } ?: HttpStatusCode.InternalServerError
+    }
+
+    private fun errorToStatusCode(commandError: CommandError): HttpStatusCode {
+        return when (commandError) {
+            is AlreadyActionedCommandError -> HttpStatusCode.NotModified
+            is AuthorizationCommandError -> HttpStatusCode.Forbidden
+            else -> HttpStatusCode.BadRequest
+        }
     }
 
     private fun updated(initial: Aggregate<*, *, *, *>, updateEvents: List<UpdateEvent>): Aggregate<*, UpdateEvent, *, *> {
