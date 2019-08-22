@@ -20,8 +20,8 @@ data class SurveyCaptureLayoutAggregate(
             is Generated -> SurveyCaptureLayoutAggregate(event.aggregateId)
         }
 
-        override fun create(command: SurveyCaptureLayoutCreationCommand): Either<SurveyCaptureLayoutCommandError, SurveyCaptureLayoutCreationEvent> = when (command) {
-            is Generate -> with(command) { Right(Generated(aggregateId, surveyId, generatedAt)) }
+        override fun create(command: SurveyCaptureLayoutCreationCommand): Either<SurveyCaptureLayoutCommandError, Pair<SurveyCaptureLayoutCreationEvent, List<SurveyCaptureLayoutUpdateEvent>>> = when (command) {
+            is Generate -> with(command) { Right(Pair(Generated(aggregateId, surveyId, generatedAt), emptyList<SurveyCaptureLayoutUpdateEvent>())) }
         }
     }
 

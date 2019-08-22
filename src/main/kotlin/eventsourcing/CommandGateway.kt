@@ -4,7 +4,13 @@ import io.ktor.http.HttpStatusCode
 import kotlin.reflect.KClass
 
 @Suppress("UNCHECKED_CAST")
-class CommandGateway(private val eventStore: EventStore, val commandToConstructor: Map<KClass<out Command>, AggregateConstructor<*, *, *, *, *, *>>) {
+class CommandGateway(
+    private val eventStore: EventStore,
+    aggregates: Map<KClass<out Command>, AggregateConstructor<*, *, *, *, *, *>>,
+    sagas: Map<KClass<out Command>, AggregateConstructorWithProjection<*, *, *, *, *, CommandGateway, *>>
+) {
+    val constructors = sagas.mapValues { (_, value) -> value.curried(this) }.toList() + aggregates.toList()
+
     fun dispatch(command: Command): HttpStatusCode = when (command) {
         is CreationCommand -> construct(command)
         is UpdateCommand -> update(command)
@@ -20,9 +26,10 @@ class CommandGateway(private val eventStore: EventStore, val commandToConstructo
                     when (result) {
                         is Left -> errorToStatusCode(result.error)
                         is Right -> {
-                            val creationEvent = result.value
+                            val (creationEvent, updateEvents) = result.value
                             val aggregate = (constructor as AggregateConstructor<*, CreationEvent, *, *, *, *>).created(creationEvent)
-                            eventStore.sink(aggregate.aggregateType(), listOf(creationEvent))
+                            val updated = updated(aggregate, updateEvents)
+                            eventStore.sink(updated.aggregateType(), listOf(creationEvent) + updateEvents)
                             HttpStatusCode.Created
                         }
                     }
@@ -63,5 +70,5 @@ class CommandGateway(private val eventStore: EventStore, val commandToConstructo
         }
     }
 
-    private fun constructorFor(command: Command) = commandToConstructor.entries.find { entry -> entry.key.isInstance(command) }?.value
+    private fun constructorFor(command: Command) = constructors.find { entry -> entry.first.isInstance(command) }?.second
 }

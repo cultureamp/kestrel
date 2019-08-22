@@ -52,7 +52,7 @@ interface AggregateWithProjection<UC: UpdateCommand, UE: UpdateEvent, Err: Comma
 
 interface AggregateConstructor<CC: CreationCommand, CE: CreationEvent, Err: CommandError, UC: UpdateCommand, UE: UpdateEvent, Self: Aggregate<UC, UE, Err, Self>> {
     fun created(event: CE): Self
-    fun create(command: CC): Either<Err, CE> // TODO this should probably be Pair<CE, MaybeEmptyList<UE>>
+    fun create(command: CC): Either<Err, Pair<CE, List<UE>>>
     fun rehydrated(creationEvent: CE, vararg updateEvents: UE): Self {
         return updateEvents.fold(created(creationEvent)) { aggregate, updateEvent -> aggregate.updated(updateEvent) }
     }
@@ -60,7 +60,7 @@ interface AggregateConstructor<CC: CreationCommand, CE: CreationEvent, Err: Comm
 
 interface AggregateConstructorWithProjection<CC: CreationCommand, CE: CreationEvent, Err: CommandError, UC: UpdateCommand, UE: UpdateEvent, P, Self : AggregateWithProjection<UC, UE, Err, P, Self>> {
     fun created(event: CE): Self
-    fun create(command: CC, projection: P): Either<Err, CE> // TODO this should probably be Pair<CE, MaybeEmptyList<UE>>
+    fun create(command: CC, projection: P): Either<Err, Pair<CE, List<UE>>>
     fun rehydrated(creationEvent: CE, vararg updateEvents: UE): Self {
         return updateEvents.fold(created(creationEvent)) { aggregate, updateEvent -> aggregate.updated(updateEvent) }
     }
@@ -70,7 +70,7 @@ interface AggregateConstructorWithProjection<CC: CreationCommand, CE: CreationEv
                 return this@AggregateConstructorWithProjection.created(event).curried(projection)
             }
 
-            override fun create(command: CC): Either<Err, CE> {
+            override fun create(command: CC): Either<Err, Pair<CE, List<UE>>> {
                 return create(command, projection)
             }
         }

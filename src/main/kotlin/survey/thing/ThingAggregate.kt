@@ -23,8 +23,8 @@ data class Bopped(override val aggregateId: UUID) : ThingUpdateEvent()
 
 data class ThingAggregate(override val aggregateId: UUID, val tweaks: List<String> = emptyList(), val bops: List<Bopped> = emptyList()) : Aggregate<ThingUpdateCommand, ThingUpdateEvent, CommandError, ThingAggregate> {
     companion object : AggregateConstructor<ThingCreationCommand, ThingCreationEvent, CommandError, ThingUpdateCommand, ThingUpdateEvent, ThingAggregate> {
-        override fun create(command: ThingCreationCommand): Either<CommandError, ThingCreationEvent> = when(command){
-            is CreateThing -> Right(ThingCreated(command.aggregateId))
+        override fun create(command: ThingCreationCommand): Either<CommandError, Pair<ThingCreationEvent, List<ThingUpdateEvent>>> = when(command){
+            is CreateThing -> Right(Pair(ThingCreated(command.aggregateId), emptyList()))
         }
 
         override fun created(event: ThingCreationEvent): ThingAggregate = when(event) {
