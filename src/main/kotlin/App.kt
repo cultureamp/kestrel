@@ -18,6 +18,7 @@ import io.ktor.util.pipeline.PipelineContext
 import survey.design.StubSurveyNamesProjection
 import java.io.PrintWriter
 import java.io.StringWriter
+import java.lang.ClassCastException
 import kotlin.reflect.KClass
 
 fun main() {
@@ -25,17 +26,14 @@ fun main() {
     val eventStore = InMemoryEventStore
     val commandGateway = CommandGateway(eventStore, surveyNamesProjection)
     val commandController = CommandController(commandGateway)
+
     embeddedServer(Netty, 8080) {
         install(ContentNegotiation) {
             jackson {}
         }
         routing {
             post("/command/{command}") {
-                // TODO handle command missing
-                val commandClassName = call.parameters["command"]!!
-                // TODO handle unrecognised name
-                val commandClass = Class.forName(commandClassName).kotlin as KClass<Command>
-                val command: Either<BadData?, Command> = parseCommandFromJson(commandClass)
+                val command = command(call.parameters["command"]!!)
                 when (command) {
                     is Left -> call.respond(
                         status = HttpStatusCode.BadRequest,
@@ -65,9 +63,14 @@ fun main() {
 data class EventData(val type: String, val data: Event)
 data class BadData(val field: String, val invalidValue: String?)
 
-private suspend fun PipelineContext<Unit, ApplicationCall>.parseCommandFromJson(commandClass: KClass<Command>): Either<BadData?, Command> {
+@Suppress("UNCHECKED_CAST")
+private suspend fun PipelineContext<Unit, ApplicationCall>.command(commandClassName: String): Either<BadData?, Command> {
     return try {
-        Right(call.receive(commandClass))
+        Right(call.receive(Class.forName(commandClassName).kotlin as KClass<Command>))
+    } catch (e: ClassNotFoundException) {
+        Left(BadData("commandClassName", commandClassName))
+    } catch (e: ClassCastException) {
+        Left(BadData("commandClassType", commandClassName))
     } catch (e: MismatchedInputException) {
         val field = e.path.first().fieldName
         val value = (e.processor as ReaderBasedJsonParser).text
