@@ -63,7 +63,7 @@ class CommandGateway(
         }
     }
 
-    private fun recursiveStep(saga: Aggregate<Step, *, *, *>): Either<CommandError, List<UpdateEvent>> {
+    private tailrec fun recursiveStep(saga: Aggregate<Step, *, *, *>): Either<CommandError, List<UpdateEvent>> {
         val result = saga.update(Step(saga.aggregateId))
         return when (result) {
             is Left -> result
