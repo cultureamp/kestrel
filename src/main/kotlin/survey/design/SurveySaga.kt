@@ -10,7 +10,7 @@ data class SurveySaga(override val aggregateId: UUID, val startEvent: SurveySaga
             is SurveySagaStarted -> SurveySaga(event.aggregateId, event)
         }
 
-        override fun create(command: SurveySagaCreationCommand, commandGateway: CommandGateway): Either<CommandError, Pair<SurveySagaCreationEvent, List<SurveySagaUpdateEvent>>> = when (command) {
+        override fun create(command: SurveySagaCreationCommand, commandGateway: CommandGateway): Either<CommandError, SurveySagaCreationEvent> = when (command) {
             is Create -> with(command) {
                 val sagaId = UUID.randomUUID()
                 val startEvent = SurveySagaStarted(
@@ -22,7 +22,7 @@ data class SurveySaga(override val aggregateId: UUID, val startEvent: SurveySaga
                     createdAt = createdAt,
                     startedAt = Date()
                 )
-                Right(Pair(startEvent, emptyList<SurveySagaUpdateEvent>()))
+                Right(startEvent)
             }
         }
     }

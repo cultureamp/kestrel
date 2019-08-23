@@ -40,11 +40,10 @@ class CommandGateway(
         return when (result) {
             is Left -> result
             is Right -> {
-                val (creationEvent, updateEvents) = result.value
+                val creationEvent = result.value
                 val aggregate = (aggregateConstructor as AggregateConstructor<*, CreationEvent, *, *, *, *>).created(creationEvent)
-                val updated = updated(aggregate, updateEvents)
-                val events = listOf(creationEvent) + updateEvents
-                eventStore.sink(updated.aggregateType(), events)
+                val events = listOf(creationEvent)
+                eventStore.sink(aggregate.aggregateType(), events)
                 Right(Created)
             }
         }
@@ -55,11 +54,10 @@ class CommandGateway(
         return when (result) {
             is Left -> result
             is Right -> {
-                val (creationEvent, updateEvents) = result.value
+                val creationEvent = result.value
                 val saga = (sagaConstructor as AggregateConstructor<*, CreationEvent, *, Step, *, *>).created(creationEvent) as Aggregate<Step, *, *, *>
-                val updated = updated(saga, updateEvents)
-                val events = listOf(creationEvent) + updateEvents
-                eventStore.sink(updated.aggregateType(), events)
+                val events = listOf(creationEvent)
+                eventStore.sink(saga.aggregateType(), events)
                 Right(recursiveStep(saga)).map { Created }
             }
         }

@@ -10,10 +10,10 @@ data class SurveyAggregate(override val aggregateId: UUID, val name: Map<Locale,
             is Snapshot -> SurveyAggregate(event.aggregateId, event.name, event.accountId, event.deleted)
         }
 
-        override fun create(command: SurveyCreationCommand, projection: SurveyNamesProjection): Either<SurveyError, Pair<SurveyCreationEvent, List<SurveyUpdateEvent>>> = when (command) {
+        override fun create(command: SurveyCreationCommand, projection: SurveyNamesProjection): Either<SurveyError, SurveyCreationEvent> = when (command) {
             is CreateSurvey -> when {
                 command.name.any { (locale, name) -> projection.nameExistsFor(command.accountId, name, locale)} -> Left(SurveyNameNotUnique)
-                else -> Right(Pair(Created(command.aggregateId, command.name, command.accountId, command.createdAt), emptyList()))
+                else -> Right(Created(command.aggregateId, command.name, command.accountId, command.createdAt))
             }
         }
     }

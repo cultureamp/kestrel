@@ -23,14 +23,14 @@ interface ReadWriteDatabase
 interface Aggregate<UC: UpdateCommand, UE: UpdateEvent, Err: CommandError, out Self : Aggregate<UC, UE, Err, Self>> {
     val aggregateId: UUID
     fun updated(event: UE): Self
-    fun update(command: UC): Either<Err, List<UE>> // TODO this should probably be NonEmptyList<UE>
+    fun update(command: UC): Either<Err, List<UE>>
     fun aggregateType(): String = this::class.simpleName!!
 }
 
 interface AggregateWithProjection<UC: UpdateCommand, UE: UpdateEvent, Err: CommandError, P, Self : AggregateWithProjection<UC, UE, Err, P, Self>> {
     val aggregateId: UUID
     fun updated(event: UE): Self
-    fun update(command: UC, projection: P): Either<Err, List<UE>> // TODO this should probably be NonEmptyList<UE>
+    fun update(command: UC, projection: P): Either<Err, List<UE>>
     fun aggregateType(): String = this::class.simpleName!!
 
     fun curried(projection: P): Aggregate<UC, UE, Err, Aggregate<UC, UE, Err, *>> {
@@ -52,7 +52,7 @@ interface AggregateWithProjection<UC: UpdateCommand, UE: UpdateEvent, Err: Comma
 
 interface AggregateConstructor<CC: CreationCommand, CE: CreationEvent, Err: CommandError, UC: UpdateCommand, UE: UpdateEvent, Self: Aggregate<UC, UE, Err, Self>> {
     fun created(event: CE): Self
-    fun create(command: CC): Either<Err, Pair<CE, List<UE>>>
+    fun create(command: CC): Either<Err, CE>
     fun rehydrated(creationEvent: CE, vararg updateEvents: UE): Self {
         return updateEvents.fold(created(creationEvent)) { aggregate, updateEvent -> aggregate.updated(updateEvent) }
     }
@@ -60,7 +60,7 @@ interface AggregateConstructor<CC: CreationCommand, CE: CreationEvent, Err: Comm
 
 interface AggregateConstructorWithProjection<CC: CreationCommand, CE: CreationEvent, Err: CommandError, UC: UpdateCommand, UE: UpdateEvent, P, Self : AggregateWithProjection<UC, UE, Err, P, Self>> {
     fun created(event: CE): Self
-    fun create(command: CC, projection: P): Either<Err, Pair<CE, List<UE>>>
+    fun create(command: CC, projection: P): Either<Err, CE>
     fun rehydrated(creationEvent: CE, vararg updateEvents: UE): Self {
         return updateEvents.fold(created(creationEvent)) { aggregate, updateEvent -> aggregate.updated(updateEvent) }
     }
@@ -70,7 +70,7 @@ interface AggregateConstructorWithProjection<CC: CreationCommand, CE: CreationEv
                 return this@AggregateConstructorWithProjection.created(event).curried(projection)
             }
 
-            override fun create(command: CC): Either<Err, Pair<CE, List<UE>>> {
+            override fun create(command: CC): Either<Err, CE> {
                 return create(command, projection)
             }
         }
