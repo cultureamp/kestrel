@@ -3,18 +3,26 @@ package survey.design
 import eventsourcing.*
 import java.util.*
 
-data class SurveySaga(override val aggregateId: UUID) : AggregateWithProjection<Nothing, SurveySagaUpdateEvent, SagasCantBeUpdatedError, CommandGateway, SurveySaga> {
-    companion object : AggregateConstructorWithProjection<SurveySagaCreationCommand, SurveySagaCreationEvent, SagasCantBeUpdatedError, Nothing, SurveySagaUpdateEvent, CommandGateway, SurveySaga> {
+data class SurveySaga(override val aggregateId: UUID) : AggregateWithProjection<Nothing, SurveySagaUpdateEvent, SagaCannotBeUpdated, CommandGateway, SurveySaga> {
+    companion object : AggregateConstructorWithProjection<SurveySagaCreationCommand, SurveySagaCreationEvent, SagaCannotBeUpdated, Nothing, SurveySagaUpdateEvent, CommandGateway, SurveySaga> {
 
         override fun created(event: SurveySagaCreationEvent): SurveySaga = when (event) {
-            is SurveySagaCreated -> SurveySaga(event.aggregateId)
+            is SurveySagaStarted -> SurveySaga(event.aggregateId)
         }
 
         // TODO this doesn't save state part of the way through so isn't resumeable
-        override fun create(command: SurveySagaCreationCommand, commandGateway: CommandGateway): Either<SagasCantBeUpdatedError, Pair<SurveySagaCreationEvent, List<SurveySagaUpdateEvent>>> = when (command) {
+        override fun create(command: SurveySagaCreationCommand, commandGateway: CommandGateway): Either<SagaCannotBeUpdated, Pair<SurveySagaCreationEvent, List<SurveySagaUpdateEvent>>> = when (command) {
             is Create -> with(command) {
                 val sagaId = UUID.randomUUID()
-                val startEvent = SurveySagaCreated(sagaId, Date())
+                val startEvent = SurveySagaStarted(
+                    aggregateId = sagaId,
+                    surveyAggregateId = aggregateId,
+                    surveyCaptureLayoutAggregateId = surveyCaptureLayoutAggregateId,
+                    name = name,
+                    accountId = accountId,
+                    createdAt = createdAt,
+                    startedAt = Date()
+                )
 
                 val updateEvents = mutableListOf<SurveySagaUpdateEvent>()
 
@@ -71,15 +79,15 @@ data class SurveySaga(override val aggregateId: UUID) : AggregateWithProjection<
     }
 
     override fun updated(event: SurveySagaUpdateEvent): SurveySaga {
-        return this
+        return this // this would be used if Sagas were resumeable
     }
 
-    override fun update(command: Nothing, projection: CommandGateway): Either<SagasCantBeUpdatedError, List<SurveySagaUpdateEvent>> {
-        return Left(SagasCantBeUpdatedError)
+    override fun update(command: Nothing, projection: CommandGateway): Either<SagaCannotBeUpdated, List<SurveySagaUpdateEvent>> {
+        return Left(SagaCannotBeUpdated) // this would be used if the Saga could be cancelled
     }
 }
 
-object SagasCantBeUpdatedError : CommandError
+object SagaCannotBeUpdated : CommandError
 
 sealed class SurveySagaCreationCommand : CreationCommand
 data class Create(
@@ -92,7 +100,15 @@ data class Create(
 
 sealed class SurveySagaEvent : Event
 sealed class SurveySagaCreationEvent : SurveySagaEvent(), CreationEvent
-data class SurveySagaCreated(override val aggregateId: UUID, val createdAt: Date) : SurveySagaCreationEvent()
+data class SurveySagaStarted(
+    override val aggregateId: UUID,
+    val surveyAggregateId: UUID,
+    val surveyCaptureLayoutAggregateId: UUID,
+    val name: Map<Locale, String>,
+    val accountId: UUID,
+    val createdAt: Date,
+    val startedAt: Date
+) : SurveySagaCreationEvent()
 
 sealed class SurveySagaUpdateEvent : SurveySagaEvent(), UpdateEvent
 
