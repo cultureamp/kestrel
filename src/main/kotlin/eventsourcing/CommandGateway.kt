@@ -12,7 +12,7 @@ class CommandGateway(
 
     fun dispatch(command: Command): Either<CommandError, SuccessStatus> = when (command) {
         is CreationCommand -> construct(command)
-        is UpdateCommand -> update(command).map { Updated }
+        is UpdateCommand -> update(command)
         else -> Left(UnrecognizedCommandType)
     }
 
@@ -20,22 +20,18 @@ class CommandGateway(
         return when (eventStore.isTaken(creationCommand.aggregateId)) {
             true -> Left(AggregateIdAlreadyTaken)
             false -> {
-                val sagaConstructor = sagaConstructorFor(creationCommand) as AggregateConstructor<CreationCommand, *, *, Step, *, *>?
-                if (sagaConstructor != null) {
-                    doSaga(sagaConstructor, creationCommand)
-                } else {
-                    val aggregateConstructor = aggregateConstructorFor(creationCommand) as AggregateConstructor<CreationCommand, *, *, *, *, *>?
-                    if (aggregateConstructor != null) {
-                        doAggregate(aggregateConstructor, creationCommand)
-                    } else {
-                        Left(NoConstructorForCommand)
-                    }
+                val sagaConstructor = sagaConstructorFor(creationCommand) as AggregateConstructor<CreationCommand, *, *, *, *, *>?
+                val aggregateConstructor = aggregateConstructorFor(creationCommand) as AggregateConstructor<CreationCommand, *, *, *, *, *>?
+                when {
+                    sagaConstructor != null -> construct(sagaConstructor, creationCommand, ::step)
+                    aggregateConstructor != null -> construct(aggregateConstructor, creationCommand)
+                    else -> Left(NoConstructorForCommand)
                 }
             }
         }
     }
 
-    private fun doAggregate(aggregateConstructor: AggregateConstructor<CreationCommand, *, *, *, *, *>, creationCommand: CreationCommand): Either<CommandError, SuccessStatus> {
+    private fun construct(aggregateConstructor: AggregateConstructor<CreationCommand, *, *, *, *, *>, creationCommand: CreationCommand, stepfn: (Aggregate<Step, *, *, *>) -> Either<CommandError, List<UpdateEvent>> = { Right(emptyList())}): Either<CommandError, SuccessStatus> {
         val result = aggregateConstructor.create(creationCommand)
         return when (result) {
             is Left -> result
@@ -44,26 +40,12 @@ class CommandGateway(
                 val aggregate = (aggregateConstructor as AggregateConstructor<*, CreationEvent, *, *, *, *>).created(creationEvent)
                 val events = listOf(creationEvent)
                 eventStore.sink(aggregate.aggregateType(), events)
-                Right(Created)
+                Right(stepfn(aggregate as Aggregate<Step, *, *, *>)).map { Created }
             }
         }
     }
 
-    private fun doSaga(sagaConstructor: AggregateConstructor<CreationCommand, *, *, Step, *, *>, creationCommand: CreationCommand): Either<CommandError, SuccessStatus> {
-        val result = sagaConstructor.create(creationCommand)
-        return when (result) {
-            is Left -> result
-            is Right -> {
-                val creationEvent = result.value
-                val saga = (sagaConstructor as AggregateConstructor<*, CreationEvent, *, Step, *, *>).created(creationEvent) as Aggregate<Step, *, *, *>
-                val events = listOf(creationEvent)
-                eventStore.sink(saga.aggregateType(), events)
-                Right(recursiveStep(saga)).map { Created }
-            }
-        }
-    }
-
-    private tailrec fun recursiveStep(saga: Aggregate<Step, *, *, *>): Either<CommandError, List<UpdateEvent>> {
+    private tailrec fun step(saga: Aggregate<Step, *, *, *>): Either<CommandError, List<UpdateEvent>> {
         val result = saga.update(Step(saga.aggregateId))
         return when (result) {
             is Left -> result
@@ -72,13 +54,13 @@ class CommandGateway(
                 else -> {
                     val updated = updated(saga, result.value) as Aggregate<Step, *, *, *>
                     eventStore.sink(updated.aggregateType(), result.value)
-                    recursiveStep(updated)
+                    step(updated)
                 }
             }
         }
     }
 
-    private fun update(updateCommand: UpdateCommand): Either<CommandError, List<UpdateEvent>> {
+    private fun update(updateCommand: UpdateCommand): Either<CommandError, SuccessStatus> {
         val constructor = aggregateConstructorFor(updateCommand) as AggregateConstructor<*, CreationEvent, *, *, *, *>?
         return constructor?.let {
             val (creationEvent, updateEvents) = eventStore.eventsFor(updateCommand.aggregateId)
@@ -90,7 +72,7 @@ class CommandGateway(
                     val events = result.value
                     val updated = updated(aggregate, events)
                     eventStore.sink(updated.aggregateType(), events)
-                    Right(events)
+                    Right(Updated)
                 }
             }
         } ?: Left(NoConstructorForCommand)
