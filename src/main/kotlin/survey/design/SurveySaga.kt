@@ -22,7 +22,7 @@ data class SurveySaga(override val aggregateId: UUID, val startEvent: SurveySaga
                     createdAt = createdAt,
                     startedAt = Date()
                 )
-                Right(Pair(startEvent, emptyList()))
+                Right(Pair(startEvent, emptyList<SurveySagaUpdateEvent>()))
             }
         }
     }
