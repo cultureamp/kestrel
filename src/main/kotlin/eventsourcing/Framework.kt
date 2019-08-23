@@ -89,6 +89,8 @@ interface UpdateCommand : Command {
     override val aggregateId: UUID
 }
 
+data class Step(override val aggregateId: UUID) : UpdateCommand
+
 interface Event {
     val aggregateId: UUID
 }

@@ -6,7 +6,7 @@ import kotlin.reflect.KClass
 class CommandGateway(
     private val eventStore: EventStore,
     aggregates: Map<KClass<out Command>, AggregateConstructor<*, *, *, *, *, *>>,
-    sagas: Map<KClass<out Command>, AggregateConstructorWithProjection<*, *, *, *, *, CommandGateway, *>>
+    sagas: Map<KClass<out Command>, AggregateConstructorWithProjection<*, *, *, Step, *, CommandGateway, *>>
 ) {
     val constructors = sagas.mapValues { (_, value) -> value.curried(this) }.toList() + aggregates.toList()
 
