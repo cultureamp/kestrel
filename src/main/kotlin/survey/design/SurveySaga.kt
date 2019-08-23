@@ -1,7 +1,6 @@
 package survey.design
 
 import eventsourcing.*
-import io.ktor.http.HttpStatusCode
 import java.util.*
 
 data class SurveySaga(override val aggregateId: UUID) : AggregateWithProjection<Nothing, SurveySagaUpdateEvent, SagasCantBeUpdatedError, CommandGateway, SurveySaga> {
@@ -31,8 +30,8 @@ data class SurveySaga(override val aggregateId: UUID) : AggregateWithProjection<
 
                 val surveyCreationResult = commandGateway.dispatch(createSurveyCommand)
                 val surveyEvent = when (surveyCreationResult) {
-                    HttpStatusCode.Created -> FinishedCreatingSurvey(sagaId, Date())
-                    else -> FailedCreatingSurvey(sagaId, Date())
+                    is Right -> FinishedCreatingSurvey(sagaId, Date())
+                    is Left -> FailedCreatingSurvey(sagaId, surveyCreationResult.error, Date())
                 }
                 updateEvents.add(surveyEvent)
 
@@ -46,20 +45,22 @@ data class SurveySaga(override val aggregateId: UUID) : AggregateWithProjection<
                     updateEvents.add(StartedCreatingSurveyCaptureLayoutAggregate(sagaId, generate, Date()))
 
                     when (commandGateway.dispatch(generate)) {
-                        HttpStatusCode.Created -> {
+                        is Right -> {
                             updateEvents.add(FinishedCreatingSurveyCaptureLayoutAggregate(sagaId, Date()))
                         }
-                        else -> {
+                        is Left -> {
                             val deleteSurvey = Delete(aggregateId, Date())
-                            updateEvents.add(RollbackCreatingSurvey(sagaId, deleteSurvey, Date()))
-                            when (commandGateway.dispatch(deleteSurvey)) {
-                                HttpStatusCode.OK -> {
+                            updateEvents.add(FailedCreatingSurveyCaptureLayoutAggregate(sagaId, Date()))
+                            updateEvents.add(StartedRollbackCreatingSurvey(sagaId, deleteSurvey, Date()))
+                            val deleteSurveyResult = commandGateway.dispatch(deleteSurvey)
+                            when (deleteSurveyResult) {
+                                is Right -> {
+                                    updateEvents.add(FinishedRollbackCreatingSurvey(sagaId, Date()))
                                 }
-                                else -> {
-                                    updateEvents.add(RollbackCreatingSurveyFailed(sagaId, Date()))
+                                is Left -> {
+                                    updateEvents.add(FailedRollbackCreatingSurvey(sagaId, deleteSurveyResult.error, Date()))
                                 }
                             }
-                            updateEvents.add(FailedCreatingSurveyCaptureLayoutAggregate(sagaId, Date()))
                         }
                     }
                 }
@@ -97,9 +98,11 @@ sealed class SurveySagaUpdateEvent : SurveySagaEvent(), UpdateEvent
 
 data class StartedCreatingSurvey(override val aggregateId: UUID, val command: CreateSurvey, val startedAt: Date) : SurveySagaUpdateEvent()
 data class FinishedCreatingSurvey(override val aggregateId: UUID, val finishedAt: Date) : SurveySagaUpdateEvent()
-data class FailedCreatingSurvey(override val aggregateId: UUID, val failedAt: Date) : SurveySagaUpdateEvent()
-data class RollbackCreatingSurvey(override val aggregateId: UUID, val command: Delete, val rolledBackAt: Date) : SurveySagaUpdateEvent()
-data class RollbackCreatingSurveyFailed(override val aggregateId: UUID, val rollbackFailedAt: Date) : SurveySagaUpdateEvent()
+data class FailedCreatingSurvey(override val aggregateId: UUID, val error: CommandError, val failedAt: Date) : SurveySagaUpdateEvent()
+
+data class StartedRollbackCreatingSurvey(override val aggregateId: UUID, val command: Delete, val startedAt: Date) : SurveySagaUpdateEvent()
+data class FinishedRollbackCreatingSurvey(override val aggregateId: UUID, val finishedAt: Date) : SurveySagaUpdateEvent()
+data class FailedRollbackCreatingSurvey(override val aggregateId: UUID, val error: CommandError, val rollbackFailedAt: Date) : SurveySagaUpdateEvent()
 
 data class StartedCreatingSurveyCaptureLayoutAggregate(override val aggregateId: UUID, val command: Generate, val startedAt: Date) : SurveySagaUpdateEvent()
 data class FinishedCreatingSurveyCaptureLayoutAggregate(override val aggregateId: UUID, val finishedAt: Date) : SurveySagaUpdateEvent()

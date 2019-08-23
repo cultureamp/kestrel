@@ -1,6 +1,5 @@
 package eventsourcing
 
-import io.ktor.http.HttpStatusCode
 import kotlin.reflect.KClass
 
 @Suppress("UNCHECKED_CAST")
@@ -11,57 +10,50 @@ class CommandGateway(
 ) {
     val constructors = sagas.mapValues { (_, value) -> value.curried(this) }.toList() + aggregates.toList()
 
-    fun dispatch(command: Command): HttpStatusCode = when (command) {
+    fun dispatch(command: Command): Either<CommandError, SuccessStatus> = when (command) {
         is CreationCommand -> construct(command)
         is UpdateCommand -> update(command)
-        else -> HttpStatusCode.NotImplemented
+        else -> Left(UnrecognizedCommandType)
     }
 
-    private fun construct(creationCommand: CreationCommand): HttpStatusCode {
+    private fun construct(creationCommand: CreationCommand): Either<CommandError, SuccessStatus> {
         return when (eventStore.isTaken(creationCommand.aggregateId)) {
-            true -> HttpStatusCode.Conflict
+            true -> Left(AggregateIdAlreadyTaken)
             false -> {
                 val constructor = constructorFor(creationCommand) as AggregateConstructor<CreationCommand, *, *, *, *, *>?
                 return constructor?.create(creationCommand)?.let { result ->
                     when (result) {
-                        is Left -> errorToStatusCode(result.error)
+                        is Left -> result
                         is Right -> {
                             val (creationEvent, updateEvents) = result.value
                             val aggregate = (constructor as AggregateConstructor<*, CreationEvent, *, *, *, *>).created(creationEvent)
                             val updated = updated(aggregate, updateEvents)
-                            eventStore.sink(updated.aggregateType(), listOf(creationEvent) + updateEvents)
-                            HttpStatusCode.Created
+                            val events = listOf(creationEvent) + updateEvents
+                            eventStore.sink(updated.aggregateType(), events)
+                            Right(Created)
                         }
                     }
-                } ?: HttpStatusCode.InternalServerError
+                } ?: Left(NoConstructorForCommand)
             }
         }
     }
 
-    private fun update(updateCommand: UpdateCommand): HttpStatusCode {
+    private fun update(updateCommand: UpdateCommand): Either<CommandError, SuccessStatus> {
         val constructor = constructorFor(updateCommand) as AggregateConstructor<*, CreationEvent, *, *, *, *>?
         return constructor?.let {
             val (creationEvent, updateEvents) = eventStore.eventsFor(updateCommand.aggregateId)
             val aggregate = updated(constructor.created(creationEvent), updateEvents)
             val result = (aggregate as Aggregate<UpdateCommand, *, *, *>).update(updateCommand)
             when (result) {
-                is Left -> errorToStatusCode(result.error)
+                is Left -> result
                 is Right -> {
                     val events = result.value
                     val updated = updated(aggregate, events)
                     eventStore.sink(updated.aggregateType(), events)
-                    HttpStatusCode.OK
+                    Right(Updated)
                 }
             }
-        } ?: HttpStatusCode.InternalServerError
-    }
-
-    private fun errorToStatusCode(commandError: CommandError): HttpStatusCode {
-        return when (commandError) {
-            is AlreadyActionedCommandError -> HttpStatusCode.NotModified
-            is AuthorizationCommandError -> HttpStatusCode.Forbidden
-            else -> HttpStatusCode.BadRequest
-        }
+        } ?: Left(NoConstructorForCommand)
     }
 
     private fun updated(initial: Aggregate<*, *, *, *>, updateEvents: List<UpdateEvent>): Aggregate<*, UpdateEvent, *, *> {
@@ -72,3 +64,11 @@ class CommandGateway(
 
     private fun constructorFor(command: Command) = constructors.find { entry -> entry.first.isInstance(command) }?.second
 }
+
+sealed class SuccessStatus
+object Created : SuccessStatus()
+object Updated : SuccessStatus()
+
+object UnrecognizedCommandType : CommandError
+object NoConstructorForCommand : CommandError
+object AggregateIdAlreadyTaken : CommandError

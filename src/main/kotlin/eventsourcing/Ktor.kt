@@ -30,28 +30,32 @@ object Ktor {
             routing {
                 post("/command/{command}") {
                     val command = command(call.parameters["command"]!!)
-                    when (command) {
-                        is Left -> call.respond(
-                            status = HttpStatusCode.BadRequest,
-                            message = command.error ?: "Something went wrong"
-                        )
+                    val (statusCode, message) = when (command) {
+                        is Left -> when(command.error) {
+                            null -> Pair(HttpStatusCode.InternalServerError, "Something went wrong")
+                            else -> Pair(HttpStatusCode.BadRequest, command.error)
+                        }
                         is Right -> {
-                            val statusCode = commandGateway.dispatch(command.value)
-                            val message: Any = when (statusCode) {
-                                HttpStatusCode.Created, HttpStatusCode.OK -> {
+                            val result = commandGateway.dispatch(command.value)
+                            when (result) {
+                                is Right -> {
+                                    val statusCode = successToStatusCode(result.value)
                                     val (created, updated) = eventStore.eventsFor(command.value.aggregateId)
                                     val events = listOf(created) + updated
-                                    events.map { EventData(it::class.simpleName!!, it) }
+                                    val foo = events.map { EventData(it::class.simpleName!!, it) }
+                                    Pair(statusCode, foo)
                                 }
-                                else -> command
-
+                                is Left -> {
+                                    val statusCode = errorToStatusCode(result.error)
+                                    Pair(statusCode, command.value)
+                                }
                             }
-                            call.respond(
-                                status = statusCode,
-                                message = message
-                            )
                         }
                     }
+                    call.respond(
+                        status = statusCode,
+                        message = message
+                    )
                 }
             }
         }.start(wait = true)
@@ -82,7 +86,20 @@ private suspend fun PipelineContext<Unit, ApplicationCall>.command(commandClassN
     }
 }
 
-fun logStacktrace(e: Exception) {
+private fun errorToStatusCode(commandError: CommandError) = when (commandError) {
+    is AlreadyActionedCommandError -> HttpStatusCode.NotModified
+    is AuthorizationCommandError -> HttpStatusCode.Unauthorized
+    is AggregateIdAlreadyTaken -> HttpStatusCode.Conflict
+    is UnrecognizedCommandType, NoConstructorForCommand -> HttpStatusCode.NotImplemented
+    else -> HttpStatusCode.Forbidden
+}
+
+private fun successToStatusCode(successStatus: SuccessStatus) = when (successStatus) {
+    is Created -> HttpStatusCode.Created
+    is Updated -> HttpStatusCode.OK
+}
+
+private fun logStacktrace(e: Exception) {
     val sw = StringWriter()
     e.printStackTrace(PrintWriter(sw))
     print(sw.toString())
