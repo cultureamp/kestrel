@@ -21,8 +21,8 @@ sealed class ThingUpdateEvent : ThingEvent(), UpdateEvent
 data class Tweaked(override val aggregateId: UUID, val tweak: String) : ThingUpdateEvent()
 data class Bopped(override val aggregateId: UUID) : ThingUpdateEvent()
 
-data class ThingAggregate(override val aggregateId: UUID, val tweaks: List<String> = emptyList(), val bops: List<Bopped> = emptyList()) : Aggregate<ThingUpdateCommand, ThingUpdateEvent, CommandError, ThingAggregate> {
-    companion object : AggregateConstructor<ThingCreationCommand, ThingCreationEvent, CommandError, ThingUpdateCommand, ThingUpdateEvent, ThingAggregate> {
+data class ThingAggregate(override val aggregateId: UUID, val tweaks: List<String> = emptyList(), val bops: List<Bopped> = emptyList()) : Aggregate<ThingUpdateCommand, ThingUpdateEvent, ThingAggregate> {
+    companion object : AggregateConstructor<ThingCreationCommand, ThingCreationEvent, ThingUpdateCommand, ThingUpdateEvent, ThingAggregate> {
         override fun create(command: ThingCreationCommand): Either<CommandError, ThingCreationEvent> = when(command){
             is CreateThing -> Right(ThingCreated(command.aggregateId))
         }

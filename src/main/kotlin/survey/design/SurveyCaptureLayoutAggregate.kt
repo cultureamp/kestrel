@@ -12,15 +12,15 @@ data class SurveyCaptureLayoutAggregate(
     val sectionsForIntendedPurpose: Map<IntendedPurpose, List<Section>> = emptyMap(),
     val demographicSectionsPlacement: DemographicSectionPosition = bottom,
     val questions: Set<UUID> = emptySet()
-) : Aggregate<SurveyCaptureLayoutUpdateCommand, SurveyCaptureLayoutUpdateEvent, SurveyCaptureLayoutCommandError, SurveyCaptureLayoutAggregate> {
+) : Aggregate<SurveyCaptureLayoutUpdateCommand, SurveyCaptureLayoutUpdateEvent, SurveyCaptureLayoutAggregate> {
 
     companion object :
-        AggregateConstructor<SurveyCaptureLayoutCreationCommand, SurveyCaptureLayoutCreationEvent, SurveyCaptureLayoutCommandError, SurveyCaptureLayoutUpdateCommand, SurveyCaptureLayoutUpdateEvent, SurveyCaptureLayoutAggregate> {
+        AggregateConstructor<SurveyCaptureLayoutCreationCommand, SurveyCaptureLayoutCreationEvent, SurveyCaptureLayoutUpdateCommand, SurveyCaptureLayoutUpdateEvent, SurveyCaptureLayoutAggregate> {
         override fun created(event: SurveyCaptureLayoutCreationEvent): SurveyCaptureLayoutAggregate = when (event) {
             is Generated -> SurveyCaptureLayoutAggregate(event.aggregateId)
         }
 
-        override fun create(command: SurveyCaptureLayoutCreationCommand): Either<SurveyCaptureLayoutCommandError, SurveyCaptureLayoutCreationEvent> = when (command) {
+        override fun create(command: SurveyCaptureLayoutCreationCommand): Either<CommandError, SurveyCaptureLayoutCreationEvent> = when (command) {
             is Generate -> with(command) { Right(Generated(aggregateId, surveyId, generatedAt)) }
         }
     }
@@ -83,7 +83,7 @@ data class SurveyCaptureLayoutAggregate(
         }
     }
 
-    override fun update(command: SurveyCaptureLayoutUpdateCommand): Either<SurveyCaptureLayoutCommandError, List<SurveyCaptureLayoutUpdateEvent>> = when (command) {
+    override fun update(command: SurveyCaptureLayoutUpdateCommand): Either<CommandError, List<SurveyCaptureLayoutUpdateEvent>> = when (command) {
         is AddSection -> when {
             hasSection(command.sectionId) -> Left(SectionAlreadyAdded)
             hasSectionCode(command.code) -> Left(SectionCodeNotUnique)

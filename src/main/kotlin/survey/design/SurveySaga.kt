@@ -3,8 +3,8 @@ package survey.design
 import eventsourcing.*
 import java.util.*
 
-data class SurveySaga(override val aggregateId: UUID, val startEvent: SurveySagaStarted, val updateEvents: List<SurveySagaUpdateEvent> = emptyList()) : AggregateWithProjection<Step, SurveySagaUpdateEvent, CommandError, CommandGateway, SurveySaga> {
-    companion object : AggregateConstructorWithProjection<SurveySagaCreationCommand, SurveySagaCreationEvent, CommandError, Step, SurveySagaUpdateEvent, CommandGateway, SurveySaga> {
+data class SurveySaga(override val aggregateId: UUID, val startEvent: SurveySagaStarted, val updateEvents: List<SurveySagaUpdateEvent> = emptyList()) : AggregateWithProjection<Step, SurveySagaUpdateEvent, CommandGateway, SurveySaga> {
+    companion object : AggregateConstructorWithProjection<SurveySagaCreationCommand, SurveySagaCreationEvent, Step, SurveySagaUpdateEvent, CommandGateway, SurveySaga> {
 
         override fun created(event: SurveySagaCreationEvent): SurveySaga = when (event) {
             is SurveySagaStarted -> SurveySaga(event.aggregateId, event)

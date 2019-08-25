@@ -11,7 +11,7 @@ fun main() {
         SurveyCaptureLayoutCommand::class to SurveyCaptureLayoutAggregate,
         SurveyCommand::class to SurveyAggregate.curried(surveyNamesProjection)
     )
-    val sagas: Map<KClass<out Command>, AggregateConstructorWithProjection<*, *, *, Step, *, CommandGateway, *>> = mapOf(
+    val sagas: Map<KClass<out Command>, AggregateConstructorWithProjection<*, *, Step, *, CommandGateway, *>> = mapOf(
         SurveySagaCreationCommand::class to SurveySaga
     )
     val eventStore = InMemoryEventStore

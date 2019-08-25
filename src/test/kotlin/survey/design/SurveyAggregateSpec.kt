@@ -72,7 +72,7 @@ class SurveyAggregateSpec : ShouldSpec({
 			SurveyAggregate.create(
 				CreateSurvey(aggregateId, surveyCaptureLayoutAggregateId, name, accountId, createdAt), NameTaken(false)
 			) shouldBe
-				Right(Pair(Created(aggregateId, name, accountId, createdAt), emptyList<SurveyUpdateEvent>()))
+				Right(Created(aggregateId, name, accountId, createdAt))
 		}
 
 		"when Survey name already taken" {

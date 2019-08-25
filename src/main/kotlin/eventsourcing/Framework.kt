@@ -20,28 +20,28 @@ interface TripleProjector<A: Event, B: Event, C: Event> {
 interface ReadOnlyDatabase
 interface ReadWriteDatabase
 
-interface Aggregate<UC: UpdateCommand, UE: UpdateEvent, Err: CommandError, out Self : Aggregate<UC, UE, Err, Self>> {
+interface Aggregate<UC: UpdateCommand, UE: UpdateEvent, out Self : Aggregate<UC, UE, Self>> {
     val aggregateId: UUID
     fun updated(event: UE): Self
-    fun update(command: UC): Either<Err, List<UE>>
+    fun update(command: UC): Either<CommandError, List<UE>>
     fun aggregateType(): String = this::class.simpleName!!
 }
 
-interface AggregateWithProjection<UC: UpdateCommand, UE: UpdateEvent, Err: CommandError, P, Self : AggregateWithProjection<UC, UE, Err, P, Self>> {
+interface AggregateWithProjection<UC: UpdateCommand, UE: UpdateEvent, P, Self : AggregateWithProjection<UC, UE, P, Self>> {
     val aggregateId: UUID
     fun updated(event: UE): Self
-    fun update(command: UC, projection: P): Either<Err, List<UE>>
+    fun update(command: UC, projection: P): Either<CommandError, List<UE>>
     fun aggregateType(): String = this::class.simpleName!!
 
-    fun curried(projection: P): Aggregate<UC, UE, Err, Aggregate<UC, UE, Err, *>> {
-        return object:Aggregate<UC, UE, Err, Aggregate<UC, UE, Err, *>> {
+    fun curried(projection: P): Aggregate<UC, UE, Aggregate<UC, UE, *>> {
+        return object:Aggregate<UC, UE, Aggregate<UC, UE, *>> {
             override val aggregateId = this@AggregateWithProjection.aggregateId
 
-            override fun updated(event: UE): Aggregate<UC, UE, Err, *> {
+            override fun updated(event: UE): Aggregate<UC, UE, *> {
                 return this@AggregateWithProjection.updated(event).curried(projection)
             }
 
-            override fun update(command: UC): Either<Err, List<UE>> {
+            override fun update(command: UC): Either<CommandError, List<UE>> {
                 return update(command, projection)
             }
 
@@ -50,27 +50,27 @@ interface AggregateWithProjection<UC: UpdateCommand, UE: UpdateEvent, Err: Comma
     }
 }
 
-interface AggregateConstructor<CC: CreationCommand, CE: CreationEvent, Err: CommandError, UC: UpdateCommand, UE: UpdateEvent, Self: Aggregate<UC, UE, Err, Self>> {
+interface AggregateConstructor<CC: CreationCommand, CE: CreationEvent, UC: UpdateCommand, UE: UpdateEvent, Self: Aggregate<UC, UE, Self>> {
     fun created(event: CE): Self
-    fun create(command: CC): Either<Err, CE>
+    fun create(command: CC): Either<CommandError, CE>
     fun rehydrated(creationEvent: CE, vararg updateEvents: UE): Self {
         return updateEvents.fold(created(creationEvent)) { aggregate, updateEvent -> aggregate.updated(updateEvent) }
     }
 }
 
-interface AggregateConstructorWithProjection<CC: CreationCommand, CE: CreationEvent, Err: CommandError, UC: UpdateCommand, UE: UpdateEvent, P, Self : AggregateWithProjection<UC, UE, Err, P, Self>> {
+interface AggregateConstructorWithProjection<CC: CreationCommand, CE: CreationEvent, UC: UpdateCommand, UE: UpdateEvent, P, Self : AggregateWithProjection<UC, UE, P, Self>> {
     fun created(event: CE): Self
-    fun create(command: CC, projection: P): Either<Err, CE>
+    fun create(command: CC, projection: P): Either<CommandError, CE>
     fun rehydrated(creationEvent: CE, vararg updateEvents: UE): Self {
         return updateEvents.fold(created(creationEvent)) { aggregate, updateEvent -> aggregate.updated(updateEvent) }
     }
-    fun curried(projection: P): AggregateConstructor<CC, CE, Err, UC, UE, Aggregate<UC, UE, Err, *>> {
-        return object:AggregateConstructor<CC, CE, Err, UC, UE, Aggregate<UC, UE, Err, *>> {
-            override fun created(event: CE): Aggregate<UC, UE, Err, *> {
+    fun curried(projection: P): AggregateConstructor<CC, CE, UC, UE, Aggregate<UC, UE, *>> {
+        return object:AggregateConstructor<CC, CE, UC, UE, Aggregate<UC, UE, *>> {
+            override fun created(event: CE): Aggregate<UC, UE, *> {
                 return this@AggregateConstructorWithProjection.created(event).curried(projection)
             }
 
-            override fun create(command: CC): Either<Err, CE> {
+            override fun create(command: CC): Either<CommandError, CE> {
                 return create(command, projection)
             }
         }
