@@ -50,12 +50,24 @@ interface AggregateWithProjection<UC: UpdateCommand, UE: UpdateEvent, P, Self : 
     }
 }
 
-interface AggregateConstructor<CC: CreationCommand, CE: CreationEvent, UC: UpdateCommand, UE: UpdateEvent, Self: Aggregate<UC, UE, Self>> {
+interface AggregateConstructor<CC: CreationCommand, CE: CreationEvent, UC: UpdateCommand, UE: UpdateEvent, Self> {
     fun created(event: CE): Self
     fun create(command: CC): Either<CommandError, CE>
-    fun rehydrated(creationEvent: CE, vararg updateEvents: UE): Self {
-        return updateEvents.fold(created(creationEvent)) { aggregate, updateEvent -> aggregate.updated(updateEvent) }
-    }
+//    fun rehydrated(creationEvent: CE, vararg updateEvents: UE): Self {
+//        return updateEvents.fold(created(creationEvent)) { aggregate, updateEvent -> aggregate.updated(updateEvent) }
+//    }
+}
+
+open class FunctionHandleAggregateConstructor<CC: CreationCommand, CE: CreationEvent, UC: UpdateCommand, UE: UpdateEvent, Self>
+    ( val createFn: (CC) -> Either<CommandError, CE>,
+     val createdFn: (CE) -> Self,
+     val updateFn: (Self, UC) -> Either<CommandError, List<UE>>,
+     val updatedFn: (Self, UE) -> Self
+) {
+    fun created(event: CE): Self = createdFn(event)
+    fun create(command: CC): Either<CommandError, CE> = createFn(command)
+    fun updated(aggregate: Self, event: UE): Self = updatedFn(aggregate, event)
+    fun update(aggregate: Self, command: UC): Either<CommandError, List<UE>> = updateFn(aggregate, command)
 }
 
 interface AggregateConstructorWithProjection<CC: CreationCommand, CE: CreationEvent, UC: UpdateCommand, UE: UpdateEvent, P, Self : AggregateWithProjection<UC, UE, P, Self>> {

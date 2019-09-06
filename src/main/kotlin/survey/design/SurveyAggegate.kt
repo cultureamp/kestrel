@@ -3,14 +3,16 @@ package survey.design
 import eventsourcing.*
 import java.util.*
 
-data class SurveyAggregate(override val aggregateId: UUID, val name: Map<Locale, String>, val accountId: UUID, val deleted: Boolean = false) : AggregateWithProjection<SurveyUpdateCommand, SurveyUpdateEvent, SurveyNamesProjection, SurveyAggregate> {
-    companion object : AggregateConstructorWithProjection<SurveyCreationCommand, SurveyCreationEvent, SurveyUpdateCommand, SurveyUpdateEvent, SurveyNamesProjection, SurveyAggregate> {
-        override fun created(event: SurveyCreationEvent): SurveyAggregate = when (event) {
+data class SurveyAggregate(val aggregateId: UUID, val name: Map<Locale, String>, val accountId: UUID, val deleted: Boolean = false) {
+    constructor(event: Created) : this(event.aggregateId, event.name, event.accountId)
+
+    companion object {
+        fun created(event: SurveyCreationEvent): SurveyAggregate = when (event) {
             is Created -> SurveyAggregate(event.aggregateId, event.name, event.accountId)
             is Snapshot -> SurveyAggregate(event.aggregateId, event.name, event.accountId, event.deleted)
         }
 
-        override fun create(command: SurveyCreationCommand, projection: SurveyNamesProjection): Either<SurveyError, SurveyCreationEvent> = when (command) {
+        fun create(projection: SurveyNamesProjection, command: SurveyCreationCommand): Either<SurveyError, SurveyCreationEvent> = when (command) {
             is CreateSurvey -> when {
                 command.name.any { (locale, name) -> projection.nameExistsFor(command.accountId, name, locale)} -> Left(SurveyNameNotUnique)
                 else -> Right(Created(command.aggregateId, command.name, command.accountId, command.createdAt))
@@ -18,13 +20,13 @@ data class SurveyAggregate(override val aggregateId: UUID, val name: Map<Locale,
         }
     }
 
-    override fun updated(event: SurveyUpdateEvent): SurveyAggregate = when (event) {
+    fun updated(event: SurveyUpdateEvent): SurveyAggregate = when (event) {
         is Renamed -> this.copy(name = name + (event.locale to event.name))
         is Deleted -> this.copy(deleted = true)
         is Restored -> this.copy(deleted = false)
     }
 
-    override fun update(command: SurveyUpdateCommand, projection: SurveyNamesProjection): Either<SurveyError, List<SurveyUpdateEvent>> = when (command) {
+    fun update(projection: SurveyNamesProjection, command: SurveyUpdateCommand): Either<SurveyError, List<SurveyUpdateEvent>> = when (command) {
         is Rename -> when {
             name.get(command.locale) == command.newName -> Left(AlreadyRenamed)
             projection.nameExistsFor(accountId, command.newName, command.locale) -> Left(SurveyNameNotUnique)
