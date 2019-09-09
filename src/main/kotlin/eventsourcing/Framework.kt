@@ -58,17 +58,13 @@ interface AggregateConstructor<CC: CreationCommand, CE: CreationEvent, UC: Updat
 //    }
 }
 
-open class FunctionHandleAggregateConstructor<CC: CreationCommand, CE: CreationEvent, UC: UpdateCommand, UE: UpdateEvent, Self>
-    ( val createFn: (CC) -> Either<CommandError, CE>,
-     val createdFn: (CE) -> Self,
-     val updateFn: (Self, UC) -> Either<CommandError, List<UE>>,
-     val updatedFn: (Self, UE) -> Self
-) {
-    fun created(event: CE): Self = createdFn(event)
-    fun create(command: CC): Either<CommandError, CE> = createFn(command)
-    fun updated(aggregate: Self, event: UE): Self = updatedFn(aggregate, event)
-    fun update(aggregate: Self, command: UC): Either<CommandError, List<UE>> = updateFn(aggregate, command)
-}
+data class Configuration<CC: CreationCommand, CE: CreationEvent, UC: UpdateCommand, UE: UpdateEvent, Self>
+    (val create: (CC) -> Either<CommandError, CE>,
+     val created: (CE) -> Self,
+     val update: (Self, UC) -> Either<CommandError, List<UE>>,
+     val updated: (Self, UE) -> Self,
+     val aggregateType: String
+)
 
 interface AggregateConstructorWithProjection<CC: CreationCommand, CE: CreationEvent, UC: UpdateCommand, UE: UpdateEvent, P, Self : AggregateWithProjection<UC, UE, P, Self>> {
     fun created(event: CE): Self

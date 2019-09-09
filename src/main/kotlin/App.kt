@@ -9,17 +9,29 @@ import kotlin.reflect.KFunction3
 fun main() {
     val surveyNamesProjection = StubSurveyNamesProjection
 
-    FunctionHandleAggregateConstructor(
-        SurveyAggregate.Companion::create.partial(surveyNamesProjection),
-        SurveyAggregate.Companion::created,
-        SurveyAggregate::update.partial2(surveyNamesProjection),
-        SurveyAggregate::updated
-    )
-
     val aggregates = mapOf(
-        ThingCommand::class to ThingAggregate,
-        SurveyCaptureLayoutCommand::class to SurveyCaptureLayoutAggregate
-        //SurveyCommand::class to SurveyAggregate.curried(surveyNamesProjection)
+        ThingCommand::class to Configuration(
+            ThingAggregate.Companion::create,
+            ThingAggregate.Companion::created,
+            ThingAggregate::update,
+            ThingAggregate::updated,
+            ThingAggregate::class.simpleName!!
+        ),
+        SurveyCaptureLayoutCommand::class to Configuration(
+            SurveyCaptureLayoutAggregate.Companion::create,
+            SurveyCaptureLayoutAggregate.Companion::created,
+            SurveyCaptureLayoutAggregate::update,
+            SurveyCaptureLayoutAggregate::updated,
+            SurveyCaptureLayoutAggregate::class.simpleName!!
+        ),
+        SurveyCommand::class to Configuration(
+            SurveyAggregate.Companion::create.partial(surveyNamesProjection),
+            SurveyAggregate.Companion::created,
+            SurveyAggregate::update.partial2(surveyNamesProjection),
+            SurveyAggregate::updated,
+            SurveyAggregate::class.simpleName!!
+        )
+
     )
     val sagas: Map<KClass<out Command>, AggregateConstructorWithProjection<*, *, Step, *, CommandGateway, *>> = mapOf(
         SurveySagaCreationCommand::class to SurveySaga
