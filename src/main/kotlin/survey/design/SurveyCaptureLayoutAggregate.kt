@@ -8,24 +8,23 @@ import java.util.UUID
 
 
 data class SurveyCaptureLayoutAggregate(
-    override val aggregateId: UUID,
+    val aggregateId: UUID,
     val sectionsForIntendedPurpose: Map<IntendedPurpose, List<Section>> = emptyMap(),
     val demographicSectionsPlacement: DemographicSectionPosition = bottom,
     val questions: Set<UUID> = emptySet()
-) : Aggregate<SurveyCaptureLayoutUpdateCommand, SurveyCaptureLayoutUpdateEvent, SurveyCaptureLayoutAggregate> {
+) {
 
-    companion object :
-        AggregateConstructor<SurveyCaptureLayoutCreationCommand, SurveyCaptureLayoutCreationEvent, SurveyCaptureLayoutUpdateCommand, SurveyCaptureLayoutUpdateEvent, SurveyCaptureLayoutAggregate> {
-        override fun created(event: SurveyCaptureLayoutCreationEvent): SurveyCaptureLayoutAggregate = when (event) {
+    companion object {
+        fun created(event: SurveyCaptureLayoutCreationEvent): SurveyCaptureLayoutAggregate = when (event) {
             is Generated -> SurveyCaptureLayoutAggregate(event.aggregateId)
         }
 
-        override fun create(command: SurveyCaptureLayoutCreationCommand): Either<CommandError, SurveyCaptureLayoutCreationEvent> = when (command) {
+        fun create(command: SurveyCaptureLayoutCreationCommand): Either<CommandError, SurveyCaptureLayoutCreationEvent> = when (command) {
             is Generate -> with(command) { Right(Generated(aggregateId, surveyId, generatedAt)) }
         }
     }
 
-    override fun updated(event: SurveyCaptureLayoutUpdateEvent): SurveyCaptureLayoutAggregate = when (event) {
+    fun updated(event: SurveyCaptureLayoutUpdateEvent): SurveyCaptureLayoutAggregate = when (event) {
         is SectionAdded -> with(event) {
             val section = Section(sectionId, name.toMap(), shortDescription.toMap(), longDescription.toMap(), intendedPurpose, code)
             val previous = positionedAfterSectionId?.let { sectionFor(it) }
@@ -83,7 +82,7 @@ data class SurveyCaptureLayoutAggregate(
         }
     }
 
-    override fun update(command: SurveyCaptureLayoutUpdateCommand): Either<CommandError, List<SurveyCaptureLayoutUpdateEvent>> = when (command) {
+    fun update(command: SurveyCaptureLayoutUpdateCommand): Either<CommandError, List<SurveyCaptureLayoutUpdateEvent>> = when (command) {
         is AddSection -> when {
             hasSection(command.sectionId) -> Left(SectionAlreadyAdded)
             hasSectionCode(command.code) -> Left(SectionCodeNotUnique)

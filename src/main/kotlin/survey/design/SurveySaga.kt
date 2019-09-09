@@ -3,14 +3,13 @@ package survey.design
 import eventsourcing.*
 import java.util.*
 
-data class SurveySaga(override val aggregateId: UUID, val startEvent: SurveySagaStarted, val updateEvents: List<SurveySagaUpdateEvent> = emptyList()) : AggregateWithProjection<Step, SurveySagaUpdateEvent, CommandGateway, SurveySaga> {
-    companion object : AggregateConstructorWithProjection<SurveySagaCreationCommand, SurveySagaCreationEvent, Step, SurveySagaUpdateEvent, CommandGateway, SurveySaga> {
-
-        override fun created(event: SurveySagaCreationEvent): SurveySaga = when (event) {
+data class SurveySaga(val aggregateId: UUID, val startEvent: SurveySagaStarted, val updateEvents: List<SurveySagaUpdateEvent> = emptyList()) {
+    companion object {
+        fun created(event: SurveySagaCreationEvent): SurveySaga = when (event) {
             is SurveySagaStarted -> SurveySaga(event.aggregateId, event)
         }
 
-        override fun create(command: SurveySagaCreationCommand, commandGateway: CommandGateway): Either<CommandError, SurveySagaCreationEvent> = when (command) {
+        fun create(command: SurveySagaCreationCommand): Either<CommandError, SurveySagaCreationEvent> = when (command) {
             is Create -> with(command) {
                 val sagaId = UUID.randomUUID()
                 val startEvent = SurveySagaStarted(
@@ -27,11 +26,11 @@ data class SurveySaga(override val aggregateId: UUID, val startEvent: SurveySaga
         }
     }
 
-    override fun updated(event: SurveySagaUpdateEvent): SurveySaga {
+    fun updated(event: SurveySagaUpdateEvent): SurveySaga {
         return this.copy(updateEvents = updateEvents + event)
     }
 
-    override fun update(step: Step, commandGateway: CommandGateway): Either<CommandError, List<SurveySagaUpdateEvent>> {
+    fun update(commandGateway: CommandGateway, step: Step): Either<CommandError, List<SurveySagaUpdateEvent>> {
         val lastEvent = updateEvents.lastOrNull() ?: startEvent
         return when (lastEvent) {
             is SurveySagaStarted -> with(lastEvent) {
