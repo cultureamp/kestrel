@@ -13,13 +13,10 @@ data class SurveyCaptureLayoutAggregate(
     val demographicSectionsPlacement: DemographicSectionPosition = bottom,
     val questions: Set<UUID> = emptySet()
 ) : Aggregate {
+    constructor(event: Generated) : this(event.aggregateId)
 
     companion object {
-        fun created(event: SurveyCaptureLayoutCreationEvent): SurveyCaptureLayoutAggregate = when (event) {
-            is Generated -> SurveyCaptureLayoutAggregate(event.aggregateId)
-        }
-
-        fun create(command: SurveyCaptureLayoutCreationCommand): Either<CommandError, SurveyCaptureLayoutCreationEvent> = when (command) {
+        fun create(command: SurveyCaptureLayoutCreationCommand): Either<CommandError, Generated> = when (command) {
             is Generate -> with(command) { Right(Generated(aggregateId, surveyId, generatedAt)) }
         }
     }
@@ -318,12 +315,11 @@ data class HideQuestionFromCapture(
 ) : SurveyCaptureLayoutUpdateCommand()
 
 sealed class SurveyCaptureLayoutEvent : Event
-sealed class SurveyCaptureLayoutCreationEvent : SurveyCaptureLayoutEvent(), CreationEvent
 data class Generated(
     override val aggregateId: UUID,
     val surveyId: UUID,
     val generatedAt: Date
-) : SurveyCaptureLayoutCreationEvent()
+) : SurveyCaptureLayoutEvent(), CreationEvent
 
 sealed class SurveyCaptureLayoutUpdateEvent : SurveyCaptureLayoutEvent(), UpdateEvent
 data class SectionAdded(

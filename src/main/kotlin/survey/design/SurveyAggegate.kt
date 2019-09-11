@@ -4,8 +4,6 @@ import eventsourcing.*
 import java.util.*
 
 data class SurveyAggregate(override val aggregateId: UUID, val name: Map<Locale, String>, val accountId: UUID, val deleted: Boolean = false) : Aggregate {
-    constructor(event: Created) : this(event.aggregateId, event.name, event.accountId)
-
     companion object {
         fun created(event: SurveyCreationEvent): SurveyAggregate = when (event) {
             is Created -> SurveyAggregate(event.aggregateId, event.name, event.accountId)

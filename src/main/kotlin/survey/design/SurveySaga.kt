@@ -4,12 +4,10 @@ import eventsourcing.*
 import java.util.*
 
 data class SurveySaga(override val aggregateId: UUID, val startEvent: SurveySagaStarted, val updateEvents: List<SurveySagaUpdateEvent> = emptyList()) : Aggregate {
-    companion object {
-        fun created(event: SurveySagaCreationEvent): SurveySaga = when (event) {
-            is SurveySagaStarted -> SurveySaga(event.aggregateId, event)
-        }
+    constructor(event: SurveySagaStarted): this(event.aggregateId, event)
 
-        fun create(command: SurveySagaCreationCommand): Either<CommandError, SurveySagaCreationEvent> = when (command) {
+    companion object {
+        fun create(command: SurveySagaCreationCommand): Either<CommandError, SurveySagaStarted> = when (command) {
             is Create -> with(command) {
                 val sagaId = UUID.randomUUID()
                 val startEvent = SurveySagaStarted(
@@ -92,7 +90,6 @@ data class Create(
 ): SurveySagaCreationCommand()
 
 sealed class SurveySagaEvent : Event
-sealed class SurveySagaCreationEvent : SurveySagaEvent(), CreationEvent
 data class SurveySagaStarted(
     override val aggregateId: UUID,
     val surveyAggregateId: UUID,
@@ -101,7 +98,7 @@ data class SurveySagaStarted(
     val accountId: UUID,
     val createdAt: Date,
     val startedAt: Date
-) : SurveySagaCreationEvent()
+) : SurveySagaEvent(), CreationEvent
 
 sealed class SurveySagaUpdateEvent : SurveySagaEvent(), UpdateEvent
 

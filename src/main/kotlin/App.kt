@@ -10,13 +10,13 @@ fun main() {
     val aggregates = mapOf(
         ThingCommand::class to Configuration(
             ThingAggregate.Companion::create,
-            ThingAggregate.Companion::created,
+            ::ThingAggregate,
             ThingAggregate::update,
             ThingAggregate::updated
         ),
         SurveyCaptureLayoutCommand::class to Configuration(
             SurveyCaptureLayoutAggregate.Companion::create,
-            SurveyCaptureLayoutAggregate.Companion::created,
+            ::SurveyCaptureLayoutAggregate,
             SurveyCaptureLayoutAggregate::update,
             SurveyCaptureLayoutAggregate::updated
         ),
@@ -30,7 +30,7 @@ fun main() {
     val sagas: Map<KClass<out Command>, SagaConfiguration<*,*,*,*>> = mapOf(
         SurveySagaCreationCommand::class to SagaConfiguration(
             SurveySaga.Companion::create,
-            SurveySaga.Companion::created,
+            ::SurveySaga,
             SurveySaga::update,
             SurveySaga::updated
         )
