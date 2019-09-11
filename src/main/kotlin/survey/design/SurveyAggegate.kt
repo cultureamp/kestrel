@@ -3,7 +3,7 @@ package survey.design
 import eventsourcing.*
 import java.util.*
 
-data class SurveyAggregate(val aggregateId: UUID, val name: Map<Locale, String>, val accountId: UUID, val deleted: Boolean = false) {
+data class SurveyAggregate(override val aggregateId: UUID, val name: Map<Locale, String>, val accountId: UUID, val deleted: Boolean = false) : Aggregate {
     constructor(event: Created) : this(event.aggregateId, event.name, event.accountId)
 
     companion object {

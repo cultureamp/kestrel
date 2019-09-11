@@ -1,6 +1,7 @@
 package eventsourcing
 
 import java.util.UUID
+import kotlin.reflect.KFunction2
 import kotlin.reflect.KFunction3
 
 interface Projector<E: Event> {
@@ -21,12 +22,10 @@ interface TripleProjector<A: Event, B: Event, C: Event> {
 interface ReadOnlyDatabase
 interface ReadWriteDatabase
 //
-//interface Aggregate<UC: UpdateCommand, UE: UpdateEvent, out Self : Aggregate<UC, UE, Self>> {
-//    val aggregateId: UUID
-//    fun updated(event: UE): Self
-//    fun update(command: UC): Either<CommandError, List<UE>>
-//    fun aggregateType(): String = this::class.simpleName!!
-//}
+interface Aggregate {
+    val aggregateId: UUID
+    fun aggregateType(): String = this::class.simpleName!!
+}
 //
 //interface AggregateWithProjection<UC: UpdateCommand, UE: UpdateEvent, P, Self : AggregateWithProjection<UC, UE, P, Self>> {
 //    val aggregateId: UUID
@@ -59,23 +58,23 @@ interface ReadWriteDatabase
 ////    }
 //}
 
-data class Configuration<CC: CreationCommand, CE: CreationEvent, UC: UpdateCommand, UE: UpdateEvent, Self : Any>
-    (val create: (CC) -> Either<CommandError, CE>,
-     val created: (CE) -> Self,
-     val update: (Self, UC) -> Either<CommandError, List<UE>>,
-     val updated: (Self, UE) -> Self,
-     val aggregateType: String,
-     val aggregateId: (Self) -> UUID
+data class Configuration<CC : CreationCommand, CE : CreationEvent, UC : UpdateCommand, UE : UpdateEvent, A : Aggregate>(
+    val create: (CC) -> Either<CommandError, CE>,
+    val created: (CE) -> A,
+    val update: (A, UC) -> Either<CommandError, List<UE>>,
+    val updated: (A, UE) -> A
 )
 
-data class SagaConfiguration<CC: CreationCommand, CE: CreationEvent, UE: UpdateEvent, Self : Any>
-    (val create: (CC) -> Either<CommandError, CE>,
-     val created: (CE) -> Self,
-     val update: KFunction3<*, CommandGateway, Step, Either<CommandError, List<UE>>>,
-     val updated: (Self, UE) -> Self,
-     val aggregateType: String,
-     val aggregateId: (Self) -> UUID
-)
+data class SagaConfiguration<CC : CreationCommand, CE : CreationEvent, UE : UpdateEvent, A : Aggregate>(
+    val create: (CC) -> Either<CommandError, CE>,
+    val created: (CE) -> A,
+    val update: KFunction3<A, CommandGateway, Step, Either<CommandError, List<UE>>>,
+    val updated: (A, UE) -> A
+) {
+    fun toConfiguration(commandGateway: CommandGateway): Configuration<CC, CE, Step, UE, A> {
+        return Configuration(this.create, this.created, this.update.partial2(commandGateway), this.updated)
+    }
+}
 
 //interface AggregateConstructorWithProjection<CC: CreationCommand, CE: CreationEvent, UC: UpdateCommand, UE: UpdateEvent, P, Self : AggregateWithProjection<UC, UE, P, Self>> {
 //    fun created(event: CE): Self
@@ -135,4 +134,12 @@ data class Right<V>(val value: V) : Either<Nothing, V>() {
 fun <E, V, R> Either<E, V>.map(transform: (V) -> R): Either<E, R> = when (this) {
     is Right -> Right(transform(this.value))
     is Left -> this
+}
+
+fun <A,B,C> KFunction2<A, B, C>.partial(a: A): (B) -> C {
+    return {b -> invoke(a, b)}
+}
+
+fun <A,B,C,D> KFunction3<A,B,C,D>.partial2(b: B): (A, C) -> D {
+    return {a,c -> invoke(a, b, c)}
 }

@@ -8,11 +8,11 @@ import java.util.UUID
 
 
 data class SurveyCaptureLayoutAggregate(
-    val aggregateId: UUID,
+    override val aggregateId: UUID,
     val sectionsForIntendedPurpose: Map<IntendedPurpose, List<Section>> = emptyMap(),
     val demographicSectionsPlacement: DemographicSectionPosition = bottom,
     val questions: Set<UUID> = emptySet()
-) {
+) : Aggregate {
 
     companion object {
         fun created(event: SurveyCaptureLayoutCreationEvent): SurveyCaptureLayoutAggregate = when (event) {

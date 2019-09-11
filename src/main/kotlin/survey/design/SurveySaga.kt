@@ -3,7 +3,7 @@ package survey.design
 import eventsourcing.*
 import java.util.*
 
-data class SurveySaga(val aggregateId: UUID, val startEvent: SurveySagaStarted, val updateEvents: List<SurveySagaUpdateEvent> = emptyList()) {
+data class SurveySaga(override val aggregateId: UUID, val startEvent: SurveySagaStarted, val updateEvents: List<SurveySagaUpdateEvent> = emptyList()) : Aggregate {
     companion object {
         fun created(event: SurveySagaCreationEvent): SurveySaga = when (event) {
             is SurveySagaStarted -> SurveySaga(event.aggregateId, event)
@@ -30,6 +30,7 @@ data class SurveySaga(val aggregateId: UUID, val startEvent: SurveySagaStarted, 
         return this.copy(updateEvents = updateEvents + event)
     }
 
+    // TODO what if we need to also accept an event/command from a 3rd party e.g. PaymentProcessed
     fun update(commandGateway: CommandGateway, step: Step): Either<CommandError, List<SurveySagaUpdateEvent>> {
         val lastEvent = updateEvents.lastOrNull() ?: startEvent
         return when (lastEvent) {
