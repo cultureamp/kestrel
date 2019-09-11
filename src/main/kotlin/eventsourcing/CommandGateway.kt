@@ -8,9 +8,6 @@ class CommandGateway(
     aggregates: Map<KClass<out Command>, Configuration<*, *, *, *, *>>,
     sagas: Map<KClass<out Command>, SagaConfiguration<*, *, *, *>>
 ) {
-    private val sagaConfigurations = sagas.mapValues { (_, value) -> Pair(value.toConfiguration(this), ::step) }
-    private val aggregateConfigurations = aggregates.mapValues { (_, value) -> Pair(value, dontStep()) }
-    private val configurations = sagaConfigurations.toList() + aggregateConfigurations.toList()
 
     fun dispatch(command: Command): Either<CommandError, SuccessStatus> = when (command) {
         is CreationCommand -> construct(command)
@@ -21,13 +18,11 @@ class CommandGateway(
     private fun construct(creationCommand: CreationCommand): Either<CommandError, SuccessStatus> {
         return when (eventStore.isTaken(creationCommand.aggregateId)) {
             true -> Left(AggregateIdAlreadyTaken)
-            false -> {
-                return configurationFor(creationCommand)?.let { (config, step) -> construct(config, creationCommand, step)} ?: Left(NoConstructorForCommand)
-            }
+            false -> configurationFor(creationCommand)?.let { (config, step) -> construct(config, creationCommand, step)} ?: Left(NoConstructorForCommand)
         }
     }
 
-    private fun construct(configuration: Configuration<CreationCommand, CreationEvent, UpdateCommand, UpdateEvent, Aggregate>, creationCommand: CreationCommand, stepFn: (Aggregate, Configuration<CreationCommand,CreationEvent,Step,UpdateEvent,Aggregate>) -> Either<CommandError, List<UpdateEvent>>): Either<CommandError, SuccessStatus> {
+    private fun construct(configuration: Configuration<CreationCommand, CreationEvent, *, *, *>, creationCommand: CreationCommand, stepFn: (Aggregate, Configuration<*, *, Step, UpdateEvent, Aggregate>) -> Either<CommandError, List<UpdateEvent>>): Either<CommandError, SuccessStatus> {
         val result = configuration.create(creationCommand)
         return when (result) {
             is Left -> result
@@ -36,24 +31,7 @@ class CommandGateway(
                 val aggregate = configuration.created(creationEvent)
                 val events = listOf(creationEvent)
                 eventStore.sink(aggregate.aggregateType(), events)
-                Right(stepFn(aggregate, configuration as Configuration<CreationCommand, CreationEvent, Step, UpdateEvent, Aggregate>)).map { Created }
-            }
-        }
-    }
-
-    private fun dontStep(): (Aggregate, Configuration<*,*,Step,UpdateEvent,Aggregate>) -> Either<CommandError, List<UpdateEvent>> = { _, _ -> Right(emptyList()) }
-
-    private tailrec fun step(saga: Aggregate, configuration: Configuration<*, *, Step, UpdateEvent, Aggregate>): Either<CommandError, List<UpdateEvent>> {
-        val result = configuration.update(saga, Step(saga.aggregateId))
-        return when (result) {
-            is Left -> result
-            is Right -> when (result.value) {
-                emptyList<UpdateEvent>() -> result
-                else -> {
-                    val updated = updated(saga, configuration, result.value)
-                    eventStore.sink(updated.aggregateType(), result.value)
-                    step(updated, configuration)
-                }
+                Right(stepFn(aggregate, configuration as Configuration<*, *, Step, UpdateEvent, Aggregate>)).map { Created }
             }
         }
     }
@@ -82,8 +60,28 @@ class CommandGateway(
         }
     }
 
+    private tailrec fun step(saga: Aggregate, configuration: Configuration<*, *, Step, UpdateEvent, Aggregate>): Either<CommandError, List<UpdateEvent>> {
+        val result = configuration.update(saga, Step(saga.aggregateId))
+        return when (result) {
+            is Left -> result
+            is Right -> when (result.value) {
+                emptyList<UpdateEvent>() -> result
+                else -> {
+                    val updated = updated(saga, configuration, result.value)
+                    eventStore.sink(updated.aggregateType(), result.value)
+                    step(updated, configuration)
+                }
+            }
+        }
+    }
+
+    private fun dontStep(): (Aggregate, Configuration<*,*,Step,UpdateEvent,Aggregate>) -> Either<CommandError, List<UpdateEvent>> = { _, _ -> Right(emptyList()) }
+
+    private val sagaConfigurations = sagas.mapValues { (_, value) -> Pair(value.toConfiguration(this), ::step) }
+    private val aggregateConfigurations = aggregates.mapValues { (_, value) -> Pair(value, dontStep()) }
+    private val configurations = sagaConfigurations.toList() + aggregateConfigurations.toList()
     private fun configurationFor(command: Command) =
-        configurations.toList().find { entry -> entry.first.isInstance(command) }?.second as Pair<Configuration<CreationCommand, CreationEvent, UpdateCommand, UpdateEvent, Aggregate>, (Aggregate, Configuration<CreationCommand,CreationEvent,Step,UpdateEvent,Aggregate>) -> Either<CommandError, List<UpdateEvent>>>?
+        configurations.toList().find { entry -> entry.first.isInstance(command) }?.second as Pair<Configuration<CreationCommand, CreationEvent, UpdateCommand, UpdateEvent, Aggregate>, (Aggregate, Configuration<*, *, Step, UpdateEvent, Aggregate>) -> Either<CommandError, List<UpdateEvent>>>?
 }
 
 sealed class SuccessStatus
