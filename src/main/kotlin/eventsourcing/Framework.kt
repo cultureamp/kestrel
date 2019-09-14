@@ -22,22 +22,12 @@ interface Aggregate {
 }
 
 data class Configuration<CC : CreationCommand, CE : CreationEvent, UC : UpdateCommand, UE : UpdateEvent, A : Aggregate>(
-    val create: (CC) -> Either<CommandError, CE>,
     val created: (CE) -> A,
-    val update: (A, UC) -> Either<CommandError, List<UE>>,
-    val updated: (A, UE) -> A
+    val create: (CC) -> Either<CommandError, CE>,
+    val updated: (A, UE) -> A,
+    val update: (A, UC) -> Either<CommandError, List<UE>> = {_,_ -> Right.list() },
+    val step: (A, CommandGateway) -> Either<CommandError, List<UE>> = {_,_ -> Right.list()}
 )
-
-data class SagaConfiguration<CC : CreationCommand, CE : CreationEvent, UE : UpdateEvent, A : Aggregate>(
-    val create: (CC) -> Either<CommandError, CE>,
-    val created: (CE) -> A,
-    val update: KFunction3<A, CommandGateway, Step, Either<CommandError, List<UE>>>,
-    val updated: (A, UE) -> A
-) {
-    fun toConfiguration(commandGateway: CommandGateway): Configuration<CC, CE, Step, UE, A> {
-        return Configuration(this.create, this.created, this.update.partial2(commandGateway), this.updated)
-    }
-}
 
 interface Command {
     val aggregateId: UUID
