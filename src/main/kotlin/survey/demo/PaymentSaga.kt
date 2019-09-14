@@ -1,9 +1,6 @@
 package survey.demo
 
 import eventsourcing.*
-import survey.design.*
-import survey.design.Create
-import survey.design.Locale
 import java.util.*
 
 data class PaymentSaga(override val aggregateId: UUID, val startEvent: PaymentSagaStarted, val updateEvents: List<PaymentSagaUpdateEvent> = emptyList()) : Aggregate {
@@ -50,14 +47,16 @@ data class PaymentSaga(override val aggregateId: UUID, val startEvent: PaymentSa
     }
 }
 
+sealed class PaymentSagaCommand : Command
+
 data class StartPaymentSaga(
     override val aggregateId: UUID,
     val fromUserId: UUID,
     val toUserBankDetails: String,
     val dollarAmount: Int
-) : CreationCommand
+) : PaymentSagaCommand(), CreationCommand
 
-sealed class PaymentSagaUpdateCommand : UpdateCommand
+sealed class PaymentSagaUpdateCommand : PaymentSagaCommand(), UpdateCommand
 data class RegisterThirdPartySuccess(override val aggregateId: UUID) : PaymentSagaUpdateCommand()
 data class RegisterThirdPartyFailure(override val aggregateId: UUID) : PaymentSagaUpdateCommand()
 

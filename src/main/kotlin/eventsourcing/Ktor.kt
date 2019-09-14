@@ -29,33 +29,37 @@ object Ktor {
             }
             routing {
                 post("/command/{command}") {
-                    val command = command(call.parameters["command"]!!)
-                    val (statusCode, message) = when (command) {
-                        is Left -> when(command.error) {
-                            null -> Pair(HttpStatusCode.InternalServerError, "Something went wrong")
-                            else -> Pair(HttpStatusCode.BadRequest, command.error)
-                        }
-                        is Right -> {
-                            val result = commandGateway.dispatch(command.value)
-                            when (result) {
-                                is Right -> {
-                                    val statusCode = successToStatusCode(result.value)
-                                    val (created, updated) = eventStore.eventsFor(command.value.aggregateId)
-                                    val events = listOf(created) + updated
-                                    val foo = events.map { EventData(it::class.simpleName!!, it) }
-                                    Pair(statusCode, foo)
-                                }
-                                is Left -> {
-                                    val statusCode = errorToStatusCode(result.error)
-                                    Pair(statusCode, command.value)
+                    try {
+                        val command = command(call.parameters["command"]!!)
+                        val (statusCode, message) = when (command) {
+                            is Left -> when(command.error) {
+                                null -> Pair(HttpStatusCode.InternalServerError, "Something went wrong")
+                                else -> Pair(HttpStatusCode.BadRequest, command.error)
+                            }
+                            is Right -> {
+                                val result = commandGateway.dispatch(command.value)
+                                when (result) {
+                                    is Right -> {
+                                        val statusCode = successToStatusCode(result.value)
+                                        val (created, updated) = eventStore.eventsFor(command.value.aggregateId)
+                                        val events = listOf(created) + updated
+                                        val foo = events.map { EventData(it::class.simpleName!!, it) }
+                                        Pair(statusCode, foo)
+                                    }
+                                    is Left -> {
+                                        val statusCode = errorToStatusCode(result.error)
+                                        Pair(statusCode, command.value)
+                                    }
                                 }
                             }
                         }
+                        call.respond(
+                            status = statusCode,
+                            message = message
+                        )
+                    } catch (e: NotImplementedError) {
+                        logStacktrace(e)
                     }
-                    call.respond(
-                        status = statusCode,
-                        message = message
-                    )
                 }
             }
         }.start(wait = true)
@@ -99,7 +103,7 @@ private fun successToStatusCode(successStatus: SuccessStatus) = when (successSta
     is Updated -> HttpStatusCode.OK
 }
 
-private fun logStacktrace(e: Exception) {
+private fun logStacktrace(e: Throwable) {
     val sw = StringWriter()
     e.printStackTrace(PrintWriter(sw))
     print(sw.toString())

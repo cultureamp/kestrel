@@ -3,6 +3,7 @@ package eventsourcing
 import java.util.UUID
 import kotlin.reflect.KFunction2
 import kotlin.reflect.KFunction3
+import kotlin.reflect.KFunction4
 
 interface Projector<E : Event> {
     fun project(event: E)
@@ -41,8 +42,6 @@ interface UpdateCommand : Command {
     override val aggregateId: UUID
 }
 
-data class Step(override val aggregateId: UUID) : UpdateCommand
-
 interface Event {
     val aggregateId: UUID
 }
@@ -76,4 +75,12 @@ fun <A, B, C> KFunction2<A, B, C>.partial(a: A): (B) -> C {
 
 fun <A, B, C, D> KFunction3<A, B, C, D>.partial2(b: B): (A, C) -> D {
     return { a, c -> invoke(a, b, c) }
+}
+
+fun <A, B, C, D> ((A, B, C) -> D).partial2(b: B): (A, C) -> D {
+    return { a, c -> invoke(a, b, c) }
+}
+
+fun <A, B, C, D, E> KFunction4<A, B, C, D, E>.partial2(b: B): (A, C, D) -> E {
+    return { a, c, d -> invoke(a, b, c, d) }
 }

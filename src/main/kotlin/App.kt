@@ -1,10 +1,16 @@
 import eventsourcing.*
+import survey.demo.EmailService
+import survey.demo.PaymentSaga
+import survey.demo.PaymentSagaCommand
+import survey.demo.PaymentService
 import survey.design.*
 import survey.thing.ThingAggregate
 import survey.thing.ThingCommand
 
 fun main() {
     val surveyNamesProjection = StubSurveyNamesProjection
+    val paymentService = PaymentService()
+    val emailService = EmailService()
 
     val aggregates = mapOf(
         ThingCommand::class to Configuration(
@@ -30,6 +36,13 @@ fun main() {
             SurveySaga.Companion::create,
             SurveySaga::updated,
             step = SurveySaga::step
+        ),
+        PaymentSagaCommand::class to Configuration(
+            ::PaymentSaga,
+            PaymentSaga.Companion::create,
+            PaymentSaga::updated,
+            PaymentSaga::update,
+            PaymentSaga::step.partial2(paymentService).partial2(emailService)
         )
     )
     val eventStore = InMemoryEventStore

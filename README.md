@@ -39,6 +39,12 @@ returns `201`:
 ]
 ```
 
+## Saga with events coming in from third parties
+```shell
+curl -v -X POST "localhost:8080/command/survey.demo.StartPaymentSaga" -d '{"aggregateId": "9586ee4b-24d6-4bc5-b1ae-6d440ab0cb60", "fromUserId": "e512c6ff-22e6-4f22-9f07-8986023b9fde", "toUserBankDetails": "12345", "dollarAmount": 5}' -H "accept: application/json" -H "Content-Type: application/json"
+curl -v -X POST "localhost:8080/command/survey.demo.RegisterThirdPartySuccess" -d '{"aggregateId": "9586ee4b-24d6-4bc5-b1ae-6d440ab0cb60"}' -H "accept: application/json" -H "Content-Type: application/json"
+```
+
 # Curl the app with bad data
 ## Missing field
 ```shell
