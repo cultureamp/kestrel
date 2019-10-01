@@ -26,7 +26,7 @@ class CommandGateway(
                         val aggregate = configuration.created(creationEvent)
                         val events = listOf(creationEvent)
                         eventStore.sink(aggregate.aggregateType(), events)
-                        Right(step(aggregate, configuration)).map { Created }
+                        result.map { Created }
                     }
                 }
             } ?: Left(NoConstructorForCommand)
@@ -46,7 +46,7 @@ class CommandGateway(
                     val events = result.value
                     val updated = updated(aggregate, configuration, events)
                     eventStore.sink(updated.aggregateType(), events)
-                    Right(step(aggregate, configuration)).map { Updated }
+                    result.map { Updated }
                 }
             }
         } ?: Left(NoConstructorForCommand)
@@ -55,21 +55,6 @@ class CommandGateway(
     private fun updated(initial: Aggregate, configuration: Configuration<*,*,*, UpdateEvent, Aggregate>, updateEvents: List<UpdateEvent>): Aggregate {
         return updateEvents.fold(initial) { aggregate, updateEvent ->
             configuration.updated(aggregate, updateEvent)
-        }
-    }
-
-    private tailrec fun step(saga: Aggregate, configuration: Configuration<CreationCommand, CreationEvent, UpdateCommand, UpdateEvent, Aggregate>): Either<CommandError, List<UpdateEvent>> {
-        val result = configuration.step(saga, this)
-        return when (result) {
-            is Left -> result
-            is Right -> when (result.value) {
-                emptyList<UpdateEvent>() -> result
-                else -> {
-                    val updated = updated(saga, configuration, result.value)
-                    eventStore.sink(updated.aggregateType(), result.value)
-                    step(updated, configuration)
-                }
-            }
         }
     }
 

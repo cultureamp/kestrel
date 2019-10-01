@@ -57,7 +57,7 @@ object Ktor {
                             status = statusCode,
                             message = message
                         )
-                    } catch (e: NotImplementedError) {
+                    } catch (e: Throwable) {
                         logStacktrace(e)
                     }
                 }

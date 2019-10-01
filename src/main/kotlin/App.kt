@@ -8,7 +8,10 @@ import survey.thing.ThingAggregate
 import survey.thing.ThingCommand
 
 fun main() {
+    val readOnlyDatabase = StubReadOnlyDatabase
+    val readWriteDatabase = StubReadWriteDatabase
     val surveyNamesProjection = StubSurveyNamesProjection
+
     val paymentService = PaymentService()
     val emailService = EmailService()
 
@@ -31,22 +34,31 @@ fun main() {
             SurveyAggregate::updated,
             SurveyAggregate::update.partial2(surveyNamesProjection)
         ),
-        SurveySagaCreationCommand::class to Configuration(
-            ::SurveySaga,
-            SurveySaga.Companion::create,
-            SurveySaga::updated,
-            step = SurveySaga::step
+        SurveySagaCommand::class to Configuration(
+            ::SurveySagaAggregate,
+            SurveySagaAggregate.Companion::create,
+            SurveySagaAggregate::updated,
+            SurveySagaAggregate::update
         ),
         PaymentSagaCommand::class to Configuration(
             ::PaymentSaga,
             PaymentSaga.Companion::create,
             PaymentSaga::updated,
-            PaymentSaga::update,
-            PaymentSaga::step.partial2(paymentService).partial2(emailService)
+            PaymentSaga::update
         )
     )
-    val eventStore = InMemoryEventStore
+    val eventStore = InMemoryEventStore()
     val commandGateway = CommandGateway(eventStore, aggregates)
+
+    // downstream from events
+    val surveySagaReactor = SurveySagaReactor(commandGateway)
+    val surveyNamesProjector = SurveyNamesProjector(readWriteDatabase)
+
+    // TODO this should be done as separate threads / jobs / queues / something
+    eventStore.listeners = listOf(
+        EventListener(SurveySagaEvent::class, surveySagaReactor::react),
+        EventListener(SurveyEvent::class, surveyNamesProjector::project)
+    )
 
     Ktor.startEmbeddedCommandServer(commandGateway, eventStore)
 }

@@ -1,6 +1,7 @@
 package eventsourcing
 
 import java.util.UUID
+import kotlin.reflect.KClass
 import kotlin.reflect.KFunction2
 import kotlin.reflect.KFunction3
 import kotlin.reflect.KFunction4
@@ -16,6 +17,8 @@ interface DoubleProjector<A : Event, B : Event> {
 
 interface ReadOnlyDatabase
 interface ReadWriteDatabase
+object StubReadOnlyDatabase : ReadOnlyDatabase
+object StubReadWriteDatabase : ReadWriteDatabase
 
 interface Aggregate {
     val aggregateId: UUID
@@ -26,9 +29,10 @@ data class Configuration<CC : CreationCommand, CE : CreationEvent, UC : UpdateCo
     val created: (CE) -> A,
     val create: (CC) -> Either<CommandError, CE>,
     val updated: (A, UE) -> A,
-    val update: (A, UC) -> Either<CommandError, List<UE>> = {_,_ -> Right.list() },
-    val step: (A, CommandGateway) -> Either<CommandError, List<UE>> = {_,_ -> Right.list()}
+    val update: (A, UC) -> Either<CommandError, List<UE>>
 )
+
+data class EventListener<E : Event>(val eventType: KClass<E>, val handle: (E) -> Any?)
 
 interface Command {
     val aggregateId: UUID
