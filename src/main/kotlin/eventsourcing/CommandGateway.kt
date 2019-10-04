@@ -37,25 +37,18 @@ class CommandGateway(
         val configuration = configurationFor(updateCommand)
         return configuration?.let {
             val (creationEvent, updateEvents) = eventStore.eventsFor(updateCommand.aggregateId)
-            val initial = configuration.created(creationEvent)
-            val aggregate = updated(initial, configuration, updateEvents)
+            val aggregate = configuration.rehydrated(creationEvent, updateEvents)
             val result = configuration.update(aggregate, updateCommand)
             when (result) {
                 is Left -> result
                 is Right -> {
                     val events = result.value
-                    val updated = updated(aggregate, configuration, events)
+                    val updated = configuration.updated(aggregate, events)
                     eventStore.sink(updated.aggregateType(), events)
                     result.map { Updated }
                 }
             }
         } ?: Left(NoConstructorForCommand)
-    }
-
-    private fun updated(initial: Aggregate, configuration: Configuration<*,*,*,*, UpdateEvent, Aggregate>, updateEvents: List<UpdateEvent>): Aggregate {
-        return updateEvents.fold(initial) { aggregate, updateEvent ->
-            configuration.updated(aggregate, updateEvent)
-        }
     }
 
     private fun configurationFor(command: Command) =

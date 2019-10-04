@@ -56,18 +56,12 @@ interface AggregateWithProjection<UC: UpdateCommand, UE: UpdateEvent, Err: Comma
 interface AggregateConstructor<CC: CreationCommand, CE: CreationEvent, Err: CommandError, UC: UpdateCommand, UE: UpdateEvent, Self: Aggregate2<UC, UE, Err, Self>> {
     fun created(event: CE): Self
     fun create(command: CC): Either<Err, CE>
-    fun rehydrated(creationEvent: CE, vararg updateEvents: UE): Self {
-        return updateEvents.fold(created(creationEvent)) { aggregate, updateEvent -> aggregate.updated(updateEvent) }
-    }
     fun toConfiguration(): Configuration<CC, CE, Err, UC, UE, Self> = Configuration(this::created, this::create, Aggregate2<UC, UE, Err, Self>::updated, Aggregate2<UC, UE, Err, Self>::update)
 }
 
 interface AggregateConstructorWithProjection<CC: CreationCommand, CE: CreationEvent, Err: CommandError, UC: UpdateCommand, UE: UpdateEvent, P, Self : AggregateWithProjection<UC, UE, Err, P, Self>> {
     fun created(event: CE): Self
     fun create(command: CC, projection: P): Either<Err, CE>
-    fun rehydrated(creationEvent: CE, vararg updateEvents: UE): Self {
-        return updateEvents.fold(created(creationEvent)) { aggregate, updateEvent -> aggregate.updated(updateEvent) }
-    }
     fun partial(projection: P): AggregateConstructor<CC, CE, Err, UC, UE, Aggregate2<UC, UE, Err, *>> {
         return object:AggregateConstructor<CC, CE, Err, UC, UE, Aggregate2<UC, UE, Err, *>> {
             override fun created(event: CE): Aggregate2<UC, UE, Err, *> {
@@ -86,7 +80,10 @@ data class Configuration<CC : CreationCommand, CE : CreationEvent, Err: CommandE
     val create: (CC) -> Either<Err, CE>,
     val updated: (A, UE) -> A,
     val update: (A, UC) -> Either<Err, List<UE>>
-)
+) {
+    fun rehydrated(creationEvent: CE, updateEvents: List<UE>): A = updated(created(creationEvent), updateEvents)
+    fun updated(initial: A, updateEvents: List<UE>): A = updateEvents.fold(initial) { aggregate, updateEvent -> updated(aggregate, updateEvent) }
+}
 
 data class EventListener<E : Event>(val eventType: KClass<E>, val handle: (E) -> Any?)
 
