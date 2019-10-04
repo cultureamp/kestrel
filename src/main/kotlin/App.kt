@@ -49,7 +49,7 @@ fun main() {
     val surveySagaReactor = SurveySagaReactor(commandGateway)
     val surveyNamesProjector = SurveyNamesProjector(readWriteDatabase)
 
-    // TODO this should be done as separate threads / jobs / queues / something
+    // TODO this should be done as separate threads/works that poll the event-store
     eventStore.listeners = listOf(
         EventListener(SurveySagaEvent::class, surveySagaReactor::react),
         EventListener(SurveyEvent::class, surveyNamesProjector::project)

@@ -3,7 +3,7 @@ package eventsourcing
 import java.util.UUID
 
 interface EventStore {
-    fun sink(aggregateType: String, events: List<Event>)
+    fun sink(aggregateType: String, newEvents: List<Event>)
 
     fun eventsFor(aggregateId: UUID): Pair<CreationEvent, List<UpdateEvent>>
 
@@ -32,7 +32,7 @@ class InMemoryEventStore : EventStore {
         return eventStore.containsKey(aggregateId)
     }
 
-    // TODO this should be done as separate threads / jobs / queues / something
+    // TODO this should be removed and implemented as separate threads/works that poll the event-store
     private fun notifyListeners(newEvents: List<Event>) {
         newEvents.forEach { event ->
             listeners.filter { it.eventType.isInstance(event) }.forEach { (it as EventListener<Event>).handle(event) }
