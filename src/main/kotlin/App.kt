@@ -16,12 +16,6 @@ fun main() {
     val emailService = EmailService()
 
     val aggregates = mapOf(
-        ThingCommand::class to Configuration(
-            ::ThingAggregate,
-            ThingAggregate.Companion::create,
-            ThingAggregate::updated,
-            ThingAggregate::update
-        ),
         SurveyCaptureLayoutCommand::class to Configuration(
             ::SurveyCaptureLayoutAggregate,
             SurveyCaptureLayoutAggregate.Companion::create,
@@ -45,7 +39,8 @@ fun main() {
             PaymentSaga.Companion::create,
             PaymentSaga::updated,
             PaymentSaga::update
-        )
+        ),
+        ThingCommand::class to ThingAggregate.toConfiguration()
     )
     val eventStore = InMemoryEventStore()
     val commandGateway = CommandGateway(eventStore, aggregates)

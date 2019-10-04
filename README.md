@@ -11,10 +11,11 @@
 ```
 
 # Curl the app
-## Create a Thing then Bop it
+## Create a Thing, Bop it then Explode it
 ```shell
 curl -v -X POST "localhost:8080/command/survey.thing.CreateThing" -d '{"aggregateId":"939c2703-673d-4d44-aee5-0b61f9b35248"}' -H "accept: application/json" -H "Content-Type: application/json"
 curl -v -X POST "localhost:8080/command/survey.thing.Bop" -d '{"aggregateId":"939c2703-673d-4d44-aee5-0b61f9b35248"}' -H "accept: application/json" -H "Content-Type: application/json"
+curl -v -X POST "localhost:8080/command/survey.thing.Explode" -d '{"aggregateId":"939c2703-673d-4d44-aee5-0b61f9b35248"}' -H "accept: application/json" -H "Content-Type: application/json"
 ```
 returns `201`:
 ```json
@@ -23,6 +24,7 @@ returns `201`:
   {"type":"Bopped","data":{"aggregateId":"939c2703-673d-4d44-aee5-0b61f9b35248"}}
 ]
 ```
+then `403` because `Explode` yields an error
 
 ## Create a Survey, Delete then Restore it
 ```shell

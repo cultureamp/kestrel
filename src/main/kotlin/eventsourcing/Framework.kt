@@ -25,11 +25,67 @@ interface Aggregate {
     fun aggregateType(): String = this::class.simpleName!!
 }
 
-data class Configuration<CC : CreationCommand, CE : CreationEvent, UC : UpdateCommand, UE : UpdateEvent, A : Aggregate>(
+interface Aggregate2<UC: UpdateCommand, UE: UpdateEvent, Err: CommandError, out Self : Aggregate2<UC, UE, Err, Self>> : Aggregate {
+    fun updated(event: UE): Self
+    fun update(command: UC): Either<Err, List<UE>>
+}
+
+interface AggregateWithProjection<UC: UpdateCommand, UE: UpdateEvent, Err: CommandError, P, Self : AggregateWithProjection<UC, UE, Err, P, Self>> {
+    val aggregateId: UUID
+    fun updated(event: UE): Self
+    fun update(command: UC, projection: P): Either<Err, List<UE>>
+    fun aggregateType(): String = this::class.simpleName!!
+
+    fun partial(projection: P): Aggregate2<UC, UE, Err, Aggregate2<UC, UE, Err, *>> {
+        return object:Aggregate2<UC, UE, Err, Aggregate2<UC, UE, Err, *>> {
+            override val aggregateId = this@AggregateWithProjection.aggregateId
+
+            override fun updated(event: UE): Aggregate2<UC, UE, Err, *> {
+                return this@AggregateWithProjection.updated(event).partial(projection)
+            }
+
+            override fun update(command: UC): Either<Err, List<UE>> {
+                return update(command, projection)
+            }
+
+            override fun aggregateType(): String = this@AggregateWithProjection.aggregateType()
+        }
+    }
+}
+
+interface AggregateConstructor<CC: CreationCommand, CE: CreationEvent, Err: CommandError, UC: UpdateCommand, UE: UpdateEvent, Self: Aggregate2<UC, UE, Err, Self>> {
+    fun created(event: CE): Self
+    fun create(command: CC): Either<Err, CE>
+    fun rehydrated(creationEvent: CE, vararg updateEvents: UE): Self {
+        return updateEvents.fold(created(creationEvent)) { aggregate, updateEvent -> aggregate.updated(updateEvent) }
+    }
+    fun toConfiguration(): Configuration<CC, CE, Err, UC, UE, Self> = Configuration(this::created, this::create, Aggregate2<UC, UE, Err, Self>::updated, Aggregate2<UC, UE, Err, Self>::update)
+}
+
+interface AggregateConstructorWithProjection<CC: CreationCommand, CE: CreationEvent, Err: CommandError, UC: UpdateCommand, UE: UpdateEvent, P, Self : AggregateWithProjection<UC, UE, Err, P, Self>> {
+    fun created(event: CE): Self
+    fun create(command: CC, projection: P): Either<Err, CE>
+    fun rehydrated(creationEvent: CE, vararg updateEvents: UE): Self {
+        return updateEvents.fold(created(creationEvent)) { aggregate, updateEvent -> aggregate.updated(updateEvent) }
+    }
+    fun partial(projection: P): AggregateConstructor<CC, CE, Err, UC, UE, Aggregate2<UC, UE, Err, *>> {
+        return object:AggregateConstructor<CC, CE, Err, UC, UE, Aggregate2<UC, UE, Err, *>> {
+            override fun created(event: CE): Aggregate2<UC, UE, Err, *> {
+                return this@AggregateConstructorWithProjection.created(event).partial(projection)
+            }
+
+            override fun create(command: CC): Either<Err, CE> {
+                return create(command, projection)
+            }
+        }
+    }
+}
+
+data class Configuration<CC : CreationCommand, CE : CreationEvent, Err: CommandError, UC : UpdateCommand, UE : UpdateEvent, A : Aggregate>(
     val created: (CE) -> A,
-    val create: (CC) -> Either<CommandError, CE>,
+    val create: (CC) -> Either<Err, CE>,
     val updated: (A, UE) -> A,
-    val update: (A, UC) -> Either<CommandError, List<UE>>
+    val update: (A, UC) -> Either<Err, List<UE>>
 )
 
 data class EventListener<E : Event>(val eventType: KClass<E>, val handle: (E) -> Any?)

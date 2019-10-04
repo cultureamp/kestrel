@@ -5,7 +5,7 @@ import kotlin.reflect.KClass
 @Suppress("UNCHECKED_CAST")
 class CommandGateway(
     private val eventStore: EventStore,
-    private val configurations: Map<KClass<out Command>, Configuration<*, *, *, *, *>>
+    private val configurations: Map<KClass<out Command>, Configuration<*, *, *, *, *, *>>
 ) {
 
     fun dispatch(command: Command): Either<CommandError, SuccessStatus> = when (command) {
@@ -52,14 +52,14 @@ class CommandGateway(
         } ?: Left(NoConstructorForCommand)
     }
 
-    private fun updated(initial: Aggregate, configuration: Configuration<*,*,*, UpdateEvent, Aggregate>, updateEvents: List<UpdateEvent>): Aggregate {
+    private fun updated(initial: Aggregate, configuration: Configuration<*,*,*,*, UpdateEvent, Aggregate>, updateEvents: List<UpdateEvent>): Aggregate {
         return updateEvents.fold(initial) { aggregate, updateEvent ->
             configuration.updated(aggregate, updateEvent)
         }
     }
 
     private fun configurationFor(command: Command) =
-        configurations.toList().find { entry -> entry.first.isInstance(command) }?.second as Configuration<CreationCommand, CreationEvent, UpdateCommand, UpdateEvent, Aggregate>?
+        configurations.toList().find { entry -> entry.first.isInstance(command) }?.second as Configuration<CreationCommand, CreationEvent, CommandError, UpdateCommand, UpdateEvent, Aggregate>?
 }
 
 sealed class SuccessStatus
