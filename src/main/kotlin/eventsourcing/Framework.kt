@@ -33,7 +33,7 @@ interface Aggregate2<UC: UpdateCommand, UE: UpdateEvent, Err: CommandError, out 
 interface AggregateWithProjection<UC: UpdateCommand, UE: UpdateEvent, Err: CommandError, P, Self : AggregateWithProjection<UC, UE, Err, P, Self>> {
     val aggregateId: UUID
     fun updated(event: UE): Self
-    fun update(command: UC, projection: P): Either<Err, List<UE>>
+    fun update(projection: P, command: UC): Either<Err, List<UE>>
     fun aggregateType(): String = this::class.simpleName!!
 
     fun partial(projection: P): Aggregate2<UC, UE, Err, Aggregate2<UC, UE, Err, *>> {
@@ -45,7 +45,7 @@ interface AggregateWithProjection<UC: UpdateCommand, UE: UpdateEvent, Err: Comma
             }
 
             override fun update(command: UC): Either<Err, List<UE>> {
-                return update(command, projection)
+                return update(projection, command)
             }
 
             override fun aggregateType(): String = this@AggregateWithProjection.aggregateType()
@@ -61,7 +61,7 @@ interface AggregateConstructor<CC: CreationCommand, CE: CreationEvent, Err: Comm
 
 interface AggregateConstructorWithProjection<CC: CreationCommand, CE: CreationEvent, Err: CommandError, UC: UpdateCommand, UE: UpdateEvent, P, Self : AggregateWithProjection<UC, UE, Err, P, Self>> {
     fun created(event: CE): Self
-    fun create(command: CC, projection: P): Either<Err, CE>
+    fun create(projection: P, command: CC): Either<Err, CE>
     fun partial(projection: P): AggregateConstructor<CC, CE, Err, UC, UE, Aggregate2<UC, UE, Err, *>> {
         return object:AggregateConstructor<CC, CE, Err, UC, UE, Aggregate2<UC, UE, Err, *>> {
             override fun created(event: CE): Aggregate2<UC, UE, Err, *> {
@@ -69,7 +69,7 @@ interface AggregateConstructorWithProjection<CC: CreationCommand, CE: CreationEv
             }
 
             override fun create(command: CC): Either<Err, CE> {
-                return create(command, projection)
+                return create(projection, command)
             }
         }
     }

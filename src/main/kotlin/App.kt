@@ -4,13 +4,16 @@ import survey.demo.PaymentSaga
 import survey.demo.PaymentSagaCommand
 import survey.demo.PaymentService
 import survey.design.*
+import survey.thing.AlwaysBoppable
 import survey.thing.ThingAggregate
 import survey.thing.ThingCommand
 
 fun main() {
     val readOnlyDatabase = StubReadOnlyDatabase
     val readWriteDatabase = StubReadWriteDatabase
+
     val surveyNamesProjection = StubSurveyNamesProjection
+    val thingProjection = AlwaysBoppable
 
     val paymentService = PaymentService()
     val emailService = EmailService()
@@ -40,7 +43,7 @@ fun main() {
             PaymentSaga::updated,
             PaymentSaga::update
         ),
-        ThingCommand::class to ThingAggregate.toConfiguration()
+        ThingCommand::class to ThingAggregate.partial(thingProjection).toConfiguration()
     )
     val eventStore = InMemoryEventStore()
     val commandGateway = CommandGateway(eventStore, aggregates)
