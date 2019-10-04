@@ -5,10 +5,8 @@ import kotlin.reflect.KClass
 @Suppress("UNCHECKED_CAST")
 class CommandGateway(
     private val eventStore: EventStore,
-    private val aggregateConstructors: Map<KClass<out Command>, AggregateConstructor<*, *, *, *, *, *>>,
-    sagas: Map<KClass<out Command>, AggregateConstructorWithProjection<*, *, *, Step, *, CommandGateway, *>>
+    private val configurations: Map<KClass<out Command>, Configuration<*, *, *, *, *, *>>
 ) {
-    private val sagaConstructors = sagas.mapValues { (_, value) -> value.curried(this) }.toList()
 
     fun dispatch(command: Command): Either<CommandError, SuccessStatus> = when (command) {
         is CreationCommand -> construct(command)
@@ -19,73 +17,49 @@ class CommandGateway(
     private fun construct(creationCommand: CreationCommand): Either<CommandError, SuccessStatus> {
         return when (eventStore.isTaken(creationCommand.aggregateId)) {
             true -> Left(AggregateIdAlreadyTaken)
-            false -> {
-                val sagaConstructor = sagaConstructorFor(creationCommand) as AggregateConstructor<CreationCommand, *, *, *, *, *>?
-                val aggregateConstructor = aggregateConstructorFor(creationCommand) as AggregateConstructor<CreationCommand, *, *, *, *, *>?
-                when {
-                    sagaConstructor != null -> construct(sagaConstructor, creationCommand, ::step)
-                    aggregateConstructor != null -> construct(aggregateConstructor, creationCommand)
-                    else -> Left(NoConstructorForCommand)
+            false -> configurationFor(creationCommand)?.let { configuration ->
+                val result = configuration.create(creationCommand)
+                when (result) {
+                    is Left -> result
+                    is Right -> {
+                        val creationEvent = result.value
+                        val aggregate = configuration.created(creationEvent)
+                        val events = listOf(creationEvent)
+                        eventStore.sink(aggregate.aggregateType(), events)
+                        result.map { Created }
+                    }
                 }
-            }
-        }
-    }
-
-    private fun construct(aggregateConstructor: AggregateConstructor<CreationCommand, *, *, *, *, *>, creationCommand: CreationCommand, stepfn: (Aggregate<Step, *, *, *>) -> Either<CommandError, List<UpdateEvent>> = { Right(emptyList())}): Either<CommandError, SuccessStatus> {
-        val result = aggregateConstructor.create(creationCommand)
-        return when (result) {
-            is Left -> result
-            is Right -> {
-                val creationEvent = result.value
-                val aggregate = (aggregateConstructor as AggregateConstructor<*, CreationEvent, *, *, *, *>).created(creationEvent)
-                val events = listOf(creationEvent)
-                eventStore.sink(aggregate.aggregateType(), events)
-                Right(stepfn(aggregate as Aggregate<Step, *, *, *>)).map { Created }
-            }
-        }
-    }
-
-    private tailrec fun step(saga: Aggregate<Step, *, *, *>): Either<CommandError, List<UpdateEvent>> {
-        val result = saga.update(Step(saga.aggregateId))
-        return when (result) {
-            is Left -> result
-            is Right -> when (result.value) {
-                emptyList<UpdateEvent>() -> result
-                else -> {
-                    val updated = updated(saga, result.value) as Aggregate<Step, *, *, *>
-                    eventStore.sink(updated.aggregateType(), result.value)
-                    step(updated)
-                }
-            }
+            } ?: Left(NoConstructorForCommand)
         }
     }
 
     private fun update(updateCommand: UpdateCommand): Either<CommandError, SuccessStatus> {
-        val constructor = aggregateConstructorFor(updateCommand) as AggregateConstructor<*, CreationEvent, *, *, *, *>?
-        return constructor?.let {
+        val configuration = configurationFor(updateCommand)
+        return configuration?.let {
             val (creationEvent, updateEvents) = eventStore.eventsFor(updateCommand.aggregateId)
-            val aggregate = updated(constructor.created(creationEvent), updateEvents)
-            val result = (aggregate as Aggregate<UpdateCommand, *, *, *>).update(updateCommand)
+            val initial = configuration.created(creationEvent)
+            val aggregate = updated(initial, configuration, updateEvents)
+            val result = configuration.update(aggregate, updateCommand)
             when (result) {
                 is Left -> result
                 is Right -> {
                     val events = result.value
-                    val updated = updated(aggregate, events)
+                    val updated = updated(aggregate, configuration, events)
                     eventStore.sink(updated.aggregateType(), events)
-                    Right(Updated)
+                    result.map { Updated }
                 }
             }
         } ?: Left(NoConstructorForCommand)
     }
 
-    private fun updated(initial: Aggregate<*, *, *, *>, updateEvents: List<UpdateEvent>): Aggregate<*, UpdateEvent, *, *> {
-        return updateEvents.fold(initial as Aggregate<*, UpdateEvent, *, *>) { aggregate, updateEvent ->
-            aggregate.updated(updateEvent) as Aggregate<*, UpdateEvent, *, *>
+    private fun updated(initial: Aggregate, configuration: Configuration<*,*,*,*, UpdateEvent, Aggregate>, updateEvents: List<UpdateEvent>): Aggregate {
+        return updateEvents.fold(initial) { aggregate, updateEvent ->
+            configuration.updated(aggregate, updateEvent)
         }
     }
 
-    private fun sagaConstructorFor(command: Command) = sagaConstructors.toList().find { entry -> entry.first.isInstance(command) }?.second
-    private fun aggregateConstructorFor(command: Command) = aggregateConstructors.toList().find { entry -> entry.first.isInstance(command) }?.second
+    private fun configurationFor(command: Command) =
+        configurations.toList().find { entry -> entry.first.isInstance(command) }?.second as Configuration<CreationCommand, CreationEvent, CommandError, UpdateCommand, UpdateEvent, Aggregate>?
 }
 
 sealed class SuccessStatus

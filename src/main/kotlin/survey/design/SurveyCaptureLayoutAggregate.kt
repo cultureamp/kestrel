@@ -12,20 +12,16 @@ data class SurveyCaptureLayoutAggregate(
     val sectionsForIntendedPurpose: Map<IntendedPurpose, List<Section>> = emptyMap(),
     val demographicSectionsPlacement: DemographicSectionPosition = bottom,
     val questions: Set<UUID> = emptySet()
-) : Aggregate<SurveyCaptureLayoutUpdateCommand, SurveyCaptureLayoutUpdateEvent, SurveyCaptureLayoutCommandError, SurveyCaptureLayoutAggregate> {
+) : Aggregate {
+    constructor(event: Generated) : this(event.aggregateId)
 
-    companion object :
-        AggregateConstructor<SurveyCaptureLayoutCreationCommand, SurveyCaptureLayoutCreationEvent, SurveyCaptureLayoutCommandError, SurveyCaptureLayoutUpdateCommand, SurveyCaptureLayoutUpdateEvent, SurveyCaptureLayoutAggregate> {
-        override fun created(event: SurveyCaptureLayoutCreationEvent): SurveyCaptureLayoutAggregate = when (event) {
-            is Generated -> SurveyCaptureLayoutAggregate(event.aggregateId)
-        }
-
-        override fun create(command: SurveyCaptureLayoutCreationCommand): Either<SurveyCaptureLayoutCommandError, SurveyCaptureLayoutCreationEvent> = when (command) {
+    companion object {
+        fun create(command: SurveyCaptureLayoutCreationCommand): Either<CommandError, Generated> = when (command) {
             is Generate -> with(command) { Right(Generated(aggregateId, surveyId, generatedAt)) }
         }
     }
 
-    override fun updated(event: SurveyCaptureLayoutUpdateEvent): SurveyCaptureLayoutAggregate = when (event) {
+    fun updated(event: SurveyCaptureLayoutUpdateEvent): SurveyCaptureLayoutAggregate = when (event) {
         is SectionAdded -> with(event) {
             val section = Section(sectionId, name.toMap(), shortDescription.toMap(), longDescription.toMap(), intendedPurpose, code)
             val previous = positionedAfterSectionId?.let { sectionFor(it) }
@@ -83,7 +79,7 @@ data class SurveyCaptureLayoutAggregate(
         }
     }
 
-    override fun update(command: SurveyCaptureLayoutUpdateCommand): Either<SurveyCaptureLayoutCommandError, List<SurveyCaptureLayoutUpdateEvent>> = when (command) {
+    fun update(command: SurveyCaptureLayoutUpdateCommand): Either<CommandError, List<SurveyCaptureLayoutUpdateEvent>> = when (command) {
         is AddSection -> when {
             hasSection(command.sectionId) -> Left(SectionAlreadyAdded)
             hasSectionCode(command.code) -> Left(SectionCodeNotUnique)
@@ -319,12 +315,11 @@ data class HideQuestionFromCapture(
 ) : SurveyCaptureLayoutUpdateCommand()
 
 sealed class SurveyCaptureLayoutEvent : Event
-sealed class SurveyCaptureLayoutCreationEvent : SurveyCaptureLayoutEvent(), CreationEvent
 data class Generated(
     override val aggregateId: UUID,
     val surveyId: UUID,
     val generatedAt: Date
-) : SurveyCaptureLayoutCreationEvent()
+) : SurveyCaptureLayoutEvent(), CreationEvent
 
 sealed class SurveyCaptureLayoutUpdateEvent : SurveyCaptureLayoutEvent(), UpdateEvent
 data class SectionAdded(

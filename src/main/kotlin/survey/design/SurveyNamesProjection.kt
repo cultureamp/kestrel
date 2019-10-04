@@ -8,7 +8,7 @@ import java.util.UUID
 class SurveyNamesProjector(database: ReadWriteDatabase) : Projector<SurveyEvent> {
     override fun project(event: SurveyEvent) = when (event) {
         is Created -> event.name.forEach { locale, name ->
-            upsert(SurveyRow(event.aggregateId, event.accountId, locale, name))
+            //upsert(SurveyRow(event.aggregateId, event.accountId, locale, name))
         }
         is Renamed -> {
             upsert(find(event.aggregateId).copy(locale = event.locale, name = event.name))

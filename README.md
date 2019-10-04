@@ -11,10 +11,11 @@
 ```
 
 # Curl the app
-## Create a Thing then Bop it
+## Create a Thing, Bop it then Explode it
 ```shell
 curl -v -X POST "localhost:8080/command/survey.thing.CreateThing" -d '{"aggregateId":"939c2703-673d-4d44-aee5-0b61f9b35248"}' -H "accept: application/json" -H "Content-Type: application/json"
 curl -v -X POST "localhost:8080/command/survey.thing.Bop" -d '{"aggregateId":"939c2703-673d-4d44-aee5-0b61f9b35248"}' -H "accept: application/json" -H "Content-Type: application/json"
+curl -v -X POST "localhost:8080/command/survey.thing.Explode" -d '{"aggregateId":"939c2703-673d-4d44-aee5-0b61f9b35248"}' -H "accept: application/json" -H "Content-Type: application/json"
 ```
 returns `201`:
 ```json
@@ -23,6 +24,7 @@ returns `201`:
   {"type":"Bopped","data":{"aggregateId":"939c2703-673d-4d44-aee5-0b61f9b35248"}}
 ]
 ```
+then `403` because `Explode` yields an error
 
 ## Create a Survey, Delete then Restore it
 ```shell
@@ -37,6 +39,12 @@ returns `201`:
   {"type":"Deleted","data":{"aggregateId":"4f188480-9a39-4335-902b-e481af19b3e5","deletedAt":818380800000}},
   {"type":"Restored","data":{"aggregateId":"4f188480-9a39-4335-902b-e481af19b3e5","restoredAt":818380800000}}
 ]
+```
+
+## Saga with events coming in from third parties
+```shell
+curl -v -X POST "localhost:8080/command/survey.demo.StartPaymentSaga" -d '{"aggregateId": "9586ee4b-24d6-4bc5-b1ae-6d440ab0cb60", "fromUserId": "e512c6ff-22e6-4f22-9f07-8986023b9fde", "toUserBankDetails": "12345", "dollarAmount": 5}' -H "accept: application/json" -H "Content-Type: application/json"
+curl -v -X POST "localhost:8080/command/survey.demo.RegisterThirdPartySuccess" -d '{"aggregateId": "9586ee4b-24d6-4bc5-b1ae-6d440ab0cb60"}' -H "accept: application/json" -H "Content-Type: application/json"
 ```
 
 # Curl the app with bad data
