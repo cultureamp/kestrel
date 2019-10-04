@@ -16,9 +16,28 @@ interface DoubleProjector<A : Event, B : Event> {
 }
 
 interface ReadOnlyDatabase
-interface ReadWriteDatabase
+
+interface ReadWriteDatabase {
+    fun insert(id: UUID, item: Any)
+    fun upsert(id: UUID, item: Any)
+    fun <T : Any> find(type: KClass<T>, aggregateId: UUID): T
+}
 object StubReadOnlyDatabase : ReadOnlyDatabase
-object StubReadWriteDatabase : ReadWriteDatabase
+object InMemoryReadWriteDatabase : ReadWriteDatabase {
+    val items: HashMap<UUID, Any> = hashMapOf()
+
+    override fun insert(id: UUID, item: Any) {
+        items[id] = item // TODO fail if already exists
+    }
+
+    override fun upsert(id: UUID, item: Any) {
+        items[id] = item
+    }
+
+    override fun <T : Any> find(type: KClass<T>, aggregateId: UUID): T {
+        return items.filterKeys { it == aggregateId }.values.filterIsInstance(type.java).first()
+    }
+}
 
 interface Aggregate {
     val aggregateId: UUID

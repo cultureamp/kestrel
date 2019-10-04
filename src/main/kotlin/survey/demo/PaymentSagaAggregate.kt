@@ -3,8 +3,8 @@ package survey.demo
 import eventsourcing.*
 import java.util.*
 
-data class PaymentSaga(override val aggregateId: UUID, val startEvent: PaymentSagaStarted, val updateEvents: List<PaymentSagaUpdateEvent> = emptyList()) : Aggregate {
-    constructor(event: PaymentSagaStarted) : this(event.aggregateId, event)
+data class PaymentSagaAggregate(override val aggregateId: UUID) : Aggregate {
+    constructor(event: PaymentSagaStarted) : this(event.aggregateId)
 
     companion object {
         fun create(command: StartPaymentSaga): Either<CommandError, PaymentSagaStarted> = with(command) {
@@ -12,38 +12,13 @@ data class PaymentSaga(override val aggregateId: UUID, val startEvent: PaymentSa
         }
     }
 
-    fun updated(event: PaymentSagaUpdateEvent): PaymentSaga {
-        return this.copy(updateEvents = updateEvents + event)
-    }
+    fun updated(event: PaymentSagaUpdateEvent) = this
 
     fun update(command: PaymentSagaUpdateCommand): Either<CommandError, List<PaymentSagaUpdateEvent>> = when (command) {
+        is StartThirdPartyPayment -> Right.list(StartedThirdPartyPayment(aggregateId, command.startedAt))
         is RegisterThirdPartySuccess -> Right.list(FinishedThirdPartyPayment(aggregateId, Date()))
         is RegisterThirdPartyFailure -> Right.list(FailedThirdPartyPayment(aggregateId, Date()))
-    }
-
-    fun step(paymentService: PaymentService, emailService: EmailService, commandGateway: CommandGateway): Either<CommandError, List<PaymentSagaUpdateEvent>> {
-        val lastEvent = updateEvents.lastOrNull() ?: startEvent
-        return when (lastEvent) {
-            is PaymentSagaStarted -> {
-                Right.list(StartedThirdPartyPayment(aggregateId, Date()))
-            }
-            is StartedThirdPartyPayment -> {
-                paymentService.pay(startEvent.fromUserId, startEvent.toUserBankDetails, startEvent.dollarAmount)
-                Right.list()
-            }
-            is FinishedThirdPartyPayment -> {
-                Right.list(StartedThirdPartyEmailNotification(aggregateId, "successfully paid", Date()))
-            }
-            is FailedThirdPartyPayment -> {
-                Right.list(StartedThirdPartyEmailNotification(aggregateId, "failed to pay", Date()))
-            }
-            is StartedThirdPartyEmailNotification -> {
-                emailService.notify(startEvent.fromUserId, lastEvent.message)
-                Right.list()
-            }
-            is FinishedThirdPartyEmailNotification -> Right.list()
-            is FailedThirdPartyEmailNotification -> Right.list() // or retry?
-        }
+        is StartThirdPartyEmailNotification -> TODO()
     }
 }
 
@@ -57,6 +32,8 @@ data class StartPaymentSaga(
 ) : PaymentSagaCommand(), CreationCommand
 
 sealed class PaymentSagaUpdateCommand : PaymentSagaCommand(), UpdateCommand
+data class StartThirdPartyPayment(override val aggregateId: UUID, val startedAt: Date) : PaymentSagaUpdateCommand()
+data class StartThirdPartyEmailNotification(override val aggregateId: UUID, val message: String, val startedAt: Date) : PaymentSagaUpdateCommand()
 data class RegisterThirdPartySuccess(override val aggregateId: UUID) : PaymentSagaUpdateCommand()
 data class RegisterThirdPartyFailure(override val aggregateId: UUID) : PaymentSagaUpdateCommand()
 

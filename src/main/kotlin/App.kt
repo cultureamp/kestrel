@@ -1,8 +1,5 @@
 import eventsourcing.*
-import survey.demo.EmailService
-import survey.demo.PaymentSaga
-import survey.demo.PaymentSagaCommand
-import survey.demo.PaymentService
+import survey.demo.*
 import survey.design.*
 import survey.thing.AlwaysBoppable
 import survey.thing.ThingAggregate
@@ -10,13 +7,10 @@ import survey.thing.ThingCommand
 
 fun main() {
     val readOnlyDatabase = StubReadOnlyDatabase
-    val readWriteDatabase = StubReadWriteDatabase
+    val readWriteDatabase = InMemoryReadWriteDatabase
 
     val surveyNamesProjection = StubSurveyNamesProjection
     val thingProjection = AlwaysBoppable
-
-    val paymentService = PaymentService()
-    val emailService = EmailService()
 
     val aggregates = mapOf(
         SurveyCaptureLayoutCommand::class to Configuration(
@@ -38,10 +32,10 @@ fun main() {
             SurveySagaAggregate::update
         ),
         PaymentSagaCommand::class to Configuration(
-            ::PaymentSaga,
-            PaymentSaga.Companion::create,
-            PaymentSaga::updated,
-            PaymentSaga::update
+            ::PaymentSagaAggregate,
+            PaymentSagaAggregate.Companion::create,
+            PaymentSagaAggregate::updated,
+            PaymentSagaAggregate::update
         ),
         ThingCommand::class to ThingAggregate.partial(thingProjection).toConfiguration()
     )
@@ -49,11 +43,15 @@ fun main() {
     val commandGateway = CommandGateway(eventStore, aggregates)
 
     // downstream from events
+    val paymentService = PaymentService()
+    val emailService = EmailService()
+    val paymentSagaReactor = PaymentSagaReactor(commandGateway, paymentService, emailService, readWriteDatabase)
     val surveySagaReactor = SurveySagaReactor(commandGateway)
     val surveyNamesProjector = SurveyNamesProjector(readWriteDatabase)
 
     // TODO this should be done as separate threads/works that poll the event-store
     eventStore.listeners = listOf(
+        EventListener(PaymentSagaEvent::class, paymentSagaReactor::react),
         EventListener(SurveySagaEvent::class, surveySagaReactor::react),
         EventListener(SurveyEvent::class, surveyNamesProjector::project)
     )
