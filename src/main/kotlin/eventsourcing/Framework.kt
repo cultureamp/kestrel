@@ -20,6 +20,7 @@ interface ReadOnlyDatabase
 interface ReadWriteDatabase {
     fun insert(id: UUID, item: Any)
     fun upsert(id: UUID, item: Any)
+    fun delete(id: UUID)
     fun <T : Any> find(type: KClass<T>, aggregateId: UUID): T
 }
 object StubReadOnlyDatabase : ReadOnlyDatabase
@@ -32,6 +33,10 @@ object InMemoryReadWriteDatabase : ReadWriteDatabase {
 
     override fun upsert(id: UUID, item: Any) {
         items[id] = item
+    }
+
+    override fun delete(id: UUID) {
+        items.remove(id)
     }
 
     override fun <T : Any> find(type: KClass<T>, aggregateId: UUID): T {
