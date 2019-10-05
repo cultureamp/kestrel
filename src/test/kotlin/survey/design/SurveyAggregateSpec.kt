@@ -173,13 +173,13 @@ class SurveyAggregateSpec : ShouldSpec({
 	}
 })
 
-class Stub : SurveyNamesProjection(StubReadOnlyDatabase()) {
+class Stub : SurveyNamesCommandProjection(StubReadOnlyDatabase()) {
 	override fun nameExistsFor(accountId: UUID, name: String, locale: Locale): Boolean {
 		throw IllegalStateException("Should not have been called")
 	}
 }
 
-class NameTaken(val taken: Boolean) : SurveyNamesProjection(StubReadOnlyDatabase()) {
+class NameTaken(val taken: Boolean) : SurveyNamesCommandProjection(StubReadOnlyDatabase()) {
 	override fun nameExistsFor(accountId: UUID, name: String, locale: Locale) = taken
 }
 

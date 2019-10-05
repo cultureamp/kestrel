@@ -5,7 +5,7 @@ import eventsourcing.ReadOnlyDatabase
 import eventsourcing.ReadWriteDatabase
 import java.util.UUID
 
-class SurveyNamesProjector(val database: ReadWriteDatabase) : Projector<SurveyEvent> {
+class SurveyNamesCommandProjector(val database: ReadWriteDatabase) : Projector<SurveyEvent> {
     override fun project(event: SurveyEvent) = when (event) {
         is Created -> event.name.forEach { locale, name ->
             database.upsert(event.aggregateId, SurveyRow(event.accountId, locale, name))
@@ -26,7 +26,7 @@ class SurveyNamesProjector(val database: ReadWriteDatabase) : Projector<SurveyEv
 
 data class SurveyRow(val accountId: UUID, val locale: Locale, val name: String)
 
-open class SurveyNamesProjection(val readOnlyDatabase: ReadOnlyDatabase) {
+open class SurveyNamesCommandProjection(val readOnlyDatabase: ReadOnlyDatabase) {
     open fun nameExistsFor(accountId: UUID, name: String, locale: Locale): Boolean {
         return readOnlyDatabase.exists(SurveyRow::class, { it.locale == locale && it.name == name })
     }

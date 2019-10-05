@@ -8,7 +8,7 @@ fun main() {
     val readWriteDatabase: ReadWriteDatabase = InMemoryReadWriteDatabase()
     val readOnlyDatabase: ReadOnlyDatabase = readWriteDatabase
 
-    val surveyNamesProjection = SurveyNamesProjection(readOnlyDatabase)
+    val surveyNamesProjection = SurveyNamesCommandProjection(readOnlyDatabase)
     val thingProjection = AlwaysBoppable
 
     val aggregates = listOf(
@@ -46,7 +46,7 @@ fun main() {
     val emailService = EmailService()
     val paymentSagaReactor = PaymentSagaReactor(commandGateway, paymentService, emailService, readWriteDatabase)
     val surveySagaReactor = SurveySagaReactor(commandGateway)
-    val surveyNamesProjector = SurveyNamesProjector(readWriteDatabase)
+    val surveyNamesProjector = SurveyNamesCommandProjector(readWriteDatabase)
 
     // TODO this should be done as separate threads/works that poll the event-store
     eventStore.listeners = listOf(
