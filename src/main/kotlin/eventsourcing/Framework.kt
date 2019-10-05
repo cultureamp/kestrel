@@ -134,7 +134,11 @@ data class Configuration<CC : CreationCommand, CE : CreationEvent, Err: CommandE
     fun updated(initial: A, updateEvents: List<UE>): A = updateEvents.fold(initial) { aggregate, updateEvent -> updated(aggregate, updateEvent) }
 }
 
-data class EventListener<E : Event>(val eventType: KClass<E>, val handle: (E) -> Any?)
+data class EventListener<E : Event>(val eventType: KClass<E>, val handle: (E) -> Any?) {
+    companion object {
+        inline fun <reified E : Event> from(noinline handle: (E) -> Any?) = EventListener(E::class, handle)
+    }
+}
 
 interface Command {
     val aggregateId: UUID

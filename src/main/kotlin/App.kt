@@ -50,9 +50,9 @@ fun main() {
 
     // TODO this should be done as separate threads/works that poll the event-store
     eventStore.listeners = listOf(
-        EventListener(PaymentSagaEvent::class, paymentSagaReactor::react),
-        EventListener(SurveySagaEvent::class, surveySagaReactor::react),
-        EventListener(SurveyEvent::class, surveyNamesProjector::project)
+        EventListener.from(paymentSagaReactor::react),
+        EventListener.from(surveySagaReactor::react),
+        EventListener.from(surveyNamesProjector::project)
     )
 
     Ktor.startEmbeddedCommandServer(commandGateway, eventStore)
