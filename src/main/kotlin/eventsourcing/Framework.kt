@@ -15,16 +15,17 @@ interface DoubleProjector<A : Event, B : Event> {
     fun second(event: B)
 }
 
-interface ReadOnlyDatabase
+interface ReadOnlyDatabase {
+    fun <T : Any> find(type: KClass<T>, aggregateId: UUID): T
+    fun <T : Any> exists(type: KClass<T>, predicate: (T) -> Boolean): Boolean
+}
 
-interface ReadWriteDatabase {
+interface ReadWriteDatabase : ReadOnlyDatabase {
     fun insert(id: UUID, item: Any)
     fun upsert(id: UUID, item: Any)
     fun delete(id: UUID)
-    fun <T : Any> find(type: KClass<T>, aggregateId: UUID): T
 }
-object StubReadOnlyDatabase : ReadOnlyDatabase
-object InMemoryReadWriteDatabase : ReadWriteDatabase {
+class InMemoryReadWriteDatabase : ReadWriteDatabase {
     val items: HashMap<UUID, Any> = hashMapOf()
 
     override fun insert(id: UUID, item: Any) {
@@ -41,6 +42,10 @@ object InMemoryReadWriteDatabase : ReadWriteDatabase {
 
     override fun <T : Any> find(type: KClass<T>, aggregateId: UUID): T {
         return items.filterKeys { it == aggregateId }.values.filterIsInstance(type.java).first()
+    }
+
+    override fun <T : Any> exists(type: KClass<T>, predicate: (T) -> Boolean): Boolean {
+        return items.values.filterIsInstance(type.java).any(predicate)
     }
 }
 

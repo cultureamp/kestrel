@@ -6,7 +6,9 @@ import eventsourcing.Right
 import io.kotlintest.shouldBe
 import io.kotlintest.specs.ShouldSpec
 import java.lang.IllegalStateException
+import java.lang.RuntimeException
 import java.util.*
+import kotlin.reflect.KClass
 
 class SurveyAggregateSpec : ShouldSpec({
 	val namedAt = Date()
@@ -181,4 +183,8 @@ class NameTaken(val taken: Boolean) : SurveyNamesProjection(StubReadOnlyDatabase
 	override fun nameExistsFor(accountId: UUID, name: String, locale: Locale) = taken
 }
 
-class StubReadOnlyDatabase : ReadOnlyDatabase
+class StubReadOnlyDatabase : ReadOnlyDatabase {
+	override fun <T : Any> find(type: KClass<T>, aggregateId: UUID): T = throw RuntimeException("should not be called")
+
+	override fun <T : Any> exists(type: KClass<T>, predicate: (T) -> Boolean) = throw RuntimeException("should not be called")
+}

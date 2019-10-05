@@ -26,12 +26,8 @@ class SurveyNamesProjector(val database: ReadWriteDatabase) : Projector<SurveyEv
 
 data class SurveyRow(val accountId: UUID, val locale: Locale, val name: String)
 
-open class SurveyNamesProjection(database: ReadOnlyDatabase) {
+open class SurveyNamesProjection(val readOnlyDatabase: ReadOnlyDatabase) {
     open fun nameExistsFor(accountId: UUID, name: String, locale: Locale): Boolean {
-        TODO("Find in the database")
+        return readOnlyDatabase.exists(SurveyRow::class, { it.locale == locale && it.name == name })
     }
-}
-
-object StubSurveyNamesProjection : SurveyNamesProjection(object:ReadOnlyDatabase {}) {
-    override fun nameExistsFor(accountId: UUID, name: String, locale: Locale): Boolean = false
 }

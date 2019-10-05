@@ -5,10 +5,10 @@ import survey.thing.AlwaysBoppable
 import survey.thing.ThingAggregate
 
 fun main() {
-    val readOnlyDatabase = StubReadOnlyDatabase
-    val readWriteDatabase = InMemoryReadWriteDatabase
+    val readWriteDatabase: ReadWriteDatabase = InMemoryReadWriteDatabase()
+    val readOnlyDatabase: ReadOnlyDatabase = readWriteDatabase
 
-    val surveyNamesProjection = StubSurveyNamesProjection
+    val surveyNamesProjection = SurveyNamesProjection(readOnlyDatabase)
     val thingProjection = AlwaysBoppable
 
     val aggregates = listOf(
