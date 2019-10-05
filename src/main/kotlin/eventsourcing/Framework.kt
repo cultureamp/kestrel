@@ -75,7 +75,6 @@ interface AggregateWithProjection<UC: UpdateCommand, UE: UpdateEvent, Err: Comma
 interface AggregateConstructor<CC: CreationCommand, CE: CreationEvent, Err: CommandError, UC: UpdateCommand, UE: UpdateEvent, Self: Aggregate2<UC, UE, Err, Self>> {
     fun created(event: CE): Self
     fun create(command: CC): Either<Err, CE>
-//    fun toConfiguration(): Configuration<CC, CE, Err, UC, UE, Self> = Configuration(this::created, this::create, Aggregate2<UC, UE, Err, Self>::updated, Aggregate2<UC, UE, Err, Self>::update)
 }
 
 interface AggregateConstructorWithProjection<CC: CreationCommand, CE: CreationEvent, Err: CommandError, UC: UpdateCommand, UE: UpdateEvent, P, Self : AggregateWithProjection<UC, UE, Err, P, Self>> {
@@ -94,18 +93,6 @@ interface AggregateConstructorWithProjection<CC: CreationCommand, CE: CreationEv
     }
 }
 
-//data class Mapping<CC : CreationCommand, CE : CreationEvent, Err: CommandError, UC : UpdateCommand, UE : UpdateEvent, A : Aggregate>(
-//    val creationCommandClass: KClass<CC>,
-//    val updateCommandClass: KClass<UC>,
-//    val configuration: Configuration<CC, CE, Err, UC, UE, A>
-//) {
-//    companion object {
-//        inline fun <reified CC : CreationCommand, reified UC : UpdateCommand> from(configuration: Configuration<CC, *, *, UC, *, *>) : Mapping<CC, *, *, UC, *, *> {
-//            return Mapping(CC::class, UC::class, configuration)
-//        }
-//    }
-//}
-
 data class Configuration<CC : CreationCommand, CE : CreationEvent, Err: CommandError, UC : UpdateCommand, UE : UpdateEvent, A : Aggregate>(
     val creationCommandClass: KClass<CC>,
     val updateCommandClass: KClass<UC>,
@@ -115,6 +102,7 @@ data class Configuration<CC : CreationCommand, CE : CreationEvent, Err: CommandE
     val update: (A, UC) -> Either<Err, List<UE>>
 ) {
     companion object {
+
         inline fun <reified CC : CreationCommand, CE : CreationEvent, Err : CommandError, reified UC : UpdateCommand, UE : UpdateEvent, A : Aggregate> from(
             noinline created: (CE) -> A,
             noinline create: (CC) -> Either<Err, CE>,
@@ -123,6 +111,17 @@ data class Configuration<CC : CreationCommand, CE : CreationEvent, Err: CommandE
         ): Configuration<CC, CE, Err, UC, UE, A> {
             return Configuration(CC::class, UC::class, created, create, updated, update)
         }
+
+        inline fun <reified CC : CreationCommand, CE : CreationEvent, Err: CommandError, reified UC : UpdateCommand, UE : UpdateEvent, Self: Aggregate2<UC, UE, Err, Self>> from(
+            aggregateConstructor: AggregateConstructor<CC, CE, Err, UC, UE, Self>
+        ): Configuration<CC, CE, Err, UC, UE, Self> {
+            val created = aggregateConstructor::created
+            val create = aggregateConstructor::create
+            val updated = Aggregate2<UC, UE, Err, Self>::updated
+            val update = Aggregate2<UC, UE, Err, Self>::update
+            return from(created, create, updated, update)
+        }
+
     }
     fun rehydrated(creationEvent: CE, updateEvents: List<UE>): A = updated(created(creationEvent), updateEvents)
     fun updated(initial: A, updateEvents: List<UE>): A = updateEvents.fold(initial) { aggregate, updateEvent -> updated(aggregate, updateEvent) }

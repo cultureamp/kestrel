@@ -3,7 +3,6 @@ import survey.demo.*
 import survey.design.*
 import survey.thing.AlwaysBoppable
 import survey.thing.ThingAggregate
-import survey.thing.ThingCommand
 
 fun main() {
     val readOnlyDatabase = StubReadOnlyDatabase
@@ -36,9 +35,9 @@ fun main() {
             PaymentSagaAggregate.Companion::create,
             PaymentSagaAggregate::updated,
             PaymentSagaAggregate::update
-        )
+        ),
+        Configuration.from(ThingAggregate)
     )
-    //        ThingCommand::class from ThingAggregate.partial(thingProjection).toConfiguration()
     val eventStore = InMemoryEventStore()
     val commandGateway = CommandGateway(eventStore, aggregates)
 
