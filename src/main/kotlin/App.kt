@@ -36,7 +36,7 @@ fun main() {
             PaymentSagaAggregate::updated,
             PaymentSagaAggregate::update
         ),
-        Configuration.from(ThingAggregate)
+        Configuration.from(ThingAggregate, thingProjection)
     )
     val eventStore = InMemoryEventStore()
     val commandGateway = CommandGateway(eventStore, aggregates)

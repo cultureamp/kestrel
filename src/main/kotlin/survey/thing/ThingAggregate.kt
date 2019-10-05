@@ -24,6 +24,7 @@ data class Bopped(override val aggregateId: UUID) : ThingUpdateEvent()
 
 sealed class ThingError : CommandError
 object Expoded : ThingError()
+object Unboppable : ThingError()
 
 interface ThingProjection {
     fun isBoppable(): Boolean
@@ -32,13 +33,13 @@ object AlwaysBoppable : ThingProjection {
     override fun isBoppable() = true
 }
 
-data class ThingAggregate(override val aggregateId: UUID, val tweaks: List<String> = emptyList(), val bops: List<Bopped> = emptyList()) : Aggregate2<ThingUpdateCommand, ThingUpdateEvent, ThingError, ThingAggregate> {
-    companion object : AggregateConstructor<ThingCreationCommand, ThingCreationEvent, ThingError, ThingUpdateCommand, ThingUpdateEvent, ThingAggregate> {
+data class ThingAggregate(override val aggregateId: UUID, val tweaks: List<String> = emptyList(), val bops: List<Bopped> = emptyList()) : AggregateWithProjection<ThingUpdateCommand, ThingUpdateEvent, ThingError, ThingProjection, ThingAggregate> {
+    companion object : AggregateConstructorWithProjection<ThingCreationCommand, ThingCreationEvent, ThingError, ThingUpdateCommand, ThingUpdateEvent, ThingProjection, ThingAggregate> {
         override fun created(event: ThingCreationEvent): ThingAggregate = when(event) {
             is ThingCreated -> ThingAggregate(event.aggregateId)
         }
 
-        override fun create(command: ThingCreationCommand): Either<ThingError, ThingCreationEvent> = when(command){
+        override fun create(projection: ThingProjection, command: ThingCreationCommand): Either<ThingError, ThingCreationEvent> = when(command){
             is CreateThing -> Right(ThingCreated(command.aggregateId))
         }
     }
@@ -48,9 +49,12 @@ data class ThingAggregate(override val aggregateId: UUID, val tweaks: List<Strin
         is Bopped -> this.copy(bops = bops + event)
     }
 
-    override fun update(command: ThingUpdateCommand): Either<ThingError, List<ThingUpdateEvent>> = when(command) {
+    override fun update(projection: ThingProjection, command: ThingUpdateCommand): Either<ThingError, List<ThingUpdateEvent>> = when(command) {
         is Tweak -> Right.list(Tweaked(command.aggregateId, command.tweak))
-        is Bop -> Right.list(Bopped(command.aggregateId))
+        is Bop -> when(projection.isBoppable()) {
+            false -> Left(Unboppable)
+            true -> Right.list(Bopped(command.aggregateId))
+        }
         is Explode -> Left(Expoded)
     }
 }

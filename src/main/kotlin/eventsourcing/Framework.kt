@@ -122,6 +122,13 @@ data class Configuration<CC : CreationCommand, CE : CreationEvent, Err: CommandE
             return from(created, create, updated, update)
         }
 
+        inline fun <reified CC : CreationCommand, CE : CreationEvent, Err: CommandError, reified UC : UpdateCommand, UE : UpdateEvent, P, Self: AggregateWithProjection<UC, UE, Err, P, Self>> from(
+            aggregateConstructor: AggregateConstructorWithProjection<CC, CE, Err, UC, UE, P, Self>,
+            projection: P
+        ): Configuration<CC, CE, Err, UC, UE, Aggregate2<UC, UE, Err, *>> {
+            val aggregateConstructor1 = aggregateConstructor.partial(projection)
+            return from<CC, CE, Err, UC, UE, Aggregate2<UC, UE, Err, *>>(aggregateConstructor1)
+        }
     }
     fun rehydrated(creationEvent: CE, updateEvents: List<UE>): A = updated(created(creationEvent), updateEvents)
     fun updated(initial: A, updateEvents: List<UE>): A = updateEvents.fold(initial) { aggregate, updateEvent -> updated(aggregate, updateEvent) }
