@@ -9,7 +9,6 @@ import kotlin.reflect.KFunction4
 interface Projector<E : Event> {
     fun project(event: E)
 }
-
 interface DoubleProjector<A : Event, B : Event> {
     fun first(event: A)
     fun second(event: B)
@@ -19,7 +18,6 @@ interface ReadOnlyDatabase {
     fun <T : Any> find(type: KClass<T>, aggregateId: UUID): T
     fun <T : Any> exists(type: KClass<T>, predicate: (T) -> Boolean): Boolean
 }
-
 interface ReadWriteDatabase : ReadOnlyDatabase {
     fun insert(id: UUID, item: Any)
     fun upsert(id: UUID, item: Any)
@@ -136,8 +134,7 @@ data class Configuration<CC : CreationCommand, CE : CreationEvent, Err: CommandE
             aggregateConstructor: AggregateConstructorWithProjection<CC, CE, Err, UC, UE, P, Self>,
             projection: P
         ): Configuration<CC, CE, Err, UC, UE, Aggregate2<UC, UE, Err, *>> {
-            val aggregateConstructor1 = aggregateConstructor.partial(projection)
-            return from<CC, CE, Err, UC, UE, Aggregate2<UC, UE, Err, *>>(aggregateConstructor1)
+            return from<CC, CE, Err, UC, UE, Aggregate2<UC, UE, Err, *>>(aggregateConstructor.partial(projection))
         }
     }
     fun rehydrated(creationEvent: CE, updateEvents: List<UE>): A = updated(created(creationEvent), updateEvents)
