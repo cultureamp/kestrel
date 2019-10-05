@@ -48,7 +48,7 @@ class SurveyAggregateSpec : ShouldSpec({
 	}
 
 	"Deleted" {
-		should("set the deleted flag to true") {
+		should("set the deleted flag from true") {
 			SurveyAggregate.created(
 				Created(aggregateId, name, accountId, createdAt)
 			).updated(
@@ -59,7 +59,7 @@ class SurveyAggregateSpec : ShouldSpec({
 	}
 
 	"Restored" {
-		should("set the deleted flag to true") {
+		should("set the deleted flag from true") {
 			SurveyAggregate.created(
 				Created(aggregateId, name, accountId, createdAt)
 			).updated(

@@ -14,9 +14,9 @@ class SurveyNamesProjector(val database: ReadWriteDatabase) : Projector<SurveyEv
             val surveyRow = database.find(SurveyRow::class, event.aggregateId)
             database.upsert(event.aggregateId, surveyRow.copy(locale = event.locale, name = event.name))
         }
-        is Snapshot -> TODO()
-        is Deleted -> TODO()
-        is Restored -> TODO()
+        is Snapshot -> Unit
+        is Deleted -> Unit
+        is Restored -> Unit
     }
 }
 

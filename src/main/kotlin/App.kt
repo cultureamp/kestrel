@@ -12,33 +12,33 @@ fun main() {
     val surveyNamesProjection = StubSurveyNamesProjection
     val thingProjection = AlwaysBoppable
 
-    val aggregates = mapOf(
-        SurveyCaptureLayoutCommand::class to Configuration(
+    val aggregates = listOf(
+        Configuration.from(
             ::SurveyCaptureLayoutAggregate,
             SurveyCaptureLayoutAggregate.Companion::create,
             SurveyCaptureLayoutAggregate::updated,
             SurveyCaptureLayoutAggregate::update
         ),
-        SurveyCommand::class to Configuration(
+        Configuration.from(
             SurveyAggregate.Companion::created,
             SurveyAggregate.Companion::create.partial(surveyNamesProjection),
             SurveyAggregate::updated,
             SurveyAggregate::update.partial2(surveyNamesProjection)
         ),
-        SurveySagaCommand::class to Configuration(
+        Configuration.from(
             ::SurveySagaAggregate,
             SurveySagaAggregate.Companion::create,
             SurveySagaAggregate::updated,
             SurveySagaAggregate::update
         ),
-        PaymentSagaCommand::class to Configuration(
+        Configuration.from(
             ::PaymentSagaAggregate,
             PaymentSagaAggregate.Companion::create,
             PaymentSagaAggregate::updated,
             PaymentSagaAggregate::update
-        ),
-        ThingCommand::class to ThingAggregate.partial(thingProjection).toConfiguration()
+        )
     )
+    //        ThingCommand::class from ThingAggregate.partial(thingProjection).toConfiguration()
     val eventStore = InMemoryEventStore()
     val commandGateway = CommandGateway(eventStore, aggregates)
 
