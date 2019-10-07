@@ -4,13 +4,10 @@ import eventsourcing.*
 import java.util.*
 
 data class SurveyAggregate(override val aggregateId: UUID, val name: Map<Locale, String>, val accountId: UUID, val deleted: Boolean = false) : Aggregate {
-    companion object {
-        fun created(event: SurveyCreationEvent): SurveyAggregate = when (event) {
-            is Created -> SurveyAggregate(event.aggregateId, event.name, event.accountId)
-            is Snapshot -> SurveyAggregate(event.aggregateId, event.name, event.accountId, event.deleted)
-        }
+    constructor(event: Created): this(event.aggregateId, event.name, event.accountId)
 
-        fun create(projection: SurveyNamesCommandProjection, command: SurveyCreationCommand): Either<SurveyError, SurveyCreationEvent> = when (command) {
+    companion object {
+        fun create(projection: SurveyNamesCommandProjection, command: SurveyCreationCommand): Either<SurveyError, Created> = when (command) {
             is CreateSurvey -> when {
                 command.name.any { (locale, name) -> projection.nameExistsFor(command.accountId, name, locale)} -> Left(SurveyNameNotUnique)
                 else -> Right(Created(command.aggregateId, command.name, command.accountId, command.createdAt))
@@ -57,9 +54,7 @@ data class Restore(override val aggregateId: UUID, val restoredAt: Date) : Surve
 
 
 sealed class SurveyEvent : Event
-sealed class SurveyCreationEvent : SurveyEvent(), CreationEvent
-data class Created(override val aggregateId: UUID, val name: Map<Locale, String>, val accountId: UUID, val createdAt: Date) : SurveyCreationEvent()
-data class Snapshot(override val aggregateId: UUID, val name: Map<Locale, String>, val accountId: UUID, val deleted: Boolean, val snapshottedAt: Date) : SurveyCreationEvent()
+data class Created(override val aggregateId: UUID, val name: Map<Locale, String>, val accountId: UUID, val createdAt: Date) : SurveyEvent(), CreationEvent
 sealed class SurveyUpdateEvent : SurveyEvent(), UpdateEvent
 data class Renamed(override val aggregateId: UUID, val name: String, val locale: Locale, val namedAt: Date) : SurveyUpdateEvent()
 data class Deleted(override val aggregateId: UUID, val deletedAt: Date) : SurveyUpdateEvent()

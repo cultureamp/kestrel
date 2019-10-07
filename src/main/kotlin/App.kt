@@ -13,13 +13,13 @@ fun main() {
 
     val aggregates = listOf(
         Configuration.from(
-            ::SurveyCaptureLayoutAggregate,
+            SurveyCaptureLayoutAggregate.Companion::created,
             SurveyCaptureLayoutAggregate.Companion::create,
             SurveyCaptureLayoutAggregate::updated,
             SurveyCaptureLayoutAggregate::update
         ),
         Configuration.from(
-            SurveyAggregate.Companion::created,
+            ::SurveyAggregate,
             SurveyAggregate.Companion::create.partial(surveyNamesProjection),
             SurveyAggregate::updated,
             SurveyAggregate::update.partial2(surveyNamesProjection)
