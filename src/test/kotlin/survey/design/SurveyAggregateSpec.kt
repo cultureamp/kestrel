@@ -75,7 +75,7 @@ class SurveyAggregateSpec : ShouldSpec({
                 .shouldBe(Right.list(Renamed(aggregateId, "rename", Locale.en, namedAt)))
         }
 
-        "when the name is the same" {
+        "when the name is taken by another aggregate" {
             should("fail with SurveyNameNotUnique") {
                 SurveyAggregate(Created(aggregateId, name, accountId, createdAt))
                     .update(NameTaken(true), Rename(aggregateId, "rename", Locale.en, namedAt))
@@ -83,7 +83,13 @@ class SurveyAggregateSpec : ShouldSpec({
             }
         }
 
-        "when the name is the same for a different locale" {
+        "when the new name is the same as the old name for the same locale" {
+            SurveyAggregate(Created(aggregateId, name, accountId, createdAt))
+                .update(NameTaken(false), Rename(aggregateId, name.getValue(Locale.en), Locale.en, namedAt))
+                .shouldBe(Left(AlreadyRenamed))
+        }
+
+        "when the name is the same but for a different locale" {
             should("return Renamed event") {
                 SurveyAggregate(Created(aggregateId, name, accountId, createdAt))
                     .update(NameTaken(false), Rename(aggregateId, name.getValue(Locale.en), Locale.de, namedAt))
