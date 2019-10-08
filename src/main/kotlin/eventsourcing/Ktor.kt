@@ -43,8 +43,7 @@ object Ktor {
                                         val statusCode = successToStatusCode(result.value)
                                         val (created, updated) = eventStore.eventsFor(command.value.aggregateId)
                                         val events = listOf(created) + updated
-                                        val foo = events.map { EventData(it::class.simpleName!!, it) }
-                                        Pair(statusCode, foo)
+                                        Pair(statusCode, events.map { EventData(it::class.simpleName!!, it) })
                                     }
                                     is Left -> {
                                         val statusCode = errorToStatusCode(result.error)

@@ -8,10 +8,10 @@ fun main() {
     val readWriteDatabase: ReadWriteDatabase = InMemoryReadWriteDatabase()
     val readOnlyDatabase: ReadOnlyDatabase = readWriteDatabase
 
-    val surveyNamesProjection = SurveyNamesCommandProjection(readOnlyDatabase)
-    val thingProjection = AlwaysBoppable
+    val surveyNamesCommandProjection = SurveyNamesCommandProjection(readOnlyDatabase)
+    val thingCommandProjection = AlwaysBoppable
 
-    val aggregates = listOf(
+    val registry = listOf(
         Configuration.from(
             SurveyCaptureLayoutAggregate.Companion::created,
             SurveyCaptureLayoutAggregate.Companion::create,
@@ -20,9 +20,9 @@ fun main() {
         ),
         Configuration.from(
             ::SurveyAggregate,
-            SurveyAggregate.Companion::create.partial(surveyNamesProjection),
+            SurveyAggregate.Companion::create.partial(surveyNamesCommandProjection),
             SurveyAggregate::updated,
-            SurveyAggregate::update.partial2(surveyNamesProjection)
+            SurveyAggregate::update.partial2(surveyNamesCommandProjection)
         ),
         Configuration.from(
             ::SurveySagaAggregate,
@@ -36,10 +36,10 @@ fun main() {
             PaymentSagaAggregate::updated,
             PaymentSagaAggregate::update
         ),
-        Configuration.from(ThingAggregate, thingProjection)
+        Configuration.from(ThingAggregate, thingCommandProjection)
     )
     val eventStore = InMemoryEventStore()
-    val commandGateway = CommandGateway(eventStore, aggregates)
+    val commandGateway = CommandGateway(eventStore, registry)
 
     // downstream from events
     val paymentService = PaymentService()
@@ -48,7 +48,7 @@ fun main() {
     val surveySagaReactor = SurveySagaReactor(commandGateway)
     val surveyNamesProjector = SurveyNamesCommandProjector(readWriteDatabase)
 
-    // TODO this should be done as separate threads/works that poll the event-store
+    // TODO this should be done as separate threads/workers that poll the event-store
     eventStore.listeners = listOf(
         EventListener.from(paymentSagaReactor::react),
         EventListener.from(surveySagaReactor::react),

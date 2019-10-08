@@ -1,11 +1,9 @@
 package eventsourcing
 
-import kotlin.reflect.KClass
-
 @Suppress("UNCHECKED_CAST")
 class CommandGateway(
     private val eventStore: EventStore,
-    private val configurations: List<Configuration<*, *, *, *, *, *>>
+    private val registry: List<Configuration<*, *, *, *, *, *>>
 ) {
 
     fun dispatch(command: Command): Either<CommandError, SuccessStatus> = when (command) {
@@ -52,7 +50,7 @@ class CommandGateway(
     }
 
     private fun configurationFor(command: Command) =
-        configurations.find { it.creationCommandClass.isInstance(command) || it.updateCommandClass.isInstance(command) } as Configuration<CreationCommand, CreationEvent, CommandError, UpdateCommand, UpdateEvent, Aggregate>?
+        registry.find { it.creationCommandClass.isInstance(command) || it.updateCommandClass.isInstance(command) } as Configuration<CreationCommand, CreationEvent, CommandError, UpdateCommand, UpdateEvent, Aggregate>?
 }
 
 sealed class SuccessStatus
