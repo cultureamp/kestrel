@@ -114,8 +114,8 @@ data class Configuration<CC : CreationCommand, CE : CreationEvent, Err: CommandE
         inline fun <reified CC : CreationCommand, CE : CreationEvent, Err : CommandError, reified UC : UpdateCommand, UE : UpdateEvent, A : Aggregate> from(
             noinline created: (CE) -> A,
             noinline create: (CC) -> Either<Err, CE>,
-            noinline updated: (A, UE) -> A,
-            noinline update: (A, UC) -> Either<Err, List<UE>>
+            noinline updated: A.(UE) -> A,
+            noinline update: A.(UC) -> Either<Err, List<UE>>
         ): Configuration<CC, CE, Err, UC, UE, A> {
             return Configuration(CC::class, UC::class, created, create, updated, update)
         }
