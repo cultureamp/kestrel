@@ -1,1 +1,4 @@
-.idea
+.gradle
+*.db
+out/
+build/

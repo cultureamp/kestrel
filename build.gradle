@@ -19,6 +19,16 @@ dependencies {
     compile "io.ktor:ktor-server-core:$ktor_version"
     compile "io.ktor:ktor-server-netty:$ktor_version"
     compile "io.ktor:ktor-jackson:$ktor_version"
+    compile 'org.jetbrains.exposed:exposed:0.16.1'
+
+    implementation "io.github.microutils:kotlin-logging:1.4.4"
+
+    implementation 'io.arrow-kt:arrow-core-data:0.9.0'
+    implementation 'io.arrow-kt:arrow-effects-data:0.9.0'
+    implementation 'org.postgresql:postgresql:42.2.5'
+    implementation 'com.zaxxer:HikariCP:2.7.8'
+    implementation 'com.amazonaws:aws-java-sdk-iam:1.11.560'
+    implementation 'com.amazonaws:aws-java-sdk-rds:1.11.560'
 }
 
 compileKotlin {

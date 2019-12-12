@@ -3,16 +3,25 @@ package eventsourcing
 import java.util.UUID
 
 interface EventStore {
+    var listeners: List<EventListener>
+
     fun sink(newEvents: List<Event>, aggregateId: UUID, aggregateType: String)
 
     fun eventsFor(aggregateId: UUID): Pair<CreationEvent, List<UpdateEvent>>
 
     fun isTaken(aggregateId: UUID): Boolean
+
+    // TODO this should be removed and implemented as separate threads/workers that poll the event-store
+    fun notifyListeners(newEvents: List<Event>, aggregateId: UUID) {
+        newEvents.forEach { event ->
+            listeners.flatMap {it.handlers.filterKeys { it.isInstance(event) }.values}.forEach { it(event, aggregateId) }
+        }
+    }
 }
 
 class InMemoryEventStore : EventStore {
     val eventStore: HashMap<UUID, List<Event>> = hashMapOf()
-    lateinit var listeners: List<EventListener>
+    override lateinit var listeners: List<EventListener>
 
     override fun sink(newEvents: List<Event>, aggregateId: UUID, aggregateType: String) {
         val oldEvents = eventStore[aggregateId] ?: emptyList()
@@ -30,12 +39,5 @@ class InMemoryEventStore : EventStore {
 
     override fun isTaken(aggregateId: UUID): Boolean {
         return eventStore.containsKey(aggregateId)
-    }
-
-    // TODO this should be removed and implemented as separate threads/workers that poll the event-store
-    private fun notifyListeners(newEvents: List<Event>, aggregateId: UUID) {
-        newEvents.forEach { event ->
-            listeners.flatMap {it.handlers.filterKeys { it.isInstance(event) }.values}.forEach { it(event, aggregateId) }
-        }
     }
 }
