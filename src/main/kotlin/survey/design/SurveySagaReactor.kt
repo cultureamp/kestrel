@@ -4,8 +4,8 @@ import eventsourcing.*
 import java.util.*
 
 class SurveySagaReactor(private val commandGateway: CommandGateway) {
-    fun react(event: SurveySagaEvent) = when (event) {
-        is SurveySagaStarted -> commandGateway.dispatch(StartCreatingSurvey(event.aggregateId, Date()))
+    fun react(event: SurveySagaEvent, aggregateId: UUID) = when (event) {
+        is SurveySagaStarted -> commandGateway.dispatch(StartCreatingSurvey(aggregateId, Date()))
         is StartedCreatingSurvey -> with(event) {
             val result = commandGateway.dispatch(command)
             when (result) {
@@ -13,7 +13,7 @@ class SurveySagaReactor(private val commandGateway: CommandGateway) {
                 is Left -> commandGateway.dispatch(FailCreatingSurvey(aggregateId, result.error, Date()))
             }
         }
-        is FinishedCreatingSurvey -> commandGateway.dispatch(StartCreatingSurveyCaptureLayoutAggregate(event.aggregateId, Date()))
+        is FinishedCreatingSurvey -> commandGateway.dispatch(StartCreatingSurveyCaptureLayoutAggregate(aggregateId, Date()))
         is StartedCreatingSurveyCaptureLayoutAggregate -> with(event) {
             val result = commandGateway.dispatch(command)
             when (result) {
@@ -21,18 +21,18 @@ class SurveySagaReactor(private val commandGateway: CommandGateway) {
                 is Left -> commandGateway.dispatch(FailCreatingSurveyCaptureLayoutAggregate(aggregateId, result.error, Date()))
             }
         }
-        is FinishedCreatingSurveyCaptureLayoutAggregate -> commandGateway.dispatch(FinishSurveySagaSuccessfully(event.aggregateId, Date()))
-        is FailedCreatingSurvey -> commandGateway.dispatch(FinishSurveySagaUnsuccessfully(event.aggregateId, Date()))
-        is FailedCreatingSurveyCaptureLayoutAggregate -> commandGateway.dispatch(StartRollbackCreatingSurvey(event.aggregateId, Date()))
+        is FinishedCreatingSurveyCaptureLayoutAggregate -> commandGateway.dispatch(FinishSurveySagaSuccessfully(aggregateId, Date()))
+        is FailedCreatingSurvey -> commandGateway.dispatch(FinishSurveySagaUnsuccessfully(aggregateId, Date()))
+        is FailedCreatingSurveyCaptureLayoutAggregate -> commandGateway.dispatch(StartRollbackCreatingSurvey(aggregateId, Date()))
         is StartedRollbackCreatingSurvey -> with(event) {
             val result = commandGateway.dispatch(command)
             when (result) {
-                is Right -> commandGateway.dispatch(FinishRollbackCreatingSurvey(event.aggregateId, Date()))
-                is Left -> commandGateway.dispatch(FailRollbackCreatingSurvey(event.aggregateId, result.error, Date()))
+                is Right -> commandGateway.dispatch(FinishRollbackCreatingSurvey(aggregateId, Date()))
+                is Left -> commandGateway.dispatch(FailRollbackCreatingSurvey(aggregateId, result.error, Date()))
             }
         }
-        is FinishedRollbackCreatingSurvey -> commandGateway.dispatch(FinishSurveySagaUnsuccessfully(event.aggregateId, Date()))
-        is FailedRollbackCreatingSurvey -> commandGateway.dispatch(FinishSurveySagaUnsuccessfully(event.aggregateId, Date()))
+        is FinishedRollbackCreatingSurvey -> commandGateway.dispatch(FinishSurveySagaUnsuccessfully(aggregateId, Date()))
+        is FailedRollbackCreatingSurvey -> commandGateway.dispatch(FinishSurveySagaUnsuccessfully(aggregateId, Date()))
         is SurveySagaFinishedSuccessfully -> Right(Updated)
         is SurveySagaFinishedUnsuccessfully -> Right(Updated)
     }

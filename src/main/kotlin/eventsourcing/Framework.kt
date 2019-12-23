@@ -7,11 +7,11 @@ import kotlin.reflect.KFunction3
 import kotlin.reflect.KFunction4
 
 interface Projector<E : Event> {
-    fun project(event: E)
+    fun project(event: E, aggregateId: UUID)
 }
 interface DoubleProjector<A : Event, B : Event> {
-    fun first(event: A)
-    fun second(event: B)
+    fun first(event: A, aggregateId: UUID)
+    fun second(event: B, aggregateId: UUID)
 }
 
 interface ReadOnlyDatabase {
@@ -48,7 +48,6 @@ class InMemoryReadWriteDatabase : ReadWriteDatabase {
 }
 
 interface Aggregate {
-    val aggregateId: UUID
     fun aggregateType(): String = this::class.simpleName!!
 }
 
@@ -58,14 +57,12 @@ interface Aggregate2<UC: UpdateCommand, UE: UpdateEvent, Err: CommandError, out 
 }
 
 interface AggregateWithProjection<UC: UpdateCommand, UE: UpdateEvent, Err: CommandError, P, Self : AggregateWithProjection<UC, UE, Err, P, Self>> {
-    val aggregateId: UUID
     fun updated(event: UE): Self
     fun update(projection: P, command: UC): Either<Err, List<UE>>
     fun aggregateType(): String = this::class.simpleName!!
 
     fun partial(projection: P): Aggregate2<UC, UE, Err, Aggregate2<UC, UE, Err, *>> {
         return object:Aggregate2<UC, UE, Err, Aggregate2<UC, UE, Err, *>> {
-            override val aggregateId = this@AggregateWithProjection.aggregateId
 
             override fun updated(event: UE): Aggregate2<UC, UE, Err, *> {
                 return this@AggregateWithProjection.updated(event).partial(projection)
@@ -114,8 +111,8 @@ data class Configuration<CC : CreationCommand, CE : CreationEvent, Err: CommandE
         inline fun <reified CC : CreationCommand, CE : CreationEvent, Err : CommandError, reified UC : UpdateCommand, UE : UpdateEvent, A : Aggregate> from(
             noinline created: (CE) -> A,
             noinline create: (CC) -> Either<Err, CE>,
-            noinline updated: A.(UE) -> A,
-            noinline update: A.(UC) -> Either<Err, List<UE>>
+            noinline updated: (A, UE) -> A,
+            noinline update: (A, UC) -> Either<Err, List<UE>>
         ): Configuration<CC, CE, Err, UC, UE, A> {
             return Configuration(CC::class, UC::class, created, create, updated, update)
         }
@@ -141,9 +138,9 @@ data class Configuration<CC : CreationCommand, CE : CreationEvent, Err: CommandE
     fun updated(initial: A, updateEvents: List<UE>): A = updateEvents.fold(initial) { aggregate, updateEvent -> updated(aggregate, updateEvent) }
 }
 
-data class EventListener<E : Event>(val eventType: KClass<E>, val handle: (E) -> Any?) {
+data class EventListener<E : Event>(val eventType: KClass<E>, val handle: (E, UUID) -> Any?) {
     companion object {
-        inline fun <reified E : Event> from(noinline handle: (E) -> Any?) = EventListener(E::class, handle)
+        inline fun <reified E : Event> from(noinline handle: (E, UUID) -> Any?) = EventListener(E::class, handle)
     }
 }
 
@@ -159,9 +156,7 @@ interface UpdateCommand : Command {
     override val aggregateId: UUID
 }
 
-interface Event {
-    val aggregateId: UUID
-}
+interface Event
 
 interface CreationEvent : Event
 

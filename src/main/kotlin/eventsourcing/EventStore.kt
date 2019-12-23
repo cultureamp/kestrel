@@ -3,7 +3,7 @@ package eventsourcing
 import java.util.UUID
 
 interface EventStore {
-    fun sink(aggregateType: String, newEvents: List<Event>)
+    fun sink(newEvents: List<Event>, aggregateId: UUID, aggregateType: String)
 
     fun eventsFor(aggregateId: UUID): Pair<CreationEvent, List<UpdateEvent>>
 
@@ -14,13 +14,13 @@ class InMemoryEventStore : EventStore {
     val eventStore: HashMap<UUID, List<Event>> = hashMapOf()
     lateinit var listeners: List<EventListener<*>>
 
-    override fun sink(aggregateType: String, newEvents: List<Event>) {
-        val uuid = newEvents.first().aggregateId
-        val oldEvents = eventStore[uuid] ?: emptyList()
-        eventStore[uuid] = oldEvents + newEvents
-        notifyListeners(newEvents)
+    override fun sink(newEvents: List<Event>, aggregateId: UUID, aggregateType: String) {
+        val oldEvents = eventStore[aggregateId] ?: emptyList()
+        eventStore[aggregateId] = oldEvents + newEvents
+        notifyListeners(newEvents, aggregateId)
     }
 
+    @Suppress("UNCHECKED_CAST")
     override fun eventsFor(aggregateId: UUID): Pair<CreationEvent, List<UpdateEvent>> {
         val events = eventStore.getValue(aggregateId)
         val creationEvent = events.first() as CreationEvent
@@ -32,10 +32,11 @@ class InMemoryEventStore : EventStore {
         return eventStore.containsKey(aggregateId)
     }
 
-    // TODO this should be removed and implemented as separate threads/works that poll the event-store
-    private fun notifyListeners(newEvents: List<Event>) {
+    // TODO this should be removed and implemented as separate threads/workers that poll the event-store
+    @Suppress("UNCHECKED_CAST")
+    private fun notifyListeners(newEvents: List<Event>, aggregateId: UUID) {
         newEvents.forEach { event ->
-            listeners.filter { it.eventType.isInstance(event) }.forEach { (it as EventListener<Event>).handle(event) }
+            listeners.filter { it.eventType.isInstance(event) }.forEach { (it as EventListener<Event>).handle(event, aggregateId) }
         }
     }
 }

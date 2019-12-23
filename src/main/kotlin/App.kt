@@ -27,14 +27,14 @@ fun main() {
         Configuration.from(
             ::SurveySagaAggregate,
             SurveySagaAggregate.Companion::create,
-            SurveySagaAggregate::updated,
+            {unchanged, _ -> unchanged },
             SurveySagaAggregate::update
         ),
         Configuration.from(
-            ::PaymentSagaAggregate,
-            PaymentSagaAggregate.Companion::create,
-            PaymentSagaAggregate::updated,
-            PaymentSagaAggregate::update
+            { PaymentSagaAggregate },
+            PaymentSagaAggregate::create,
+            { unchanged, _ -> unchanged },
+            { _, event: PaymentSagaUpdateCommand -> PaymentSagaAggregate.update(event) }
         ),
         Configuration.from(ThingAggregate, thingCommandProjection)
     )

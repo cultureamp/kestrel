@@ -3,14 +3,14 @@ package survey.design
 import eventsourcing.*
 import java.util.*
 
-data class SurveyAggregate(override val aggregateId: UUID, val name: Map<Locale, String>, val accountId: UUID, val deleted: Boolean = false) : Aggregate {
-    constructor(event: Created): this(event.aggregateId, event.name, event.accountId)
+data class SurveyAggregate(val name: Map<Locale, String>, val accountId: UUID, val deleted: Boolean = false) : Aggregate {
+    constructor(event: Created): this(event.name, event.accountId)
 
     companion object {
         fun create(projection: SurveyNamesCommandProjection, command: SurveyCreationCommand): Either<SurveyError, Created> = when (command) {
             is CreateSurvey -> when {
                 command.name.any { (locale, name) -> projection.nameExistsFor(command.accountId, name, locale)} -> Left(SurveyNameNotUnique)
-                else -> Right(Created(command.aggregateId, command.name, command.accountId, command.createdAt))
+                else -> Right(Created(command.name, command.accountId, command.createdAt))
             }
         }
     }
@@ -25,14 +25,14 @@ data class SurveyAggregate(override val aggregateId: UUID, val name: Map<Locale,
         is Rename -> when {
             name.get(command.locale) == command.newName -> Left(AlreadyRenamed)
             projection.nameExistsFor(accountId, command.newName, command.locale) -> Left(SurveyNameNotUnique)
-            else -> Right.list(Renamed(command.aggregateId, command.newName, command.locale, command.renamedAt))
+            else -> Right.list(Renamed(command.newName, command.locale, command.renamedAt))
         }
         is Delete -> when (deleted) {
             true -> Left(AlreadyDeleted)
-            false -> Right.list(Deleted(command.aggregateId, command.deletedAt))
+            false -> Right.list(Deleted(command.deletedAt))
         }
         is Restore -> when (deleted) {
-            true -> Right.list(Restored(command.aggregateId, command.restoredAt))
+            true -> Right.list(Restored(command.restoredAt))
             false -> Left(NotDeleted)
         }
     }
@@ -54,11 +54,11 @@ data class Restore(override val aggregateId: UUID, val restoredAt: Date) : Surve
 
 
 sealed class SurveyEvent : Event
-data class Created(override val aggregateId: UUID, val name: Map<Locale, String>, val accountId: UUID, val createdAt: Date) : SurveyEvent(), CreationEvent
+data class Created(val name: Map<Locale, String>, val accountId: UUID, val createdAt: Date) : SurveyEvent(), CreationEvent
 sealed class SurveyUpdateEvent : SurveyEvent(), UpdateEvent
-data class Renamed(override val aggregateId: UUID, val name: String, val locale: Locale, val namedAt: Date) : SurveyUpdateEvent()
-data class Deleted(override val aggregateId: UUID, val deletedAt: Date) : SurveyUpdateEvent()
-data class Restored(override val aggregateId: UUID, val restoredAt: Date) : SurveyUpdateEvent()
+data class Renamed(val name: String, val locale: Locale, val namedAt: Date) : SurveyUpdateEvent()
+data class Deleted(val deletedAt: Date) : SurveyUpdateEvent()
+data class Restored(val restoredAt: Date) : SurveyUpdateEvent()
 
 sealed class SurveyError : CommandError
 object SurveyNameNotUnique : SurveyError()

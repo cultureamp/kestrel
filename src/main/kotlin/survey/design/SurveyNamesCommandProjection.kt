@@ -6,16 +6,16 @@ import eventsourcing.ReadWriteDatabase
 import java.util.UUID
 
 class SurveyNamesCommandProjector(val database: ReadWriteDatabase) : Projector<SurveyEvent> {
-    override fun project(event: SurveyEvent) = when (event) {
+    override fun project(event: SurveyEvent, aggregateId: UUID) = when (event) {
         is Created -> event.name.forEach { locale, name ->
-            database.upsert(event.aggregateId, SurveyRow(event.accountId, locale, name))
+            database.upsert(aggregateId, SurveyRow(event.accountId, locale, name))
         }
         is Renamed -> {
-            val surveyRow = database.find(SurveyRow::class, event.aggregateId)
-            database.upsert(event.aggregateId, surveyRow.copy(locale = event.locale, name = event.name))
+            val surveyRow = database.find(SurveyRow::class, aggregateId)
+            database.upsert(aggregateId, surveyRow.copy(locale = event.locale, name = event.name))
         }
         is Deleted -> {
-            database.delete(event.aggregateId)
+            database.delete(aggregateId)
         }
         is Restored -> Unit // chase up how this was resolved, especially since the old name might now be taken
     }

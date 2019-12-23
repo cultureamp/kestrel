@@ -8,19 +8,18 @@ import java.util.UUID
 
 
 data class SurveyCaptureLayoutAggregate(
-    override val aggregateId: UUID,
     val sectionsForIntendedPurpose: Map<IntendedPurpose, List<Section>> = emptyMap(),
     val demographicSectionsPlacement: DemographicSectionPosition = bottom,
     val questions: Set<UUID> = emptySet()
 ) : Aggregate {
     companion object {
         fun created(event: SurveyCaptureLayoutCreationEvent) = when (event) {
-            is Generated -> SurveyCaptureLayoutAggregate(event.aggregateId)
-            is Snapshot -> with(event) { SurveyCaptureLayoutAggregate(aggregateId, sectionsForIntendedPurpose, demographicSectionsPlacement, questions) }
+            is Generated -> SurveyCaptureLayoutAggregate()
+            is Snapshot -> with(event) { SurveyCaptureLayoutAggregate(sectionsForIntendedPurpose, demographicSectionsPlacement, questions) }
         }
 
         fun create(command: SurveyCaptureLayoutCreationCommand): Either<CommandError, Generated> = when (command) {
-            is Generate -> with(command) { Right(Generated(aggregateId, surveyId, generatedAt)) }
+            is Generate -> with(command) { Right(Generated(surveyId, generatedAt)) }
         }
     }
 
@@ -87,68 +86,68 @@ data class SurveyCaptureLayoutAggregate(
             hasSection(command.sectionId) -> Left(SectionAlreadyAdded)
             hasSectionCode(command.code) -> Left(SectionCodeNotUnique)
             command.positionedAfterSectionId != null && sectionFor(command.positionedAfterSectionId).intendedPurpose != command.intendedPurpose -> Left(SectionHasDifferentIntendedPurpose)
-            else -> with(command) { Right.list(SectionAdded(aggregateId, sectionId, name, shortDescription, longDescription, intendedPurpose, code, positionedAfterSectionId, addedAt)) }
+            else -> with(command) { Right.list(SectionAdded(sectionId, name, shortDescription, longDescription, intendedPurpose, code, positionedAfterSectionId, addedAt)) }
         }
         is MoveSection -> if (command.positionedAfterSectionId != null) when {
             !hasSection(command.sectionId) || !hasSection(command.positionedAfterSectionId) -> Left(SectionNotFound)
             indexOf(command.sectionId) == indexOf(command.positionedAfterSectionId) + 1 -> Left(SectionAlreadyMoved)
             sectionFor(command.sectionId).intendedPurpose != sectionFor(command.positionedAfterSectionId).intendedPurpose -> Left(SectionHasDifferentIntendedPurpose)
-            else -> with(command) { Right.list(SectionMoved(aggregateId, sectionId, positionedAfterSectionId, movedAt)) }
+            else -> with(command) { Right.list(SectionMoved(sectionId, positionedAfterSectionId, movedAt)) }
         } else when {
             !hasSection(command.sectionId) -> Left(SectionNotFound)
             indexOf(command.sectionId) == 0 -> Left(SectionAlreadyMoved)
-            else -> with(command) { Right.list(SectionMoved(aggregateId, sectionId, positionedAfterSectionId, movedAt)) }
+            else -> with(command) { Right.list(SectionMoved(sectionId, positionedAfterSectionId, movedAt)) }
         }
         is RemoveSection -> when {
             !hasSection(command.sectionId) -> Left(SectionNotFound)
             sectionFor(command.sectionId).status == Status.removed -> Left(SectionAlreadyRemoved)
-            else -> with(command) { Right.list(SectionRemoved(aggregateId, sectionId, removedAt)) }
+            else -> with(command) { Right.list(SectionRemoved(sectionId, removedAt)) }
         }
         is RestoreSection -> when {
             !hasSection(command.sectionId) -> Left(SectionNotFound)
             sectionFor(command.sectionId).status == Status.active -> Left(SectionAlreadyRestored)
-            else -> with(command) { Right.list(SectionRestored(aggregateId, sectionId, restoredAt)) }
+            else -> with(command) { Right.list(SectionRestored(sectionId, restoredAt)) }
         }
         is RenameSection -> when {
             !hasSection(command.sectionId) -> Left(SectionNotFound)
             sectionFor(command.sectionId).name[command.locale] == command.name -> Left(RenameAlreadyActioned)
-            else -> with(command) { Right.list(SectionRenamed(aggregateId, sectionId, name, locale, renamedAt)) }
+            else -> with(command) { Right.list(SectionRenamed(sectionId, name, locale, renamedAt)) }
         }
         is ChangeSectionShortDescription -> when {
             !hasSection(command.sectionId) -> Left(SectionNotFound)
             sectionFor(command.sectionId).shortDescription[command.locale] == command.text -> Left(ShortDescriptionAlreadyChanged)
-            else -> with(command) { Right.list(SectionShortDescriptionChanged(aggregateId, sectionId, text, locale, changedAt)) }
+            else -> with(command) { Right.list(SectionShortDescriptionChanged(sectionId, text, locale, changedAt)) }
         }
         is ChangeSectionLongDescription -> when {
             !hasSection(command.sectionId) -> Left(SectionNotFound)
             sectionFor(command.sectionId).longDescription[command.locale] == command.text -> Left(LongDescriptionAlreadyChanged)
-            else -> with(command) { Right.list(SectionLongDescriptionChanged(aggregateId, sectionId, text, locale, changedAt)) }
+            else -> with(command) { Right.list(SectionLongDescriptionChanged(sectionId, text, locale, changedAt)) }
         }
         is RemoveSectionDescriptions -> when {
             !hasSection(command.sectionId) -> Left(SectionNotFound)
             sectionFor(command.sectionId).let { it.shortDescription.isEmpty() || it.longDescription.isEmpty()} -> Left(SectionDescriptionsAlreadyRemoved)
-            else -> with(command) { Right.list(SectionDescriptionsRemoved(aggregateId, sectionId, removedAt)) }
+            else -> with(command) { Right.list(SectionDescriptionsRemoved(sectionId, removedAt)) }
         }
         is PositionQuestion -> if (command.positionedAfterQuestionId != null) when {
             !hasSection(command.sectionId) -> Left(SectionNotFound)
             !questionExistsInSection(command.positionedAfterQuestionId) -> Left(QuestionNotFound)
             sectionFor(command.sectionId) != sectionForQuestionId(command.positionedAfterQuestionId) -> Left(PositionedAfterQuestionInWrongSection)
             sectionFor(command.sectionId).questions.let { it.indexOf(command.questionId) == it.indexOf(command.positionedAfterQuestionId) + 1 } -> Left(QuestionAlreadyInPosition)
-            else -> with(command) { Right.list(QuestionPositioned(aggregateId, questionId, positionedAfterQuestionId, sectionId, positionedAt)) }
+            else -> with(command) { Right.list(QuestionPositioned(questionId, positionedAfterQuestionId, sectionId, positionedAt)) }
         } else when {
             !hasSection(command.sectionId) -> Left(SectionNotFound)
             sectionFor(command.sectionId).questions.first() != command.questionId -> Left(QuestionAlreadyInPosition)
-            else -> with(command) { Right.list(QuestionPositioned(aggregateId, questionId, positionedAfterQuestionId, sectionId, positionedAt)) }
+            else -> with(command) { Right.list(QuestionPositioned(questionId, positionedAfterQuestionId, sectionId, positionedAt)) }
         }
         is PositionDemographicSections -> when(command.placement) {
             demographicSectionsPlacement -> Left(DemographicSectionsAlreadyPositioned)
-            top -> with(command) { Right.list(DemographicSectionsPositionedAtTop(aggregateId, positionedAt)) }
-            bottom -> with(command) { Right.list(DemographicSectionsPositionedAtTop(aggregateId, positionedAt)) }
+            top -> with(command) { Right.list(DemographicSectionsPositionedAtTop(positionedAt)) }
+            bottom -> with(command) { Right.list(DemographicSectionsPositionedAtTop(positionedAt)) }
         }
         is HideQuestionFromCapture -> when {
             !questions.contains(command.questionId) -> Left(QuestionNotFound)
             !questionExistsInSection(command.questionId) -> Left(QuestionAlreadyRemovedFromSection)
-            else -> with(command) { Right.list(QuestionHiddenFromCapture(aggregateId, questionId, hiddenAt)) }
+            else -> with(command) { Right.list(QuestionHiddenFromCapture(questionId, hiddenAt)) }
         }
     }
 
@@ -320,12 +319,10 @@ data class HideQuestionFromCapture(
 sealed class SurveyCaptureLayoutEvent : Event
 sealed class SurveyCaptureLayoutCreationEvent : SurveyCaptureLayoutEvent(), CreationEvent
 data class Generated(
-    override val aggregateId: UUID,
     val surveyId: UUID,
     val generatedAt: Date
 ) : SurveyCaptureLayoutCreationEvent()
 data class Snapshot(
-    override val aggregateId: UUID,
     val sectionsForIntendedPurpose: Map<IntendedPurpose, List<Section>> = emptyMap(),
     val demographicSectionsPlacement: DemographicSectionPosition = bottom,
     val questions: Set<UUID> = emptySet()
@@ -333,7 +330,6 @@ data class Snapshot(
 
 sealed class SurveyCaptureLayoutUpdateEvent : SurveyCaptureLayoutEvent(), UpdateEvent
 data class SectionAdded(
-    override val aggregateId: UUID,
     val sectionId: UUID,
     val name: List<LocalizedText>,
     val shortDescription: List<LocalizedText>,
@@ -345,26 +341,22 @@ data class SectionAdded(
 ) : SurveyCaptureLayoutUpdateEvent()
 
 data class SectionMoved(
-    override val aggregateId: UUID,
     val sectionId: UUID,
     val positionedAfterSectionId: UUID?,
     val movedAt: Date
 ) : SurveyCaptureLayoutUpdateEvent()
 
 data class SectionRemoved(
-    override val aggregateId: UUID,
     val sectionId: UUID,
     val removedAt: Date
 ) : SurveyCaptureLayoutUpdateEvent()
 
 data class SectionRestored(
-    override val aggregateId: UUID,
     val sectionId: UUID,
     val restoredAt: Date
 ) : SurveyCaptureLayoutUpdateEvent()
 
 data class SectionRenamed(
-    override val aggregateId: UUID,
     val sectionId: UUID,
     val name: String,
     val locale: Locale,
@@ -372,7 +364,6 @@ data class SectionRenamed(
 ) : SurveyCaptureLayoutUpdateEvent()
 
 data class SectionShortDescriptionChanged(
-    override val aggregateId: UUID,
     val sectionId: UUID,
     val text: String,
     val locale: Locale,
@@ -380,7 +371,6 @@ data class SectionShortDescriptionChanged(
 ) : SurveyCaptureLayoutUpdateEvent()
 
 data class SectionLongDescriptionChanged(
-    override val aggregateId: UUID,
     val sectionId: UUID,
     val text: String,
     val locale: Locale,
@@ -388,7 +378,6 @@ data class SectionLongDescriptionChanged(
 ) : SurveyCaptureLayoutUpdateEvent()
 
 data class SectionDescriptionChanged(
-    override val aggregateId: UUID,
     val sectionId: UUID,
     val shortDescription: String,
     val longDescription: String,
@@ -397,13 +386,11 @@ data class SectionDescriptionChanged(
 ) : SurveyCaptureLayoutUpdateEvent()
 
 data class SectionDescriptionsRemoved(
-    override val aggregateId: UUID,
     val sectionId: UUID,
     val removedAt: Date
 ) : SurveyCaptureLayoutUpdateEvent()
 
 data class QuestionPositioned(
-    override val aggregateId: UUID,
     val questionId: UUID,
     val positionedAfterQuestionId: UUID?,
     val sectionId: UUID,
@@ -411,17 +398,14 @@ data class QuestionPositioned(
 ) : SurveyCaptureLayoutUpdateEvent()
 
 data class DemographicSectionsPositionedAtTop(
-    override val aggregateId: UUID,
     val positionedAt: Date
 ) : SurveyCaptureLayoutUpdateEvent()
 
 data class DemographicSectionsPositionedAtBottom(
-    override val aggregateId: UUID,
     val positionedAt: Date
 ) : SurveyCaptureLayoutUpdateEvent()
 
 data class QuestionHiddenFromCapture(
-    override val aggregateId: UUID,
     val questionId: UUID,
     val hiddenAt: Date
 ) : SurveyCaptureLayoutUpdateEvent()
