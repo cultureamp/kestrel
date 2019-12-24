@@ -16,7 +16,7 @@ class CommandGateway(private val eventStore: EventStore, private val registry: L
     }
 
     private fun update(updateCommand: UpdateCommand): Either<CommandError, SuccessStatus> =
-        configurationFor(updateCommand)?.let { it.update(updateCommand, eventStore).map { Created } } ?: Left(NoConstructorForCommand)
+        configurationFor(updateCommand)?.let { it.update(updateCommand, eventStore).map { Updated } } ?: Left(NoConstructorForCommand)
 
 
     @Suppress("UNCHECKED_CAST")
