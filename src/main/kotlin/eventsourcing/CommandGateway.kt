@@ -23,7 +23,7 @@ class CommandGateway(
                         val creationEvent = result.value
                         val aggregate = configuration.created(creationEvent)
                         val events = listOf(creationEvent)
-                        eventStore.sink(events, creationCommand.aggregateId, aggregate.aggregateType())
+                        eventStore.sink(events, creationCommand.aggregateId, configuration.aggregateType(aggregate))
                         result.map { Created }
                     }
                 }
@@ -42,7 +42,7 @@ class CommandGateway(
                 is Right -> {
                     val events = result.value
                     val updated = configuration.updated(aggregate, events)
-                    eventStore.sink(events, updateCommand.aggregateId, updated.aggregateType())
+                    eventStore.sink(events, updateCommand.aggregateId, configuration.aggregateType(updated))
                     result.map { Updated }
                 }
             }

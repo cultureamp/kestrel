@@ -47,13 +47,12 @@ class InMemoryReadWriteDatabase : ReadWriteDatabase {
     }
 }
 
-interface Aggregate {
-    fun aggregateType(): String = this::class.simpleName!!
-}
+interface Aggregate
 
 interface Aggregate2<UC: UpdateCommand, UE: UpdateEvent, Err: CommandError, out Self : Aggregate2<UC, UE, Err, Self>> : Aggregate {
     fun updated(event: UE): Self
     fun update(command: UC): Either<Err, List<UE>>
+    fun aggregateType(): String = this::class.simpleName!!
 }
 
 interface AggregateWithProjection<UC: UpdateCommand, UE: UpdateEvent, Err: CommandError, P, Self : AggregateWithProjection<UC, UE, Err, P, Self>> {
@@ -104,27 +103,30 @@ data class Configuration<CC : CreationCommand, CE : CreationEvent, Err: CommandE
     val created: (CE) -> A,
     val create: (CC) -> Either<Err, CE>,
     val updated: (A, UE) -> A,
-    val update: (A, UC) -> Either<Err, List<UE>>
+    val update: (A, UC) -> Either<Err, List<UE>>,
+    val aggregateType: (A) -> String
 ) {
     companion object {
 
-        inline fun <reified CC : CreationCommand, CE : CreationEvent, Err : CommandError, reified UC : UpdateCommand, UE : UpdateEvent, A : Aggregate> from(
+        inline fun <reified CC : CreationCommand, CE : CreationEvent, Err : CommandError, reified UC : UpdateCommand, UE : UpdateEvent, reified A : Aggregate> from(
             noinline created: (CE) -> A,
             noinline create: (CC) -> Either<Err, CE>,
             noinline updated: (A, UE) -> A,
-            noinline update: (A, UC) -> Either<Err, List<UE>>
+            noinline update: (A, UC) -> Either<Err, List<UE>>,
+            noinline aggregateType: (A) -> String = {it::class.simpleName!!}
         ): Configuration<CC, CE, Err, UC, UE, A> {
-            return Configuration(CC::class, UC::class, created, create, updated, update)
+            return Configuration(CC::class, UC::class, created, create, updated, update, aggregateType)
         }
 
-        inline fun <reified CC : CreationCommand, CE : CreationEvent, Err: CommandError, reified UC : UpdateCommand, UE : UpdateEvent, Self: Aggregate2<UC, UE, Err, Self>> from(
+        inline fun <reified CC : CreationCommand, CE : CreationEvent, Err: CommandError, reified UC : UpdateCommand, UE : UpdateEvent, reified Self: Aggregate2<UC, UE, Err, Self>> from(
             aggregateConstructor: AggregateConstructor<CC, CE, Err, UC, UE, Self>
         ): Configuration<CC, CE, Err, UC, UE, Self> {
             val created = aggregateConstructor::created
             val create = aggregateConstructor::create
             val updated = Aggregate2<UC, UE, Err, Self>::updated
             val update = Aggregate2<UC, UE, Err, Self>::update
-            return from(created, create, updated, update)
+            val aggregateType = Aggregate2<UC, UE, Err, Self>::aggregateType
+            return from(created, create, updated, update, aggregateType)
         }
 
         inline fun <reified CC : CreationCommand, CE : CreationEvent, Err: CommandError, reified UC : UpdateCommand, UE : UpdateEvent, P, Self: AggregateWithProjection<UC, UE, Err, P, Self>> from(
