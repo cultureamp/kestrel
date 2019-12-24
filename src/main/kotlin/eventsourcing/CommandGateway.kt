@@ -1,6 +1,5 @@
 package eventsourcing
 
-@Suppress("UNCHECKED_CAST")
 class CommandGateway(
     private val eventStore: EventStore,
     private val registry: List<Configuration<*, *, *, *, *, *>>
@@ -15,42 +14,17 @@ class CommandGateway(
     private fun construct(creationCommand: CreationCommand): Either<CommandError, SuccessStatus> {
         return when (eventStore.isTaken(creationCommand.aggregateId)) {
             true -> Left(AggregateIdAlreadyTaken)
-            false -> configurationFor(creationCommand)?.let { configuration ->
-                val result = configuration.create(creationCommand)
-                when (result) {
-                    is Left -> result
-                    is Right -> {
-                        val creationEvent = result.value
-                        val aggregate = configuration.created(creationEvent)
-                        val events = listOf(creationEvent)
-                        eventStore.sink(events, creationCommand.aggregateId, configuration.aggregateType(aggregate))
-                        result.map { Created }
-                    }
-                }
-            } ?: Left(NoConstructorForCommand)
+            false -> configurationFor(creationCommand)?.let { it.create(creationCommand, eventStore).map { Created } } ?: Left(NoConstructorForCommand)
         }
     }
 
     private fun update(updateCommand: UpdateCommand): Either<CommandError, SuccessStatus> {
-        val configuration = configurationFor(updateCommand)
-        return configuration?.let {
-            val (creationEvent, updateEvents) = eventStore.eventsFor(updateCommand.aggregateId)
-            val aggregate = configuration.rehydrated(creationEvent, updateEvents)
-            val result = configuration.update(aggregate, updateCommand)
-            when (result) {
-                is Left -> result
-                is Right -> {
-                    val events = result.value
-                    val updated = configuration.updated(aggregate, events)
-                    eventStore.sink(events, updateCommand.aggregateId, configuration.aggregateType(updated))
-                    result.map { Updated }
-                }
-            }
-        } ?: Left(NoConstructorForCommand)
+        return configurationFor(updateCommand)?.let { it.update(updateCommand, eventStore).map { Created } } ?: Left(NoConstructorForCommand)
     }
 
+    @Suppress("UNCHECKED_CAST")
     private fun configurationFor(command: Command) =
-        registry.find { it.creationCommandClass.isInstance(command) || it.updateCommandClass.isInstance(command) } as Configuration<CreationCommand, CreationEvent, CommandError, UpdateCommand, UpdateEvent, Aggregate>?
+        registry.find { it.creationCommandClass.isInstance(command) || it.updateCommandClass.isInstance(command) } as Configuration<CreationCommand, *, *, UpdateCommand, *, *>?
 }
 
 sealed class SuccessStatus

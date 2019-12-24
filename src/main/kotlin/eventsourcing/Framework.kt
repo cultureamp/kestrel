@@ -136,8 +136,27 @@ data class Configuration<CC : CreationCommand, CE : CreationEvent, Err: CommandE
             return from<CC, CE, Err, UC, UE, Aggregate2<UC, UE, Err, *>>(aggregateConstructor.partial(projection))
         }
     }
-    fun rehydrated(creationEvent: CE, updateEvents: List<UE>): A = updated(created(creationEvent), updateEvents)
-    fun updated(initial: A, updateEvents: List<UE>): A = updateEvents.fold(initial) { aggregate, updateEvent -> updated(aggregate, updateEvent) }
+
+    fun create(creationCommand: CC, eventStore: EventStore) = create(creationCommand).map { creationEvent ->
+        val aggregate = created(creationEvent)
+        val events = listOf(creationEvent)
+        eventStore.sink(events, creationCommand.aggregateId, aggregateType(aggregate))
+    }
+
+    @Suppress("UNCHECKED_CAST")
+    fun update(updateCommand: UC, eventStore: EventStore): Either<Err, Unit> {
+        val (creationEvent, updateEvents) = eventStore.eventsFor(updateCommand.aggregateId)
+        val aggregate = rehydrated(creationEvent as CE, updateEvents as List<UE>)
+        return update(aggregate, updateCommand).map { events ->
+            val updated = updated(aggregate, events)
+            eventStore.sink(events, updateCommand.aggregateId, aggregateType(updated))
+        }
+    }
+
+    private fun rehydrated(creationEvent: CE, updateEvents: List<UE>): A = updated(created(creationEvent), updateEvents)
+
+    private fun updated(initial: A, updateEvents: List<UE>): A = updateEvents.fold(initial) { aggregate, updateEvent -> updated(aggregate, updateEvent) }
+
 }
 
 data class EventListener<E : Event>(val eventType: KClass<E>, val handle: (E, UUID) -> Any?) {
