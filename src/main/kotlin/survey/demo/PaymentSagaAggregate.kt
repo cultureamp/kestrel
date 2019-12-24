@@ -12,7 +12,7 @@ object PaymentSagaAggregate : Aggregate {
         is StartThirdPartyPayment -> Right.list(StartedThirdPartyPayment(command.startedAt))
         is RegisterThirdPartySuccess -> Right.list(FinishedThirdPartyPayment(Date()))
         is RegisterThirdPartyFailure -> Right.list(FailedThirdPartyPayment(Date()))
-        is StartThirdPartyEmailNotification -> TODO()
+        is StartThirdPartyEmailNotification -> Right.list(StartedThirdPartyEmailNotification(command.message, command.startedAt))
     }
 }
 

@@ -31,7 +31,8 @@ fun main() {
         ),
         Configuration.from(
             PaymentSagaAggregate::create,
-            PaymentSagaAggregate::update
+            PaymentSagaAggregate::update,
+            PaymentSagaAggregate
         ),
         Configuration.from(ThingAggregate, thingCommandProjection)
     )
