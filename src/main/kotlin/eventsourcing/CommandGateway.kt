@@ -1,9 +1,6 @@
 package eventsourcing
 
-class CommandGateway(
-    private val eventStore: EventStore,
-    private val registry: List<Configuration<*, *, *, *, *, *>>
-) {
+class CommandGateway(private val eventStore: EventStore, private val registry: List<Configuration<*, *, *, *, *, *>>) {
 
     fun dispatch(command: Command): Either<CommandError, SuccessStatus> = when (command) {
         is CreationCommand -> construct(command)
@@ -18,9 +15,9 @@ class CommandGateway(
         }
     }
 
-    private fun update(updateCommand: UpdateCommand): Either<CommandError, SuccessStatus> {
-        return configurationFor(updateCommand)?.let { it.update(updateCommand, eventStore).map { Created } } ?: Left(NoConstructorForCommand)
-    }
+    private fun update(updateCommand: UpdateCommand): Either<CommandError, SuccessStatus> =
+        configurationFor(updateCommand)?.let { it.update(updateCommand, eventStore).map { Created } } ?: Left(NoConstructorForCommand)
+
 
     @Suppress("UNCHECKED_CAST")
     private fun configurationFor(command: Command) =

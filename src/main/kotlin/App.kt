@@ -13,28 +13,25 @@ fun main() {
 
     val registry = listOf(
         Configuration.from(
-            SurveyCaptureLayoutAggregate.Companion::created,
             SurveyCaptureLayoutAggregate.Companion::create,
-            SurveyCaptureLayoutAggregate::updated,
-            SurveyCaptureLayoutAggregate::update
+            SurveyCaptureLayoutAggregate::update,
+            SurveyCaptureLayoutAggregate.Companion::created,
+            SurveyCaptureLayoutAggregate::updated
         ),
         Configuration.from(
-            ::SurveyAggregate,
             SurveyAggregate.Companion::create.partial(surveyNamesCommandProjection),
-            SurveyAggregate::updated,
-            SurveyAggregate::update.partial2(surveyNamesCommandProjection)
+            SurveyAggregate::update.partial2(surveyNamesCommandProjection),
+            ::SurveyAggregate,
+            SurveyAggregate::updated
         ),
         Configuration.from(
-            ::SurveySagaAggregate,
             SurveySagaAggregate.Companion::create,
-            {unchanged, _ -> unchanged },
-            SurveySagaAggregate::update
+            SurveySagaAggregate::update,
+            ::SurveySagaAggregate
         ),
         Configuration.from(
-            { PaymentSagaAggregate },
             PaymentSagaAggregate::create,
-            { unchanged, _ -> unchanged },
-            { _, event: PaymentSagaUpdateCommand -> PaymentSagaAggregate.update(event) }
+            PaymentSagaAggregate::update
         ),
         Configuration.from(ThingAggregate, thingCommandProjection)
     )
