@@ -97,20 +97,16 @@ interface AggregateConstructorWithProjection<CC: CreationCommand, CE: CreationEv
     }
 }
 
-interface Configuration<CC : CreationCommand, CE : CreationEvent, Err: CommandError, UC : UpdateCommand, UE : UpdateEvent, A : Aggregate> {
-    val creationCommandClass: KClass<CC>
-    val updateCommandClass: KClass<UC>
-
+data class Configuration<CC : CreationCommand, CE : CreationEvent, Err : CommandError, UC : UpdateCommand, UE : UpdateEvent, A : Aggregate>(
+    val creationCommandClass: KClass<CC>,
+    val updateCommandClass: KClass<UC>,
+    val create: (CC) -> Either<Err, CE>,
+    val update: A.(UC) -> Either<Err, List<UE>>,
+    val created: (CE) -> A,
+    val updated: A.(UE) -> A,
+    val aggregateType: A.() -> String
+) {
     companion object {
-
-        inline fun <reified CC : CreationCommand, CE : CreationEvent, Err : CommandError, reified UC : UpdateCommand, UE : UpdateEvent, reified A : Aggregate> from(
-            noinline create: (CC) -> Either<Err, CE>,
-            noinline update: (UC) -> Either<Err, List<UE>>,
-            instance: A,
-            noinline aggregateType: A.() -> String = { this::class.simpleName!! }
-        ): Configuration<CC, CE, Err, UC, UE, A> {
-            return ObjectConfiguration(CC::class, UC::class, create, update, instance, aggregateType)
-        }
 
         inline fun <reified CC : CreationCommand, CE : CreationEvent, Err : CommandError, reified UC : UpdateCommand, UE : UpdateEvent, reified A : Aggregate> from(
             noinline create: (CC) -> Either<Err, CE>,
@@ -119,7 +115,16 @@ interface Configuration<CC : CreationCommand, CE : CreationEvent, Err: CommandEr
             noinline updated: A.(UE) -> A = {_ -> this },
             noinline aggregateType: A.() -> String = { this::class.simpleName!! }
         ): Configuration<CC, CE, Err, UC, UE, A> {
-            return DataClassConfiguration(CC::class, UC::class, created, create, updated, update, aggregateType)
+            return Configuration(CC::class, UC::class, create, update, created, updated, aggregateType)
+        }
+
+        inline fun <reified CC : CreationCommand, CE : CreationEvent, Err : CommandError, reified UC : UpdateCommand, UE : UpdateEvent, reified A : Aggregate> from(
+            noinline create: (CC) -> Either<Err, CE>,
+            noinline update: (UC) -> Either<Err, List<UE>>,
+            instance: A,
+            noinline aggregateType: A.() -> String = { this::class.simpleName!! }
+        ): Configuration<CC, CE, Err, UC, UE, A> {
+            return from(create, {update(it)}, {instance}, {instance}, aggregateType)
         }
 
         inline fun <reified CC : CreationCommand, CE : CreationEvent, Err: CommandError, reified UC : UpdateCommand, UE : UpdateEvent, reified Self: Aggregate2<UC, UE, Err, Self>> from(
@@ -141,27 +146,14 @@ interface Configuration<CC : CreationCommand, CE : CreationEvent, Err: CommandEr
         }
     }
 
-    fun create(creationCommand: CC, eventStore: EventStore): Either<Err, Any>
-    fun update(updateCommand: UC, eventStore: EventStore): Either<Err, Any>
-}
-
-data class DataClassConfiguration<CC : CreationCommand, CE : CreationEvent, Err : CommandError, UC : UpdateCommand, UE : UpdateEvent, A : Aggregate>(
-    override val creationCommandClass: KClass<CC>,
-    override val updateCommandClass: KClass<UC>,
-    val created: (CE) -> A,
-    val create: (CC) -> Either<Err, CE>,
-    val updated: A.(UE) -> A,
-    val update: A.(UC) -> Either<Err, List<UE>>,
-    val aggregateType: A.() -> String
-) : Configuration<CC, CE, Err, UC, UE, A> {
-    override fun create(creationCommand: CC, eventStore: EventStore) = create(creationCommand).map { event ->
+    fun create(creationCommand: CC, eventStore: EventStore) = create(creationCommand).map { event ->
         val aggregate = created(event)
         val events = listOf(event)
         eventStore.sink(events, creationCommand.aggregateId, aggregate.aggregateType())
     }
 
     @Suppress("UNCHECKED_CAST")
-    override fun update(updateCommand: UC, eventStore: EventStore): Either<Err, Unit> {
+    fun update(updateCommand: UC, eventStore: EventStore): Either<Err, Unit> {
         val (creationEvent, updateEvents) = eventStore.eventsFor(updateCommand.aggregateId)
         val aggregate = rehydrated(creationEvent as CE, updateEvents as List<UE>)
         return update(aggregate, updateCommand).map { events ->
@@ -173,24 +165,6 @@ data class DataClassConfiguration<CC : CreationCommand, CE : CreationEvent, Err 
     private fun rehydrated(creationEvent: CE, updateEvents: List<UE>): A = updated(created(creationEvent), updateEvents)
 
     private fun updated(initial: A, updateEvents: List<UE>): A = updateEvents.fold(initial) { aggregate, updateEvent -> updated(aggregate, updateEvent) }
-
-}
-
-data class ObjectConfiguration<CC : CreationCommand, CE : CreationEvent, Err : CommandError, UC : UpdateCommand, UE : UpdateEvent, A : Aggregate>(
-    override val creationCommandClass: KClass<CC>,
-    override val updateCommandClass: KClass<UC>,
-    val create: (CC) -> Either<Err, CE>,
-    val update: (UC) -> Either<Err, List<UE>>,
-    val instance: A,
-    val aggregateType: A.() -> String
-) : Configuration<CC, CE, Err, UC, UE, A> {
-    override fun create(creationCommand: CC, eventStore: EventStore) = create(creationCommand).map { event ->
-        eventStore.sink(listOf(event), creationCommand.aggregateId, instance.aggregateType())
-    }
-
-    override fun update(updateCommand: UC, eventStore: EventStore) = update(updateCommand).map { events ->
-        eventStore.sink(events, updateCommand.aggregateId, instance.aggregateType())
-    }
 }
 
 data class EventListener<E : Event>(val eventType: KClass<E>, val handle: (E, UUID) -> Any?) {
