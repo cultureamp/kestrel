@@ -18,6 +18,7 @@ import io.ktor.server.netty.Netty
 import io.ktor.util.pipeline.PipelineContext
 import java.io.PrintWriter
 import java.io.StringWriter
+import java.util.UUID
 import kotlin.reflect.KClass
 
 
@@ -43,7 +44,7 @@ object Ktor {
                                         val statusCode = successToStatusCode(result.value)
                                         val (created, updated) = eventStore.eventsFor(command.value.aggregateId)
                                         val events = listOf(created) + updated
-                                        Pair(statusCode, events.map { EventData(it::class.simpleName!!, it) })
+                                        Pair(statusCode, AggregateData(command.value.aggregateId, events.map { EventData(it::class.simpleName!!, it) }))
                                     }
                                     is Left -> {
                                         val statusCode = errorToStatusCode(result.error)
@@ -65,6 +66,7 @@ object Ktor {
     }
 }
 
+data class AggregateData(val aggregateId: UUID, val events: List<EventData>)
 data class EventData(val type: String, val data: Event)
 data class BadData(val field: String, val invalidValue: String?)
 
