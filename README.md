@@ -74,7 +74,9 @@ Gives:
     {"type":"PaymentSagaStarted","data":{"fromUserId":"e512c6ff-22e6-4f22-9f07-8986023b9fde","toUserBankDetails":"12345","dollarAmount":5,"startedAt":1577402146951}},
     {"type":"StartedThirdPartyPayment","data":{"startedAt":1577402146952}},
     {"type":"FinishedThirdPartyPayment","data":{"finishedAt":1577402152015}},
-    {"type":"StartedThirdPartyEmailNotification","data":{"message":"successfully paid","startedAt":1577402152016}}]}
+    {"type":"StartedThirdPartyEmailNotification","data":{"message":"successfully paid","startedAt":1577402152016}}
+  ]
+}
 ```
 # Curl the app with bad data
 ## Missing field
