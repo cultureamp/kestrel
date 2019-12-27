@@ -144,7 +144,11 @@ class NameTaken(val taken: Boolean) : SurveyNamesCommandProjection(StubReadOnlyD
 }
 
 class StubReadOnlyDatabase : ReadOnlyDatabase {
-    override fun <T : Any> find(type: KClass<T>, aggregateId: UUID): T = throw RuntimeException("should not be called")
+
+    override fun <T : Any> find(type: KClass<T>, aggregateId: UUID): T? = throw RuntimeException("should not be called")
+
+    override fun <T : Any> findBy(type: KClass<T>, predicate: (T) -> Boolean): T? =
+        throw RuntimeException("should not be called")
 
     override fun <T : Any> exists(type: KClass<T>, predicate: (T) -> Boolean) =
         throw RuntimeException("should not be called")

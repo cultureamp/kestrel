@@ -12,7 +12,7 @@ interface EventStore {
 
 class InMemoryEventStore : EventStore {
     val eventStore: HashMap<UUID, List<Event>> = hashMapOf()
-    lateinit var listeners: List<EventListener<*>>
+    lateinit var listeners: List<EventListener>
 
     override fun sink(newEvents: List<Event>, aggregateId: UUID, aggregateType: String) {
         val oldEvents = eventStore[aggregateId] ?: emptyList()
@@ -36,7 +36,7 @@ class InMemoryEventStore : EventStore {
     @Suppress("UNCHECKED_CAST")
     private fun notifyListeners(newEvents: List<Event>, aggregateId: UUID) {
         newEvents.forEach { event ->
-            listeners.filter { it.eventType.isInstance(event) }.forEach { (it as EventListener<Event>).handle(event, aggregateId) }
+            listeners.flatMap {it.handlers.filterKeys { it.isInstance(event) }.values}.forEach { it(event, aggregateId) }
         }
     }
 }

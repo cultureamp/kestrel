@@ -45,12 +45,14 @@ fun main() {
     val paymentSagaReactor = PaymentSagaReactor(commandGateway, paymentService, emailService, readWriteDatabase)
     val surveySagaReactor = SurveySagaReactor(commandGateway)
     val surveyNamesProjector = SurveyNamesCommandProjector(readWriteDatabase)
+    val surveyCommandProjector = SurveyCommandProjector(readWriteDatabase)
 
     // TODO this should be done as separate threads/workers that poll the event-store
     eventStore.listeners = listOf(
         EventListener.from(paymentSagaReactor::react),
         EventListener.from(surveySagaReactor::react),
-        EventListener.from(surveyNamesProjector::project)
+        EventListener.from(surveyNamesProjector::project),
+        EventListener.from(surveyCommandProjector::first, surveyCommandProjector::second)
     )
 
     Ktor.startEmbeddedCommandServer(commandGateway, eventStore)

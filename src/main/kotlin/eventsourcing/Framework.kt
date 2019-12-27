@@ -6,29 +6,18 @@ import kotlin.reflect.KFunction2
 import kotlin.reflect.KFunction3
 import kotlin.reflect.KFunction4
 
-interface Projector<E : Event> {
-    fun project(event: E, aggregateId: UUID)
-}
-interface DoubleProjector<A : Event, B : Event> {
-    fun first(event: A, aggregateId: UUID)
-    fun second(event: B, aggregateId: UUID)
-}
 
 interface ReadOnlyDatabase {
-    fun <T : Any> find(type: KClass<T>, aggregateId: UUID): T
+    fun <T : Any> find(type: KClass<T>, aggregateId: UUID): T?
+    fun <T : Any> findBy(type: KClass<T>, predicate: (T) -> Boolean): T?
     fun <T : Any> exists(type: KClass<T>, predicate: (T) -> Boolean): Boolean
 }
 interface ReadWriteDatabase : ReadOnlyDatabase {
-    fun insert(id: UUID, item: Any)
     fun upsert(id: UUID, item: Any)
     fun delete(id: UUID)
 }
 class InMemoryReadWriteDatabase : ReadWriteDatabase {
     val items: HashMap<UUID, Any> = hashMapOf()
-
-    override fun insert(id: UUID, item: Any) {
-        items[id] = item // TODO fail if already exists
-    }
 
     override fun upsert(id: UUID, item: Any) {
         items[id] = item
@@ -38,8 +27,12 @@ class InMemoryReadWriteDatabase : ReadWriteDatabase {
         items.remove(id)
     }
 
-    override fun <T : Any> find(type: KClass<T>, aggregateId: UUID): T {
-        return items.filterKeys { it == aggregateId }.values.filterIsInstance(type.java).first()
+    override fun <T : Any> find(type: KClass<T>, aggregateId: UUID): T? {
+        return items.filterKeys { it == aggregateId }.values.filterIsInstance(type.java).firstOrNull()
+    }
+
+    override fun <T : Any> findBy(type: KClass<T>, predicate: (T) -> Boolean): T? {
+        return items.values.filterIsInstance(type.java).find(predicate)
     }
 
     override fun <T : Any> exists(type: KClass<T>, predicate: (T) -> Boolean): Boolean {
@@ -168,9 +161,19 @@ data class Configuration<CC : CreationCommand, CE : CreationEvent, Err : Command
         updateEvents.fold(initial) { aggregate, updateEvent -> updated(aggregate, updateEvent) }
 }
 
-data class EventListener<E : Event>(val eventType: KClass<E>, val handle: (E, UUID) -> Any?) {
+data class EventListener(val handlers: Map<KClass<Event>, (Event, UUID) -> Any?>) {
+    @Suppress("UNCHECKED_CAST")
     companion object {
-        inline fun <reified E : Event> from(noinline handle: (E, UUID) -> Any?) = EventListener(E::class, handle)
+        inline fun <reified E : Event> from(noinline handle: (E, UUID) -> Any?): EventListener {
+            val handler = (E::class to handle) as Pair<KClass<Event>, (Event, UUID) -> Any?>
+            return EventListener(mapOf(handler))
+        }
+
+        inline fun <reified A : Event, reified B : Event> from(noinline a: (A, UUID) -> Any?, noinline b: (B, UUID) -> Any?): EventListener {
+            val first = (A::class to a) as Pair<KClass<Event>, (Event, UUID) -> Any?>
+            val second = (B::class to b) as Pair<KClass<Event>, (Event, UUID) -> Any?>
+            return EventListener(mapOf(first, second))
+        }
     }
 }
 

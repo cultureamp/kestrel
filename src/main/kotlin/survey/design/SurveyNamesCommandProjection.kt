@@ -1,17 +1,16 @@
 package survey.design
 
-import eventsourcing.Projector
 import eventsourcing.ReadOnlyDatabase
 import eventsourcing.ReadWriteDatabase
 import java.util.UUID
 
-class SurveyNamesCommandProjector(val database: ReadWriteDatabase) : Projector<SurveyEvent> {
-    override fun project(event: SurveyEvent, aggregateId: UUID) = when (event) {
+class SurveyNamesCommandProjector(val database: ReadWriteDatabase) {
+    fun project(event: SurveyEvent, aggregateId: UUID) = when (event) {
         is Created -> event.name.forEach { locale, name ->
-            database.upsert(aggregateId, SurveyRow(event.accountId, locale, name))
+            database.upsert(aggregateId, SurveyNameRow(event.accountId, locale, name))
         }
         is Renamed -> {
-            val surveyRow = database.find(SurveyRow::class, aggregateId)
+            val surveyRow = database.find(SurveyNameRow::class, aggregateId)!!
             database.upsert(aggregateId, surveyRow.copy(locale = event.locale, name = event.name))
         }
         is Deleted -> {
@@ -21,10 +20,10 @@ class SurveyNamesCommandProjector(val database: ReadWriteDatabase) : Projector<S
     }
 }
 
-data class SurveyRow(val accountId: UUID, val locale: Locale, val name: String)
+data class SurveyNameRow(val accountId: UUID, val locale: Locale, val name: String)
 
 open class SurveyNamesCommandProjection(val readOnlyDatabase: ReadOnlyDatabase) {
     open fun nameExistsFor(accountId: UUID, name: String, locale: Locale): Boolean {
-        return readOnlyDatabase.exists(SurveyRow::class, { it.locale == locale && it.name == name })
+        return readOnlyDatabase.exists(SurveyNameRow::class, { it.locale == locale && it.name == name })
     }
 }
