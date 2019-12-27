@@ -112,7 +112,7 @@ data class Configuration<CC : CreationCommand, CE : CreationEvent, Err : Command
             noinline create: (CC) -> Either<Err, CE>,
             noinline update: A.(UC) -> Either<Err, List<UE>>,
             noinline created: (CE) -> A,
-            noinline updated: A.(UE) -> A = {_ -> this },
+            noinline updated: A.(UE) -> A = { _ -> this },
             noinline aggregateType: A.() -> String = { this::class.simpleName!! }
         ): Configuration<CC, CE, Err, UC, UE, A> {
             return Configuration(CC::class, UC::class, create, update, created, updated, aggregateType)
@@ -124,10 +124,10 @@ data class Configuration<CC : CreationCommand, CE : CreationEvent, Err : Command
             instance: A,
             noinline aggregateType: A.() -> String = { this::class.simpleName!! }
         ): Configuration<CC, CE, Err, UC, UE, A> {
-            return from(create, {update(it)}, {instance}, {instance}, aggregateType)
+            return from(create, { update(it) }, { instance }, { instance }, aggregateType)
         }
 
-        inline fun <reified CC : CreationCommand, CE : CreationEvent, Err: CommandError, reified UC : UpdateCommand, UE : UpdateEvent, reified Self: Aggregate2<UC, UE, Err, Self>> from(
+        inline fun <reified CC : CreationCommand, CE : CreationEvent, Err : CommandError, reified UC : UpdateCommand, UE : UpdateEvent, reified Self : Aggregate2<UC, UE, Err, Self>> from(
             aggregateConstructor: AggregateConstructor<CC, CE, Err, UC, UE, Self>
         ): Configuration<CC, CE, Err, UC, UE, Self> {
             val created = aggregateConstructor::created
@@ -138,7 +138,7 @@ data class Configuration<CC : CreationCommand, CE : CreationEvent, Err : Command
             return from(create, update, created, updated, aggregateType)
         }
 
-        inline fun <reified CC : CreationCommand, CE : CreationEvent, Err: CommandError, reified UC : UpdateCommand, UE : UpdateEvent, P, Self: AggregateWithProjection<UC, UE, Err, P, Self>> from(
+        inline fun <reified CC : CreationCommand, CE : CreationEvent, Err : CommandError, reified UC : UpdateCommand, UE : UpdateEvent, P, Self : AggregateWithProjection<UC, UE, Err, P, Self>> from(
             aggregateConstructor: AggregateConstructorWithProjection<CC, CE, Err, UC, UE, P, Self>,
             projection: P
         ): Configuration<CC, CE, Err, UC, UE, Aggregate2<UC, UE, Err, *>> {
@@ -164,7 +164,8 @@ data class Configuration<CC : CreationCommand, CE : CreationEvent, Err : Command
 
     private fun rehydrated(creationEvent: CE, updateEvents: List<UE>): A = updated(created(creationEvent), updateEvents)
 
-    private fun updated(initial: A, updateEvents: List<UE>): A = updateEvents.fold(initial) { aggregate, updateEvent -> updated(aggregate, updateEvent) }
+    private fun updated(initial: A, updateEvents: List<UE>): A =
+        updateEvents.fold(initial) { aggregate, updateEvent -> updated(aggregate, updateEvent) }
 }
 
 data class EventListener<E : Event>(val eventType: KClass<E>, val handle: (E, UUID) -> Any?) {
