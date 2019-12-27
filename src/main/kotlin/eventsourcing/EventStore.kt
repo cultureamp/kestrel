@@ -33,7 +33,6 @@ class InMemoryEventStore : EventStore {
     }
 
     // TODO this should be removed and implemented as separate threads/workers that poll the event-store
-    @Suppress("UNCHECKED_CAST")
     private fun notifyListeners(newEvents: List<Event>, aggregateId: UUID) {
         newEvents.forEach { event ->
             listeners.flatMap {it.handlers.filterKeys { it.isInstance(event) }.values}.forEach { it(event, aggregateId) }
