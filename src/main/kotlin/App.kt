@@ -36,7 +36,9 @@ fun main() {
         ),
         Configuration.from(ThingAggregate, thingCommandProjection)
     )
-    val eventStore = InMemoryEventStore()
+    val dbConfig = DatabaseConfig.fromEnvironment("EVENT_STORE")
+    val eventStoreDataSource = dbConfig.toDataSource("event_store")
+    val eventStore = createEventStore(eventStoreDataSource)
     val commandGateway = CommandGateway(eventStore, registry)
 
     // downstream from events
