@@ -1,14 +1,11 @@
 package survey.design
 
 import eventsourcing.Left
-import eventsourcing.ReadOnlyDatabase
 import eventsourcing.Right
 import io.kotlintest.shouldBe
 import io.kotlintest.specs.ShouldSpec
-import java.lang.IllegalStateException
-import java.lang.RuntimeException
+import org.jetbrains.exposed.sql.Database
 import java.util.*
-import kotlin.reflect.KClass
 
 class SurveyAggregateSpec : ShouldSpec({
     val namedAt = Date()
@@ -133,23 +130,14 @@ class SurveyAggregateSpec : ShouldSpec({
     }
 })
 
-class Stub : SurveyNamesCommandProjection(StubReadOnlyDatabase()) {
+class Stub : SurveyNamesCommandQuery(inMemoryDatabase) {
     override fun nameExistsFor(accountId: UUID, name: String, locale: Locale): Boolean {
         throw IllegalStateException("Should not have been called")
     }
 }
 
-class NameTaken(val taken: Boolean) : SurveyNamesCommandProjection(StubReadOnlyDatabase()) {
+class NameTaken(val taken: Boolean) : SurveyNamesCommandQuery(inMemoryDatabase) {
     override fun nameExistsFor(accountId: UUID, name: String, locale: Locale) = taken
 }
 
-class StubReadOnlyDatabase : ReadOnlyDatabase {
-
-    override fun <T : Any> find(type: KClass<T>, aggregateId: UUID): T? = throw RuntimeException("should not be called")
-
-    override fun <T : Any> findBy(type: KClass<T>, predicate: (T) -> Boolean): T? =
-        throw RuntimeException("should not be called")
-
-    override fun <T : Any> exists(type: KClass<T>, predicate: (T) -> Boolean) =
-        throw RuntimeException("should not be called")
-}
+val inMemoryDatabase = Database.connect("jdbc:h2:mem:test", driver = "org.h2.Driver")
