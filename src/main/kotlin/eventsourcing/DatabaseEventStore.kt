@@ -3,22 +3,24 @@ package eventsourcing
 import com.fasterxml.jackson.databind.ObjectMapper
 import com.fasterxml.jackson.module.kotlin.registerKotlinModule
 import org.jetbrains.exposed.dao.IntIdTable
-import org.jetbrains.exposed.sql.*
+import org.jetbrains.exposed.sql.Database
+import org.jetbrains.exposed.sql.SchemaUtils
+import org.jetbrains.exposed.sql.insert
+import org.jetbrains.exposed.sql.select
 import org.jetbrains.exposed.sql.transactions.transaction
 import org.joda.time.DateTime
 import java.util.*
-import javax.sql.DataSource
 
-fun createEventStore(dataSource: DataSource): EventStore {
-    val db = Database.connect(dataSource)
-    transaction(db) {
-        addLogger(StdOutSqlLogger)
-        SchemaUtils.create(Events)
+class DatabaseEventStore private constructor(private val db: Database) : EventStore {
+    companion object {
+        fun create(db: Database): DatabaseEventStore {
+            transaction(db) {
+                SchemaUtils.create(Events)
+            }
+            return DatabaseEventStore(db)
+        }
     }
-    return DatabaseEventStore(db)
-}
 
-private class DatabaseEventStore(private val db: Database) : EventStore {
     override lateinit var listeners: List<EventListener>
 
     override fun sink(newEvents: List<Event>, aggregateId: UUID, aggregateType: String) {

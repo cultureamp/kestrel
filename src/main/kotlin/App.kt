@@ -1,4 +1,8 @@
 import eventsourcing.*
+import org.jetbrains.exposed.sql.Database
+import org.jetbrains.exposed.sql.StdOutSqlLogger
+import org.jetbrains.exposed.sql.addLogger
+import org.jetbrains.exposed.sql.transactions.transaction
 import survey.demo.*
 import survey.design.*
 import survey.thing.AlwaysBoppable
@@ -6,9 +10,14 @@ import survey.thing.ThingAggregate
 
 fun main() {
     val readWriteDatabase: ReadWriteDatabase = InMemoryReadWriteDatabase()
-    val readOnlyDatabase: ReadOnlyDatabase = readWriteDatabase
 
-    val surveyNamesCommandProjection = SurveyNamesCommandProjection(readOnlyDatabase)
+    val projectionDatabase = Database.connect(DatabaseConfig.fromEnvironment("PROJECTIONS").toDataSource("projections"))
+    transaction(projectionDatabase) {
+        addLogger(StdOutSqlLogger)
+    }
+
+    val (surveyNamesCommandQuery, surveyNamesCommandProjector) = SurveyNamesCommandProjection.create(projectionDatabase)
+
     val thingCommandProjection = AlwaysBoppable
 
     val registry = listOf(
@@ -19,8 +28,8 @@ fun main() {
             SurveyCaptureLayoutAggregate::updated
         ),
         Configuration.from(
-            SurveyAggregate.Companion::create.partial(surveyNamesCommandProjection),
-            SurveyAggregate::update.partial2(surveyNamesCommandProjection),
+            SurveyAggregate.Companion::create.partial(surveyNamesCommandQuery),
+            SurveyAggregate::update.partial2(surveyNamesCommandQuery),
             ::SurveyAggregate,
             SurveyAggregate::updated
         ),
@@ -36,24 +45,23 @@ fun main() {
         ),
         Configuration.from(ThingAggregate, thingCommandProjection)
     )
-    val dbConfig = DatabaseConfig.fromEnvironment("EVENT_STORE")
-    val eventStoreDataSource = dbConfig.toDataSource("event_store")
-    val eventStore = createEventStore(eventStoreDataSource)
+    val eventStoreDatabase = Database.connect(DatabaseConfig.fromEnvironment("EVENT_STORE").toDataSource("event_store"))
+    transaction(eventStoreDatabase) {
+        addLogger(StdOutSqlLogger)
+    }
+    val eventStore = DatabaseEventStore.create(eventStoreDatabase)
     val commandGateway = CommandGateway(eventStore, registry)
-
-    // downstream from events
     val paymentService = PaymentService()
     val emailService = EmailService()
     val paymentSagaReactor = PaymentSagaReactor(commandGateway, paymentService, emailService, readWriteDatabase)
     val surveySagaReactor = SurveySagaReactor(commandGateway)
-    val surveyNamesProjector = SurveyNamesCommandProjector(readWriteDatabase)
     val surveyCommandProjector = SurveyCommandProjector(readWriteDatabase)
 
     // TODO this should be done as separate threads/workers that poll the event-store
     eventStore.listeners = listOf(
         EventListener.from(paymentSagaReactor::react),
         EventListener.from(surveySagaReactor::react),
-        EventListener.from(surveyNamesProjector::project),
+        EventListener.from(surveyNamesCommandProjector::project),
         EventListener.from(surveyCommandProjector::first, surveyCommandProjector::second)
     )
 

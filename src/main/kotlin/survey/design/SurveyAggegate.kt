@@ -7,10 +7,12 @@ data class SurveyAggregate(val name: Map<Locale, String>, val accountId: UUID, v
     constructor(event: Created): this(event.name, event.accountId)
 
     companion object {
-        fun create(projection: SurveyNamesCommandProjection, command: SurveyCreationCommand): Either<SurveyError, Created> = when (command) {
-            is CreateSurvey -> when {
-                command.name.any { (locale, name) -> projection.nameExistsFor(command.accountId, name, locale)} -> Left(SurveyNameNotUnique)
-                else -> Right(Created(command.name, command.accountId, command.createdAt))
+        fun create(query: SurveyNamesCommandQuery, command: SurveyCreationCommand): Either<SurveyError, Created> {
+            return when (command) {
+                is CreateSurvey -> when {
+                    command.name.any { (locale, name) -> query.nameExistsFor(command.accountId, name, locale)} -> Left(SurveyNameNotUnique)
+                    else -> Right(Created(command.name, command.accountId, command.createdAt))
+                }
             }
         }
     }
@@ -21,10 +23,10 @@ data class SurveyAggregate(val name: Map<Locale, String>, val accountId: UUID, v
         is Restored -> this.copy(deleted = false)
     }
 
-    fun update(projection: SurveyNamesCommandProjection, command: SurveyUpdateCommand): Either<SurveyError, List<SurveyUpdateEvent>> = when (command) {
+    fun update(query: SurveyNamesCommandQuery, command: SurveyUpdateCommand): Either<SurveyError, List<SurveyUpdateEvent>> = when (command) {
         is Rename -> when {
             name.get(command.locale) == command.newName -> Left(AlreadyRenamed)
-            projection.nameExistsFor(accountId, command.newName, command.locale) -> Left(SurveyNameNotUnique)
+            query.nameExistsFor(accountId, command.newName, command.locale) -> Left(SurveyNameNotUnique)
             else -> Right.list(Renamed(command.newName, command.locale, command.renamedAt))
         }
         is Delete -> when (deleted) {

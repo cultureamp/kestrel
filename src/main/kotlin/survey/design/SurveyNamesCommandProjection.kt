@@ -1,29 +1,50 @@
 package survey.design
 
-import eventsourcing.ReadOnlyDatabase
-import eventsourcing.ReadWriteDatabase
-import java.util.UUID
+import org.jetbrains.exposed.sql.*
+import org.jetbrains.exposed.sql.transactions.transaction
+import java.util.*
 
-class SurveyNamesCommandProjector(val database: ReadWriteDatabase) {
-    fun project(event: SurveyEvent, aggregateId: UUID) = when (event) {
-        is Created -> event.name.forEach { locale, name ->
-            database.upsert(aggregateId, SurveyNameRow(event.accountId, locale, name))
+class SurveyNamesCommandProjector internal constructor(private val database: Database) {
+    fun project(event: SurveyEvent, aggregateId: UUID): Any = transaction(database) {
+         when (event) {
+            is Created -> event.name.forEach { locale, name ->
+                SurveyNames.insert { // use insertIgnore
+                    it[SurveyNames.surveyId] = aggregateId
+                    it[SurveyNames.accountId] = event.accountId
+                    it[SurveyNames.locale] = locale.name
+                    it[SurveyNames.name] = name
+                }
+            }
+            is Renamed ->
+                SurveyNames.update({ SurveyNames.surveyId eq aggregateId }) {
+                    it[SurveyNames.locale] = event.locale.name
+                    it[SurveyNames.name] = event.name
+                }
+            is Deleted ->
+                SurveyNames.deleteWhere { SurveyNames.surveyId eq aggregateId }
+            is Restored -> Unit // chase up how this was resolved, especially since the old name might now be taken
         }
-        is Renamed -> {
-            val surveyRow = database.find(SurveyNameRow::class, aggregateId)!!
-            database.upsert(aggregateId, surveyRow.copy(locale = event.locale, name = event.name))
-        }
-        is Deleted -> {
-            database.delete(aggregateId)
-        }
-        is Restored -> Unit // chase up how this was resolved, especially since the old name might now be taken
     }
 }
 
-data class SurveyNameRow(val accountId: UUID, val locale: Locale, val name: String)
-
-open class SurveyNamesCommandProjection(val readOnlyDatabase: ReadOnlyDatabase) {
-    open fun nameExistsFor(accountId: UUID, name: String, locale: Locale): Boolean {
-        return readOnlyDatabase.exists(SurveyNameRow::class, { it.locale == locale && it.name == name })
+open class SurveyNamesCommandQuery internal constructor(private val database: Database) {
+    open fun nameExistsFor(accountId: UUID, name: String, locale: Locale) = transaction(database) {
+        SurveyNames.select { (SurveyNames.name eq name) and (SurveyNames.locale eq locale.name) }.any()
     }
+}
+
+object SurveyNamesCommandProjection {
+    fun create(database: Database): Pair<SurveyNamesCommandQuery, SurveyNamesCommandProjector> {
+        transaction(database) {
+            SchemaUtils.create(SurveyNames)
+        }
+        return Pair(SurveyNamesCommandQuery(database), SurveyNamesCommandProjector(database))
+    }
+}
+
+object SurveyNames : Table() {
+    val surveyId = SurveyNames.uuid("survey_id")
+    val accountId = SurveyNames.uuid("account_id")
+    val locale = SurveyNames.text("locale")
+    val name = SurveyNames.text("name").index()
 }
