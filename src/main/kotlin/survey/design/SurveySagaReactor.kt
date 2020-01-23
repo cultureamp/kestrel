@@ -10,7 +10,7 @@ class SurveySagaReactor(private val commandGateway: CommandGateway) {
             val result = commandGateway.dispatch(command)
             when (result) {
                 is Right -> commandGateway.dispatch(FinishCreatingSurvey(aggregateId, Date()))
-                is Left -> commandGateway.dispatch(FailCreatingSurvey(aggregateId, result.error, Date()))
+                is Left -> commandGateway.dispatch(FailCreatingSurvey(aggregateId, result.error::class.simpleName!!, Date()))
             }
         }
         is FinishedCreatingSurvey -> commandGateway.dispatch(StartCreatingSurveyCaptureLayoutAggregate(aggregateId, Date()))
@@ -18,7 +18,7 @@ class SurveySagaReactor(private val commandGateway: CommandGateway) {
             val result = commandGateway.dispatch(command)
             when (result) {
                 is Right -> commandGateway.dispatch(FinishCreatingSurveyCaptureLayoutAggregate(aggregateId, Date()))
-                is Left -> commandGateway.dispatch(FailCreatingSurveyCaptureLayoutAggregate(aggregateId, result.error, Date()))
+                is Left -> commandGateway.dispatch(FailCreatingSurveyCaptureLayoutAggregate(aggregateId, result.error::class.simpleName!!, Date()))
             }
         }
         is FinishedCreatingSurveyCaptureLayoutAggregate -> commandGateway.dispatch(FinishSurveySagaSuccessfully(aggregateId, Date()))
@@ -28,7 +28,7 @@ class SurveySagaReactor(private val commandGateway: CommandGateway) {
             val result = commandGateway.dispatch(command)
             when (result) {
                 is Right -> commandGateway.dispatch(FinishRollbackCreatingSurvey(aggregateId, Date()))
-                is Left -> commandGateway.dispatch(FailRollbackCreatingSurvey(aggregateId, result.error, Date()))
+                is Left -> commandGateway.dispatch(FailRollbackCreatingSurvey(aggregateId, result.error::class.simpleName!!, Date()))
             }
         }
         is FinishedRollbackCreatingSurvey -> commandGateway.dispatch(FinishSurveySagaUnsuccessfully(aggregateId, Date()))

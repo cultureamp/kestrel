@@ -44,13 +44,13 @@ data class SurveySagaAggregate(val surveyAggregateId: UUID,
                 ), command.startedAt
             )
             is FinishCreatingSurvey -> FinishedCreatingSurvey(command.finishedAt)
-            is FailCreatingSurvey -> FailedCreatingSurvey(command.error, command.failedAt)
+            is FailCreatingSurvey -> FailedCreatingSurvey(command.errorType, command.failedAt)
             is StartRollbackCreatingSurvey -> StartedRollbackCreatingSurvey(Delete(surveyAggregateId, command.startedAt), command.startedAt)
             is FinishRollbackCreatingSurvey -> FinishedRollbackCreatingSurvey(command.finishedAt)
-            is FailRollbackCreatingSurvey -> FailedRollbackCreatingSurvey(command.error, command.rollbackFailedAt)
+            is FailRollbackCreatingSurvey -> FailedRollbackCreatingSurvey(command.errorType, command.rollbackFailedAt)
             is StartCreatingSurveyCaptureLayoutAggregate -> StartedCreatingSurveyCaptureLayoutAggregate(Generate(surveyCaptureLayoutAggregateId, surveyAggregateId, Date()), command.startedAt)
             is FinishCreatingSurveyCaptureLayoutAggregate -> FinishedCreatingSurveyCaptureLayoutAggregate(command.finishedAt)
-            is FailCreatingSurveyCaptureLayoutAggregate -> FailedCreatingSurveyCaptureLayoutAggregate(command.error, command.failedAt)
+            is FailCreatingSurveyCaptureLayoutAggregate -> FailedCreatingSurveyCaptureLayoutAggregate(command.errorType, command.failedAt)
             is FinishSurveySagaSuccessfully -> SurveySagaFinishedSuccessfully(command.finishedAt)
             is FinishSurveySagaUnsuccessfully -> SurveySagaFinishedUnsuccessfully(command.finishedAt)
         }
@@ -71,15 +71,15 @@ data class Create(
 sealed class SurveySagaUpdateCommand : SurveySagaCommand(), UpdateCommand
 data class StartCreatingSurvey(override val aggregateId: UUID, val startedAt: Date) : SurveySagaUpdateCommand()
 data class FinishCreatingSurvey(override val aggregateId: UUID, val finishedAt: Date) : SurveySagaUpdateCommand()
-data class FailCreatingSurvey(override val aggregateId: UUID, val error: CommandError, val failedAt: Date) : SurveySagaUpdateCommand()
+data class FailCreatingSurvey(override val aggregateId: UUID, val errorType: String, val failedAt: Date) : SurveySagaUpdateCommand()
 
 data class StartRollbackCreatingSurvey(override val aggregateId: UUID, val startedAt: Date) : SurveySagaUpdateCommand()
 data class FinishRollbackCreatingSurvey(override val aggregateId: UUID, val finishedAt: Date) : SurveySagaUpdateCommand()
-data class FailRollbackCreatingSurvey(override val aggregateId: UUID, val error: CommandError, val rollbackFailedAt: Date) : SurveySagaUpdateCommand()
+data class FailRollbackCreatingSurvey(override val aggregateId: UUID, val errorType: String, val rollbackFailedAt: Date) : SurveySagaUpdateCommand()
 
 data class StartCreatingSurveyCaptureLayoutAggregate(override val aggregateId: UUID, val startedAt: Date) : SurveySagaUpdateCommand()
 data class FinishCreatingSurveyCaptureLayoutAggregate(override val aggregateId: UUID, val finishedAt: Date) : SurveySagaUpdateCommand()
-data class FailCreatingSurveyCaptureLayoutAggregate(override val aggregateId: UUID, val error: CommandError, val failedAt: Date) : SurveySagaUpdateCommand()
+data class FailCreatingSurveyCaptureLayoutAggregate(override val aggregateId: UUID, val errorType: String, val failedAt: Date) : SurveySagaUpdateCommand()
 
 data class FinishSurveySagaSuccessfully(override val aggregateId: UUID, val finishedAt: Date) : SurveySagaUpdateCommand()
 data class FinishSurveySagaUnsuccessfully(override val aggregateId: UUID, val finishedAt: Date) : SurveySagaUpdateCommand()
@@ -99,15 +99,15 @@ sealed class SurveySagaUpdateEvent : SurveySagaEvent(), UpdateEvent
 
 data class StartedCreatingSurvey(val command: CreateSurvey, val startedAt: Date) : SurveySagaUpdateEvent()
 data class FinishedCreatingSurvey(val finishedAt: Date) : SurveySagaUpdateEvent()
-data class FailedCreatingSurvey(val error: CommandError, val failedAt: Date) : SurveySagaUpdateEvent()
+data class FailedCreatingSurvey(val errorType: String, val failedAt: Date) : SurveySagaUpdateEvent() // this can't be rehydrated
 
 data class StartedRollbackCreatingSurvey(val command: Delete, val startedAt: Date) : SurveySagaUpdateEvent()
 data class FinishedRollbackCreatingSurvey(val finishedAt: Date) : SurveySagaUpdateEvent()
-data class FailedRollbackCreatingSurvey(val error: CommandError, val rollbackFailedAt: Date) : SurveySagaUpdateEvent()
+data class FailedRollbackCreatingSurvey(val errorType: String, val rollbackFailedAt: Date) : SurveySagaUpdateEvent()
 
 data class StartedCreatingSurveyCaptureLayoutAggregate(val command: Generate, val startedAt: Date) : SurveySagaUpdateEvent()
 data class FinishedCreatingSurveyCaptureLayoutAggregate(val finishedAt: Date) : SurveySagaUpdateEvent()
-data class FailedCreatingSurveyCaptureLayoutAggregate(val error: CommandError, val failedAt: Date) : SurveySagaUpdateEvent()
+data class FailedCreatingSurveyCaptureLayoutAggregate(val errorType: String, val failedAt: Date) : SurveySagaUpdateEvent()
 
 data class SurveySagaFinishedSuccessfully(val finishedAt: Date) : SurveySagaUpdateEvent()
 data class SurveySagaFinishedUnsuccessfully(val finishedAt: Date) : SurveySagaUpdateEvent()
