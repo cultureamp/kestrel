@@ -7,7 +7,7 @@ data class SurveyAggregate(val name: Map<Locale, String>, val accountId: UUID, v
     constructor(event: Created): this(event.name, event.accountId)
 
     companion object {
-        fun create(query: SurveyNamesCommandQuery, command: SurveyCreationCommand): Either<SurveyError, Created> {
+        fun create(query: SurveyNamesQuery, command: SurveyCreationCommand): Either<SurveyError, Created> {
             return when (command) {
                 is CreateSurvey -> when {
                     command.name.any { (locale, name) -> query.nameExistsFor(command.accountId, name, locale)} -> Left(SurveyNameNotUnique)
@@ -23,7 +23,7 @@ data class SurveyAggregate(val name: Map<Locale, String>, val accountId: UUID, v
         is Restored -> this.copy(deleted = false)
     }
 
-    fun update(query: SurveyNamesCommandQuery, command: SurveyUpdateCommand): Either<SurveyError, List<SurveyUpdateEvent>> = when (command) {
+    fun update(query: SurveyNamesQuery, command: SurveyUpdateCommand): Either<SurveyError, List<SurveyUpdateEvent>> = when (command) {
         is Rename -> when {
             name.get(command.locale) == command.newName -> Left(AlreadyRenamed)
             query.nameExistsFor(accountId, command.newName, command.locale) -> Left(SurveyNameNotUnique)

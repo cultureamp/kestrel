@@ -22,7 +22,7 @@ class SurveyAggregateSpec : ShouldSpec() {
     }
 
     init {
-        val surveyNamesCommandQuery = SurveyNamesCommandQuery(projectionDatabase)
+        val surveyNamesQuery = SurveyNamesQuery(projectionDatabase)
         val surveyNamesCommandProjector = SurveyNamesCommandProjector(projectionDatabase)
 
         val namedAt = Date()
@@ -70,7 +70,7 @@ class SurveyAggregateSpec : ShouldSpec() {
             should("return Created event") {
                 SurveyAggregate
                     .create(
-                        surveyNamesCommandQuery,
+                        surveyNamesQuery,
                         CreateSurvey(aggregateId, surveyCaptureLayoutAggregateId, name, accountId, createdAt)
                     )
                     .shouldBe(Right(Created(name, accountId, createdAt)))
@@ -81,7 +81,7 @@ class SurveyAggregateSpec : ShouldSpec() {
                     surveyNamesCommandProjector.project(Created(name, UUID.randomUUID(), Date()), UUID.randomUUID())
                     SurveyAggregate
                         .create(
-                            surveyNamesCommandQuery,
+                            surveyNamesQuery,
                             CreateSurvey(aggregateId, surveyCaptureLayoutAggregateId, name, accountId, createdAt)
                         )
                         .shouldBe(Left(SurveyNameNotUnique))
@@ -92,14 +92,14 @@ class SurveyAggregateSpec : ShouldSpec() {
         "Rename" {
             should("return Renamed event") {
                 SurveyAggregate(Created(name, accountId, createdAt))
-                    .update(surveyNamesCommandQuery, Rename(aggregateId, "rename", Locale.en, namedAt))
+                    .update(surveyNamesQuery, Rename(aggregateId, "rename", Locale.en, namedAt))
                     .shouldBe(Right.list(Renamed("rename", Locale.en, namedAt)))
             }
 
             "when the name is the same as the existing name" {
                 should("fail with AlreadyRenamed") {
                     SurveyAggregate(Created(name, accountId, createdAt))
-                        .update(surveyNamesCommandQuery, Rename(aggregateId, name.getValue(Locale.en), Locale.en, namedAt))
+                        .update(surveyNamesQuery, Rename(aggregateId, name.getValue(Locale.en), Locale.en, namedAt))
                         .shouldBe(Left(AlreadyRenamed))
                 }
             }
@@ -108,7 +108,7 @@ class SurveyAggregateSpec : ShouldSpec() {
                 should("fail with SurveyNameNotUnique") {
                     surveyNamesCommandProjector.project(Created(mapOf(Locale.en to "rename"), UUID.randomUUID(), Date()), UUID.randomUUID())
                     SurveyAggregate(Created(name, accountId, createdAt))
-                        .update(surveyNamesCommandQuery, Rename(aggregateId, "rename", Locale.en, namedAt))
+                        .update(surveyNamesQuery, Rename(aggregateId, "rename", Locale.en, namedAt))
                         .shouldBe(Left(SurveyNameNotUnique))
                 }
             }
@@ -120,7 +120,7 @@ class SurveyAggregateSpec : ShouldSpec() {
                     surveyNamesCommandProjector.project(Created(name, UUID.randomUUID(), Date()), UUID.randomUUID())
                     SurveyAggregate(Created(name, accountId, createdAt))
                         .update(
-                            surveyNamesCommandQuery,
+                            surveyNamesQuery,
                             Rename(aggregateId, name.getValue(Locale.en), Locale.de, namedAt)
                         )
                         .shouldBe(Right.list(Renamed(name.getValue(Locale.en), Locale.de, namedAt)))
@@ -131,7 +131,7 @@ class SurveyAggregateSpec : ShouldSpec() {
         "Delete" {
             should("return Deleted event") {
                 SurveyAggregate(Created(name, accountId, createdAt))
-                    .update(surveyNamesCommandQuery, Delete(aggregateId, deletedAt))
+                    .update(surveyNamesQuery, Delete(aggregateId, deletedAt))
                     .shouldBe(Right.list(Deleted(deletedAt)))
             }
 
@@ -139,7 +139,7 @@ class SurveyAggregateSpec : ShouldSpec() {
                 should("fail with AlreadyDeleted") {
                     SurveyAggregate(Created(name, accountId, createdAt))
                         .updated(Deleted(deletedAt))
-                        .update(surveyNamesCommandQuery, Delete(aggregateId, deletedAt))
+                        .update(surveyNamesQuery, Delete(aggregateId, deletedAt))
                         .shouldBe(Left(AlreadyDeleted))
                 }
             }
@@ -148,7 +148,7 @@ class SurveyAggregateSpec : ShouldSpec() {
         "Restore" {
             should("fail with NotDeleted") {
                 SurveyAggregate(Created(name, accountId, createdAt))
-                    .update(surveyNamesCommandQuery, Restore(aggregateId, restoredAt))
+                    .update(surveyNamesQuery, Restore(aggregateId, restoredAt))
                     .shouldBe(Left(NotDeleted))
             }
 
@@ -156,7 +156,7 @@ class SurveyAggregateSpec : ShouldSpec() {
                 should("return Restored event") {
                     SurveyAggregate(Created(name, accountId, createdAt))
                         .updated(Deleted(deletedAt))
-                        .update(surveyNamesCommandQuery, Restore(aggregateId, restoredAt))
+                        .update(surveyNamesQuery, Restore(aggregateId, restoredAt))
                         .shouldBe(Right.list(Restored(restoredAt)))
                 }
             }

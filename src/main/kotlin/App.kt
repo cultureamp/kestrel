@@ -17,6 +17,7 @@ fun main() {
     }
 
     val (surveyNamesCommandQuery, surveyNamesCommandProjector) = SurveyNamesCommandProjection.create(projectionDatabase)
+    val (surveyQuery, surveyCommandProjector) = SurveyCommandProjection.create(projectionDatabase)
 
     val thingCommandProjection = AlwaysBoppable
 
@@ -55,7 +56,6 @@ fun main() {
     val emailService = EmailService()
     val paymentSagaReactor = PaymentSagaReactor(commandGateway, paymentService, emailService, readWriteDatabase)
     val surveySagaReactor = SurveySagaReactor(commandGateway)
-    val surveyCommandProjector = SurveyCommandProjector(readWriteDatabase)
 
     // TODO this should be done as separate threads/workers that poll the event-store
     eventStore.listeners = listOf(

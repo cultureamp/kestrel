@@ -8,7 +8,7 @@ class SurveyNamesCommandProjector internal constructor(private val database: Dat
     fun project(event: SurveyEvent, aggregateId: UUID): Any = transaction(database) {
          when (event) {
             is Created -> event.name.forEach { locale, name ->
-                SurveyNames.insert { // use insertIgnore
+                SurveyNames.insert { // use insertIgnore for idempotency
                     it[SurveyNames.surveyId] = aggregateId
                     it[SurveyNames.accountId] = event.accountId
                     it[SurveyNames.locale] = locale.name
@@ -27,18 +27,18 @@ class SurveyNamesCommandProjector internal constructor(private val database: Dat
     }
 }
 
-open class SurveyNamesCommandQuery internal constructor(private val database: Database) {
+open class SurveyNamesQuery internal constructor(private val database: Database) {
     open fun nameExistsFor(accountId: UUID, name: String, locale: Locale) = transaction(database) {
         SurveyNames.select { (SurveyNames.name eq name) and (SurveyNames.locale eq locale.name) }.any()
     }
 }
 
 object SurveyNamesCommandProjection {
-    fun create(database: Database): Pair<SurveyNamesCommandQuery, SurveyNamesCommandProjector> {
+    fun create(database: Database): Pair<SurveyNamesQuery, SurveyNamesCommandProjector> {
         transaction(database) {
             SchemaUtils.create(SurveyNames)
         }
-        return Pair(SurveyNamesCommandQuery(database), SurveyNamesCommandProjector(database))
+        return Pair(SurveyNamesQuery(database), SurveyNamesCommandProjector(database))
     }
 }
 
