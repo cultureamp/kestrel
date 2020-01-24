@@ -6,40 +6,6 @@ import kotlin.reflect.KFunction2
 import kotlin.reflect.KFunction3
 import kotlin.reflect.KFunction4
 
-
-interface ReadOnlyDatabase {
-    fun <T : Any> find(type: KClass<T>, aggregateId: UUID): T?
-    fun <T : Any> findBy(type: KClass<T>, predicate: (T) -> Boolean): T?
-    fun <T : Any> exists(type: KClass<T>, predicate: (T) -> Boolean): Boolean
-}
-interface ReadWriteDatabase : ReadOnlyDatabase {
-    fun upsert(id: UUID, item: Any)
-    fun delete(id: UUID)
-}
-class InMemoryReadWriteDatabase : ReadWriteDatabase {
-    val items: HashMap<UUID, Any> = hashMapOf()
-
-    override fun upsert(id: UUID, item: Any) {
-        items[id] = item
-    }
-
-    override fun delete(id: UUID) {
-        items.remove(id)
-    }
-
-    override fun <T : Any> find(type: KClass<T>, aggregateId: UUID): T? {
-        return items.filterKeys { it == aggregateId }.values.filterIsInstance(type.java).firstOrNull()
-    }
-
-    override fun <T : Any> findBy(type: KClass<T>, predicate: (T) -> Boolean): T? {
-        return items.values.filterIsInstance(type.java).find(predicate)
-    }
-
-    override fun <T : Any> exists(type: KClass<T>, predicate: (T) -> Boolean): Boolean {
-        return items.values.filterIsInstance(type.java).any(predicate)
-    }
-}
-
 interface Aggregate
 
 interface Aggregate2<UC: UpdateCommand, UE: UpdateEvent, Err: CommandError, out Self : Aggregate2<UC, UE, Err, Self>> : Aggregate {

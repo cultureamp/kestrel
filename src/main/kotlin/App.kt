@@ -9,8 +9,6 @@ import survey.thing.AlwaysBoppable
 import survey.thing.ThingAggregate
 
 fun main() {
-    val readWriteDatabase: ReadWriteDatabase = InMemoryReadWriteDatabase()
-
     val projectionDatabase = Database.connect(DatabaseConfig.fromEnvironment("PROJECTIONS").toDataSource("projections"))
     transaction(projectionDatabase) {
         addLogger(StdOutSqlLogger)
@@ -54,7 +52,7 @@ fun main() {
     val commandGateway = CommandGateway(eventStore, registry)
     val paymentService = PaymentService()
     val emailService = EmailService()
-    val paymentSagaReactor = PaymentSagaReactor(commandGateway, paymentService, emailService, readWriteDatabase)
+    val paymentSagaReactor = PaymentSagaReactor(commandGateway, paymentService, emailService, projectionDatabase)
     val surveySagaReactor = SurveySagaReactor(commandGateway)
 
     // TODO this should be done as separate threads/workers that poll the event-store

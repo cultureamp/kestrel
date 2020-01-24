@@ -28,7 +28,7 @@ class SurveyCommandProjector internal constructor(private val database: Database
 
 class SurveyQuery internal constructor(private val database: Database) {
     fun bySurvey(surveyId: UUID): Survey? = transaction(database) {
-        Surveys.select { Surveys.surveyId eq surveyId }.limit(1).toList().map { row ->
+        Surveys.select { Surveys.surveyId eq surveyId }.limit(1).map { row ->
             Survey(
                 accountId = row[Surveys.accountId],
                 surveyId = row[Surveys.surveyId],
