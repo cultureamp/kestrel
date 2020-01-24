@@ -9,16 +9,16 @@ class SurveyNamesCommandProjector internal constructor(private val database: Dat
          when (event) {
             is Created -> event.name.forEach { locale, name ->
                 SurveyNames.insert { // use insertIgnore for idempotency
-                    it[SurveyNames.surveyId] = aggregateId
-                    it[SurveyNames.accountId] = event.accountId
+                    it[surveyId] = aggregateId
+                    it[accountId] = event.accountId
                     it[SurveyNames.locale] = locale.name
                     it[SurveyNames.name] = name
                 }
             }
             is Renamed ->
                 SurveyNames.update({ SurveyNames.surveyId eq aggregateId }) {
-                    it[SurveyNames.locale] = event.locale.name
-                    it[SurveyNames.name] = event.name
+                    it[locale] = event.locale.name
+                    it[name] = event.name
                 }
             is Deleted ->
                 SurveyNames.deleteWhere { SurveyNames.surveyId eq aggregateId }
@@ -43,8 +43,8 @@ object SurveyNamesCommandProjection {
 }
 
 object SurveyNames : Table() {
-    val surveyId = SurveyNames.uuid("survey_id")
-    val accountId = SurveyNames.uuid("account_id")
-    val locale = SurveyNames.text("locale")
-    val name = SurveyNames.text("name").index()
+    val surveyId = uuid("survey_id")
+    val accountId = uuid("account_id")
+    val locale = text("locale")
+    val name = text("name").index()
 }

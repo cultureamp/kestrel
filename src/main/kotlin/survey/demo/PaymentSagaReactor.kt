@@ -18,10 +18,10 @@ class PaymentSagaReactor(
         is PaymentSagaStarted -> with(event) {
             transaction(database) {
                 Payments.insert {
-                    it[Payments.sagaId] = aggregateId
-                    it[Payments.fromUserId] = event.fromUserId
-                    it[Payments.toUserBankDetails] = event.toUserBankDetails
-                    it[Payments.dollarAmount] = event.dollarAmount
+                    it[sagaId] = aggregateId
+                    it[fromUserId] = event.fromUserId
+                    it[toUserBankDetails] = event.toUserBankDetails
+                    it[dollarAmount] = event.dollarAmount
                 }
             }
             paymentService.pay(fromUserId, toUserBankDetails, dollarAmount)
@@ -31,7 +31,7 @@ class PaymentSagaReactor(
         is FinishedThirdPartyPayment -> {
             val fromUserId = transaction(database) {
                 Payments.update({ Payments.sagaId eq aggregateId }) {
-                    it[Payments.succeeded] = true
+                    it[succeeded] = true
                 }
                 Payments
                     .slice(Payments.fromUserId)
@@ -48,7 +48,7 @@ class PaymentSagaReactor(
         is FailedThirdPartyPayment -> {
             val fromUserId = transaction(database) {
                 Payments.update({ Payments.sagaId eq aggregateId }) {
-                    it[Payments.succeeded] = false
+                    it[succeeded] = false
                 }
                 Payments
                     .slice(Payments.fromUserId)
@@ -68,11 +68,9 @@ class PaymentSagaReactor(
 }
 
 object Payments : Table() {
-    val sagaId = Payments.uuid("saga_id")
-    val fromUserId = Payments.uuid("from_user_id")
-    val toUserBankDetails = Payments.text("to_user_bank_details")
-    val dollarAmount = Payments.integer("dollar_amount")
-    val succeeded = Payments.bool("succeeded").nullable()
+    val sagaId = uuid("saga_id")
+    val fromUserId = uuid("from_user_id")
+    val toUserBankDetails = text("to_user_bank_details")
+    val dollarAmount = integer("dollar_amount")
+    val succeeded = bool("succeeded").nullable()
 }
-
-data class PaymentRow(val fromUserId: UUID)

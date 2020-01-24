@@ -15,7 +15,7 @@ fun main() {
     }
 
     val (surveyNamesCommandQuery, surveyNamesCommandProjector) = SurveyNamesCommandProjection.create(projectionDatabase)
-    val (surveyQuery, surveyCommandProjector) = SurveyCommandProjection.create(projectionDatabase)
+    val (_, surveyCommandProjector) = SurveyCommandProjection.create(projectionDatabase)
 
     val thingCommandProjection = AlwaysBoppable
 

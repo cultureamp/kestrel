@@ -9,14 +9,14 @@ class SurveyCommandProjector internal constructor(private val database: Database
     fun first(event: Created, aggregateId: UUID) = transaction(database) {
         // use insertIgnore for idempotency
         Surveys.insert {
-            it[Surveys.accountId] = event.accountId
-            it[Surveys.surveyId] = aggregateId
+            it[accountId] = event.accountId
+            it[surveyId] = aggregateId
         }
     }
 
     fun second(event: Generated, aggregateId: UUID) = transaction(database) {
         val rowsUpdated = Surveys.update({ Surveys.surveyId eq event.surveyId }) {
-            it[Surveys.surveyCaptureLayoutId] = aggregateId
+            it[surveyCaptureLayoutId] = aggregateId
         }
 
         // this is an anti-pattern, don't throw in projectors
@@ -50,7 +50,7 @@ object SurveyCommandProjection {
 }
 
 object Surveys : Table() {
-    val accountId = Surveys.uuid("account_id")
-    val surveyId = Surveys.uuid("survey_id")
-    val surveyCaptureLayoutId = Surveys.uuid("survey_capture_layout_id").nullable()
+    val accountId = uuid("account_id")
+    val surveyId = uuid("survey_id")
+    val surveyCaptureLayoutId = uuid("survey_capture_layout_id").nullable()
 }
