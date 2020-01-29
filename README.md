@@ -10,6 +10,12 @@
 ./gradlew run"
 ```
 
+# Run with Docker
+```
+docker build .
+docker run -p 8080:8080 <id from above>
+```
+
 # Curl the app
 ## Create a Thing, Bop it then Explode it
 ```shell
