@@ -34,12 +34,6 @@ class SurveyAggregateSpec : ShouldSpec() {
         val aggregateId = UUID.randomUUID()
         val surveyCaptureLayoutAggregateId = UUID.randomUUID()
 
-        "Always fails" {
-            should("always fail") {
-                1.shouldBe(2)
-            }
-        }
-
         "Created" {
             should("created a new Survey") {
                 SurveyAggregate(Created(name, accountId, createdAt))
