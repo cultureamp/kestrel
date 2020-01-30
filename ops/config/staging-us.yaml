@@ -1,0 +1,6 @@
+environment: 'staging-us'
+crsFarm: 'preprod'
+hasDBPrefix: false
+cpu: 2048
+memory: 16384
+desiredCount: 1
