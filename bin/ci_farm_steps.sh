@@ -1,7 +1,7 @@
 #!/bin/bash
 set -eu
 
-dev_farms=(aslan emu ibex lilbub panther playground dolly ragdoll)
+dev_farms=(ibex)
 
 steps=$(echo "steps:"
 
