@@ -1,0 +1,36 @@
+steps:
+
+  - name: ":docker: Build and push image"
+    command: "bin/ci_build_and_push.sh"
+    agents:
+      queue: ${BUILD_AGENT}
+    artifact_paths:
+      - '**/build/test-results/test/TEST-*.xml'
+    plugins:
+      cultureamp/aws-assume-role:
+        role: ${BUILD_ROLE}
+
+  - wait: ~
+    continue_on_failure: true
+
+  - name: ':junit: Gather test output'
+    agents:
+      queue: ${BUILD_AGENT}
+    plugins:
+      junit-annotate#v1.7.0:
+        artifacts: '**/build/test-results/test/TEST-*.xml'
+
+  - wait: for unit test results
+
+  - block: "Deploy to Development"
+    prompt: Select farms
+    fields:
+      - select: 'Ibex'
+        key: 'deploy-ibex'
+        options: ['deploy', 'skip']
+        default: 'skip'
+
+  - name: ":gear: Create CI farm steps"
+    command: "bin/ci_farm_steps.sh"
+    agents:
+      queue: build-unrestricted-small

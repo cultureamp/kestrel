@@ -1,0 +1,12 @@
+#!/bin/bash
+
+if [[ "${BUILDKITE_BRANCH}" != "master" ]]; then
+    build_role="arn:aws:iam::226140413739:role/build-role-development-kotlin-cqrs-eventsourcing"
+    build_agent="build-unrestricted-small"
+else
+    build_role="arn:aws:iam::226140413739:role/build-role-master-kotlin-cqrs-eventsourcing"
+    build_agent="build-restricted"
+fi
+
+export BUILD_AGENT=${build_agent}
+export BUILD_ROLE="${build_role}"
