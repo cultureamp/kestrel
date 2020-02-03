@@ -1,0 +1,22 @@
+<component name="ProjectRunConfigurationManager">
+  <configuration default="false" name="AppKt" type="JetRunConfigurationType" factoryName="Kotlin" nameIsGenerated="true">
+    <module name="kotlin-cqrs-eventsourcing.main" />
+    <option name="VM_PARAMETERS" value="" />
+    <option name="PROGRAM_PARAMETERS" value="" />
+    <option name="ALTERNATIVE_JRE_PATH_ENABLED" value="false" />
+    <option name="ALTERNATIVE_JRE_PATH" />
+    <option name="PASS_PARENT_ENVS" value="true" />
+    <option name="MAIN_CLASS_NAME" value="AppKt" />
+    <option name="WORKING_DIRECTORY" value="" />
+    <envs>
+      <env name="EVENT_STORE_DBNAME" value="kotlin_event_store" />
+      <env name="EVENT_STORE_HOST" value="localhost" />
+      <env name="EVENT_STORE_USERNAME" value="william.boxhall" />
+      <env name="EVENT_STORE_PORT" value="5432" />
+      <env name="EVENT_STORE_SSL" value="false" />
+    </envs>
+    <method v="2">
+      <option name="Make" enabled="true" />
+    </method>
+  </configuration>
+</component>
