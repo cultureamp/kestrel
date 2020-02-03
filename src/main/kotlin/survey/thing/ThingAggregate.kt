@@ -13,7 +13,7 @@ data class Tweak(override val aggregateId: UUID, val tweak: String) : ThingUpdat
 data class Bop(override val aggregateId: UUID) : ThingUpdateCommand()
 data class Explode(override val aggregateId: UUID) : ThingUpdateCommand()
 
-sealed class ThingEvent : Event
+sealed class ThingEvent : DomainEvent
 
 sealed class ThingCreationEvent : CreationEvent
 object ThingCreated : ThingCreationEvent()

@@ -31,7 +31,7 @@ data class StartThirdPartyEmailNotification(override val aggregateId: UUID, val 
 data class RegisterThirdPartySuccess(override val aggregateId: UUID) : PaymentSagaUpdateCommand()
 data class RegisterThirdPartyFailure(override val aggregateId: UUID) : PaymentSagaUpdateCommand()
 
-sealed class PaymentSagaEvent : Event
+sealed class PaymentSagaEvent : DomainEvent
 data class PaymentSagaStarted(
     val fromUserId: UUID,
     val toUserBankDetails: String,

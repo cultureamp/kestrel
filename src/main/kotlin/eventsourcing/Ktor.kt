@@ -42,9 +42,9 @@ object Ktor {
                                 when (result) {
                                     is Right -> {
                                         val statusCode = successToStatusCode(result.value)
-                                        val (created, updated) = eventStore.eventsFor(command.value.aggregateId)
-                                        val events = listOf(created) + updated
-                                        Pair(statusCode, AggregateData(command.value.aggregateId, events.map { EventData(it::class.simpleName!!, it) }))
+                                        val events = eventStore.eventsFor(command.value.aggregateId)
+                                        val domainEvents = events.map { it.domainEvent }
+                                        Pair(statusCode, AggregateData(command.value.aggregateId, domainEvents.map { EventData(it::class.simpleName!!, it) }))
                                     }
                                     is Left -> {
                                         val statusCode = errorToStatusCode(result.error)
@@ -59,6 +59,10 @@ object Ktor {
                         )
                     } catch (e: Throwable) {
                         logStacktrace(e)
+                        call.respond(
+                            status = HttpStatusCode.InternalServerError,
+                            message = "Something went wrong"
+                        )
                     }
                 }
             }
@@ -67,7 +71,7 @@ object Ktor {
 }
 
 data class AggregateData(val aggregateId: UUID, val events: List<EventData>)
-data class EventData(val type: String, val data: Event)
+data class EventData(val type: String, val data: DomainEvent)
 data class BadData(val field: String, val invalidValue: String?)
 
 @Suppress("UNCHECKED_CAST")

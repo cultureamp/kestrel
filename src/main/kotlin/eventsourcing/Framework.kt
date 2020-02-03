@@ -1,6 +1,7 @@
 package eventsourcing
 
-import java.util.UUID
+import org.joda.time.DateTime
+import java.util.*
 import kotlin.reflect.KClass
 import kotlin.reflect.KFunction2
 import kotlin.reflect.KFunction3
@@ -105,18 +106,38 @@ data class Configuration<CC : CreationCommand, CE : CreationEvent, Err : Command
         }
     }
 
-    fun create(creationCommand: CC, eventStore: EventStore) = create(creationCommand).map { event ->
-        val aggregate = created(event)
-        val events = listOf(event)
-        eventStore.sink(events, creationCommand.aggregateId, aggregate.aggregateType())
+    fun create(creationCommand: CC, eventStore: EventStore) = create(creationCommand).map { domainEvent ->
+        val aggregate = created(domainEvent)
+        val event = Event(
+            id = UUID.randomUUID(),
+            aggregateId = creationCommand.aggregateId,
+            aggregateSequence = 1,
+            createdAt = DateTime(),
+            metadata = Metadata(UUID.randomUUID()), // TODO use "real" account id in metadata
+            domainEvent = domainEvent)
+        eventStore.sink(listOf(event), creationCommand.aggregateId, aggregate.aggregateType())
     }
 
     @Suppress("UNCHECKED_CAST")
     fun update(updateCommand: UC, eventStore: EventStore): Either<Err, Unit> {
-        val (creationEvent, updateEvents) = eventStore.eventsFor(updateCommand.aggregateId)
+        val events = eventStore.eventsFor(updateCommand.aggregateId)
+        val creationEvent = events.first().domainEvent as CreationEvent
+        val updateEvents = events.slice(1 until events.size).map { it.domainEvent as UpdateEvent }
         val aggregate = rehydrated(creationEvent as CE, updateEvents as List<UE>)
-        return update(aggregate, updateCommand).map { events ->
-            val updated = updated(aggregate, events)
+        return update(aggregate, updateCommand).map { domainEvents ->
+            val updated = updated(aggregate, domainEvents)
+            val offset = events.last().aggregateSequence + 1
+            val createdAt = DateTime()
+            val events = domainEvents.withIndex().map { (index, domainEvent) ->
+                Event(
+                    id = UUID.randomUUID(),
+                    aggregateId = updateCommand.aggregateId,
+                    aggregateSequence = offset + index,
+                    createdAt = createdAt,
+                    metadata = Metadata(UUID.randomUUID()), // TODO use "real" account id in metadata
+                    domainEvent = domainEvent
+                )
+            }
             eventStore.sink(events, updateCommand.aggregateId, updated.aggregateType())
         }
     }
@@ -127,17 +148,17 @@ data class Configuration<CC : CreationCommand, CE : CreationEvent, Err : Command
         updateEvents.fold(initial) { aggregate, updateEvent -> updated(aggregate, updateEvent) }
 }
 
-data class EventListener(val handlers: Map<KClass<Event>, (Event, UUID) -> Any?>) {
+data class EventListener(val handlers: Map<KClass<DomainEvent>, (DomainEvent, UUID) -> Any?>) {
     @Suppress("UNCHECKED_CAST")
     companion object {
-        inline fun <reified E : Event> from(noinline handle: (E, UUID) -> Any?): EventListener {
-            val handler = (E::class to handle) as Pair<KClass<Event>, (Event, UUID) -> Any?>
+        inline fun <reified E : DomainEvent> from(noinline handle: (E, UUID) -> Any?): EventListener {
+            val handler = (E::class to handle) as Pair<KClass<DomainEvent>, (DomainEvent, UUID) -> Any?>
             return EventListener(mapOf(handler))
         }
 
-        inline fun <reified A : Event, reified B : Event> from(noinline a: (A, UUID) -> Any?, noinline b: (B, UUID) -> Any?): EventListener {
-            val first = (A::class to a) as Pair<KClass<Event>, (Event, UUID) -> Any?>
-            val second = (B::class to b) as Pair<KClass<Event>, (Event, UUID) -> Any?>
+        inline fun <reified A : DomainEvent, reified B : DomainEvent> from(noinline a: (A, UUID) -> Any?, noinline b: (B, UUID) -> Any?): EventListener {
+            val first = (A::class to a) as Pair<KClass<DomainEvent>, (DomainEvent, UUID) -> Any?>
+            val second = (B::class to b) as Pair<KClass<DomainEvent>, (DomainEvent, UUID) -> Any?>
             return EventListener(mapOf(first, second))
         }
     }
@@ -155,11 +176,28 @@ interface UpdateCommand : Command {
     override val aggregateId: UUID
 }
 
-interface Event
+data class Event(
+    val id: UUID,
+    val aggregateId: UUID,
+    val aggregateSequence: Long,
+    val createdAt: DateTime,
+    val metadata: Metadata,
+    val domainEvent: DomainEvent
+)
 
-interface CreationEvent : Event
+data class Metadata(
+    val account_id: UUID,
+    val user_id: UUID? = null,
+    val correlation_id: UUID? = null,
+    val causation_id: UUID? = null,
+    val migrated: Boolean? = null
+)
 
-interface UpdateEvent : Event
+interface DomainEvent
+
+interface CreationEvent : DomainEvent
+
+interface UpdateEvent : DomainEvent
 
 interface CommandError
 
