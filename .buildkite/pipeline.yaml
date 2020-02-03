@@ -1,0 +1,22 @@
+steps:
+
+  - name: ":docker: Build and push image"
+    command: "bin/ci_build_and_push.sh"
+    agents:
+      queue: ${BUILD_AGENT}
+    plugins:
+      cultureamp/aws-assume-role:
+        role: ${BUILD_ROLE}
+
+  - block: "Deploy to Development"
+    prompt: Select farms
+    fields:
+      - select: 'Ibex'
+        key: 'deploy-ibex'
+        options: ['deploy', 'skip']
+        default: 'skip'
+
+  - name: ":gear: Create CI farm steps"
+    command: "bin/ci_farm_steps.sh"
+    agents:
+      queue: build-unrestricted-small

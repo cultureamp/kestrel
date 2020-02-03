@@ -1,0 +1,5 @@
+environment: 'development'
+hasDBPrefix: true
+cpu: 512
+memory: 2048
+desiredCount: 1

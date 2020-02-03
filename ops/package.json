@@ -1,0 +1,28 @@
+{
+  "name": "kotlin-cqrs-eventsourcing-deploy",
+  "version": "0.1.0",
+  "bin": {
+    "cdk-deploy-roles": "index.js"
+  },
+  "scripts": {
+    "build": "tsc",
+    "watch": "tsc -w",
+    "cdk": "cdk",
+    "cdk-deploy": "cdk deploy --require-approval never"
+  },
+  "devDependencies": {
+    "@types/node": "^8.10.54",
+    "aws-cdk": "~1.18.0",
+    "typescript": "^3.1.2"
+  },
+  "dependencies": {
+    "@cultureamp/cdk-common": "^1.39.2",
+    "@cultureamp/cdk-services": "^1.40.2",
+    "@cultureamp/cdk-tasks": "^1.40.1",
+    "@cultureamp/cdk-iam": "^1.40.1",
+    "@aws-cdk/aws-s3": "~1.18.0",
+    "@aws-cdk/aws-ssm": "~1.18.0",
+    "@aws-cdk/core": "~1.18.0",
+    "@aws-cdk/aws-applicationautoscaling": "~1.18.0"
+  }
+}
