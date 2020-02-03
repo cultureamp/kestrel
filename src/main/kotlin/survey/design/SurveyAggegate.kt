@@ -55,7 +55,7 @@ data class Delete(override val aggregateId: UUID, val deletedAt: Date) : SurveyU
 data class Restore(override val aggregateId: UUID, val restoredAt: Date) : SurveyUpdateCommand()
 
 
-sealed class SurveyEvent : Event
+sealed class SurveyEvent : DomainEvent
 data class Created(val name: Map<Locale, String>, val accountId: UUID, val createdAt: Date) : SurveyEvent(), CreationEvent
 sealed class SurveyUpdateEvent : SurveyEvent(), UpdateEvent
 data class Renamed(val name: String, val locale: Locale, val namedAt: Date) : SurveyUpdateEvent()

@@ -85,7 +85,7 @@ data class FinishSurveySagaSuccessfully(override val aggregateId: UUID, val fini
 data class FinishSurveySagaUnsuccessfully(override val aggregateId: UUID, val finishedAt: Date) : SurveySagaUpdateCommand()
 
 
-sealed class SurveySagaEvent : Event
+sealed class SurveySagaEvent : DomainEvent
 data class SurveySagaStarted(
     val surveyAggregateId: UUID,
     val surveyCaptureLayoutAggregateId: UUID,

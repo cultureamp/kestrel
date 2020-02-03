@@ -316,7 +316,7 @@ data class HideQuestionFromCapture(
     val hiddenAt: Date
 ) : SurveyCaptureLayoutUpdateCommand()
 
-sealed class SurveyCaptureLayoutEvent : Event
+sealed class SurveyCaptureLayoutEvent : DomainEvent
 sealed class SurveyCaptureLayoutCreationEvent : SurveyCaptureLayoutEvent(), CreationEvent
 data class Generated(
     val surveyId: UUID,

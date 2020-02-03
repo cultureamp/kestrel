@@ -7,14 +7,14 @@ interface EventStore {
 
     fun sink(newEvents: List<Event>, aggregateId: UUID, aggregateType: String)
 
-    fun eventsFor(aggregateId: UUID): Pair<CreationEvent, List<UpdateEvent>>
+    fun eventsFor(aggregateId: UUID): List<Event>
 
     fun isTaken(aggregateId: UUID): Boolean
 
     // TODO this should be removed and implemented as separate threads/workers that poll the event-store
     fun notifyListeners(newEvents: List<Event>, aggregateId: UUID) {
         newEvents.forEach { event ->
-            listeners.flatMap {it.handlers.filterKeys { it.isInstance(event) }.values}.forEach { it(event, aggregateId) }
+            listeners.flatMap {it.handlers.filterKeys { it.isInstance(event.domainEvent) }.values}.forEach { it(event.domainEvent, aggregateId) }
         }
     }
 }
@@ -29,12 +29,8 @@ class InMemoryEventStore : EventStore {
         notifyListeners(newEvents, aggregateId)
     }
 
-    @Suppress("UNCHECKED_CAST")
-    override fun eventsFor(aggregateId: UUID): Pair<CreationEvent, List<UpdateEvent>> {
-        val events = eventStore.getValue(aggregateId)
-        val creationEvent = events.first() as CreationEvent
-        val updateEvents = events.drop(1) as List<UpdateEvent>
-        return Pair(creationEvent, updateEvents)
+    override fun eventsFor(aggregateId: UUID): List<Event> {
+        return eventStore.getValue(aggregateId)
     }
 
     override fun isTaken(aggregateId: UUID): Boolean {

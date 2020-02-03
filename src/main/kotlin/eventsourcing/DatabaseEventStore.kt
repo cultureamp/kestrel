@@ -2,7 +2,7 @@ package eventsourcing
 
 import com.fasterxml.jackson.databind.ObjectMapper
 import com.fasterxml.jackson.module.kotlin.registerKotlinModule
-import org.jetbrains.exposed.dao.IntIdTable
+import org.jetbrains.exposed.dao.LongIdTable
 import org.jetbrains.exposed.sql.Database
 import org.jetbrains.exposed.sql.SchemaUtils
 import org.jetbrains.exposed.sql.insert
@@ -15,6 +15,7 @@ class DatabaseEventStore private constructor(private val db: Database) : EventSt
     companion object {
         fun create(db: Database): DatabaseEventStore {
             transaction(db) {
+                // TODO don't do this if pointing directly to Murmur DB or potentially introduce separate migrations
                 SchemaUtils.create(Events)
             }
             return DatabaseEventStore(db)
@@ -27,31 +28,38 @@ class DatabaseEventStore private constructor(private val db: Database) : EventSt
         transaction(db) {
             newEvents.forEach { event ->
                 Events.insert { row ->
+                    row[Events.aggregateSequence] = event.aggregateSequence
+                    row[Events.eventId] = event.id
                     row[Events.aggregateId] = aggregateId
                     row[Events.aggregateType] = aggregateType
-                    row[Events.eventType] = event.javaClass.canonicalName
-                    row[Events.date] = DateTime.now()
-                    row[Events.body] = event.asJson()
+                    row[Events.eventType] = event.domainEvent.javaClass.canonicalName
+                    row[Events.createdAt] = DateTime.now()
+                    row[Events.body] = om.writeValueAsString(event.domainEvent)
+                    row[Events.metadata] = om.writeValueAsString(event.metadata)
                 }
             }
         }
         notifyListeners(newEvents, aggregateId)
     }
 
-    override fun eventsFor(aggregateId: UUID): Pair<CreationEvent, List<UpdateEvent>> {
+    override fun eventsFor(aggregateId: UUID): List<Event> {
         return transaction(db) {
-            val events = Events
+            return@transaction Events
                 .select { Events.aggregateId eq aggregateId }
                 .orderBy(Events.id)
                 .map { row ->
-                    val type = row[Events.eventType].asClass<Event>()
-                    om.readValue(row[Events.body], type)
+                    val type = row[Events.eventType].asClass<DomainEvent>()
+                    val domainEvent = om.readValue(row[Events.body], type)
+                    val metadata = om.readValue(row[Events.metadata], Metadata::class.java)
+                    Event(
+                        id = row[Events.eventId],
+                        aggregateId = aggregateId,
+                        aggregateSequence = row[Events.aggregateSequence],
+                        createdAt = row[Events.createdAt],
+                        metadata = metadata,
+                        domainEvent = domainEvent
+                    )
                 }
-            val creationEvent = events.first() as CreationEvent
-            val updateEvents = events.slice(1 until events.size).map {
-                it as UpdateEvent
-            }
-            return@transaction creationEvent to updateEvents
         }
     }
 
@@ -71,14 +79,14 @@ private fun <T> String.asClass(): Class<out T>? {
 
 val om = ObjectMapper().registerKotlinModule()
 
-private fun Event.asJson(): String {
-    return om.writeValueAsString(this)
-}
-
-object Events : IntIdTable() {
+object Events : LongIdTable(columnName = "sequence") {
+    val aggregateSequence = long("aggregate_sequence")
+    val eventId = uuid("id")
     val aggregateId = uuid("aggregate_id")
     val aggregateType = varchar("aggregate_type", 128)
     val eventType = varchar("event_type", 128)
-    val date = date("date")
+    val createdAt = date("createdAt")
+    // TODO make this jsonb similar to https://gist.github.com/quangIO/a623b5caa53c703e252d858f7a806919
     val body = text("json_body")
+    val metadata = text("metadata")
 }
