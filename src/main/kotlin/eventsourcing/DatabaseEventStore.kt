@@ -2,6 +2,7 @@ package eventsourcing
 
 import com.fasterxml.jackson.databind.ObjectMapper
 import com.fasterxml.jackson.module.kotlin.registerKotlinModule
+import database.jsonb
 import org.jetbrains.exposed.dao.LongIdTable
 import org.jetbrains.exposed.sql.Database
 import org.jetbrains.exposed.sql.SchemaUtils
@@ -86,7 +87,6 @@ object Events : LongIdTable(columnName = "sequence") {
     val aggregateType = varchar("aggregate_type", 128)
     val eventType = varchar("event_type", 128)
     val createdAt = date("createdAt")
-    // TODO make this jsonb similar to https://gist.github.com/quangIO/a623b5caa53c703e252d858f7a806919
-    val body = text("json_body")
-    val metadata = text("metadata")
+    val body = jsonb("json_body")
+    val metadata = jsonb("metadata")
 }
