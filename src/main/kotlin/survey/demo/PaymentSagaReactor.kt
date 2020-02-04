@@ -5,8 +5,8 @@ import eventsourcing.Right
 import eventsourcing.Updated
 import org.jetbrains.exposed.sql.*
 import org.jetbrains.exposed.sql.transactions.transaction
-import java.util.*
-import java.util.Date
+import org.joda.time.DateTime
+import java.util.UUID
 
 class PaymentSagaReactor(
     private val commandGateway: CommandGateway,
@@ -25,7 +25,7 @@ class PaymentSagaReactor(
                 }
             }
             paymentService.pay(fromUserId, toUserBankDetails, dollarAmount)
-            commandGateway.dispatch(StartThirdPartyPayment(aggregateId, Date()))
+            commandGateway.dispatch(StartThirdPartyPayment(aggregateId, DateTime()))
         }
         is StartedThirdPartyPayment -> Right(Updated)
         is FinishedThirdPartyPayment -> {
@@ -43,7 +43,7 @@ class PaymentSagaReactor(
 
             val message = "successfully paid"
             emailService.notify(fromUserId, message)
-            commandGateway.dispatch(StartThirdPartyEmailNotification(aggregateId, message, Date()))
+            commandGateway.dispatch(StartThirdPartyEmailNotification(aggregateId, message, DateTime()))
         }
         is FailedThirdPartyPayment -> {
             val fromUserId = transaction(database) {
@@ -59,7 +59,7 @@ class PaymentSagaReactor(
             }
             val message = "payment failed"
             emailService.notify(fromUserId, message)
-            commandGateway.dispatch(StartThirdPartyEmailNotification(aggregateId, message, Date()))
+            commandGateway.dispatch(StartThirdPartyEmailNotification(aggregateId, message, DateTime()))
         }
         is StartedThirdPartyEmailNotification -> Right(Updated)
         is FinishedThirdPartyEmailNotification -> Right(Updated)

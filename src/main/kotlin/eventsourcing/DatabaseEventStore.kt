@@ -1,6 +1,8 @@
 package eventsourcing
 
 import com.fasterxml.jackson.databind.ObjectMapper
+import com.fasterxml.jackson.databind.SerializationFeature.WRITE_DATES_AS_TIMESTAMPS
+import com.fasterxml.jackson.datatype.joda.JodaModule
 import com.fasterxml.jackson.module.kotlin.registerKotlinModule
 import database.jsonb
 import org.jetbrains.exposed.dao.LongIdTable
@@ -78,7 +80,7 @@ private fun <T> String.asClass(): Class<out T>? {
     return Class.forName(this) as Class<out T>?
 }
 
-val om = ObjectMapper().registerKotlinModule()
+val om = ObjectMapper().registerKotlinModule().registerModule(JodaModule()).configure(WRITE_DATES_AS_TIMESTAMPS, false)
 
 object Events : LongIdTable(columnName = "sequence") {
     val aggregateSequence = long("aggregate_sequence")

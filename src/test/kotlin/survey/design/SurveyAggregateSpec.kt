@@ -7,8 +7,8 @@ import io.kotlintest.shouldBe
 import io.kotlintest.specs.ShouldSpec
 import org.jetbrains.exposed.sql.*
 import org.jetbrains.exposed.sql.transactions.transaction
-import java.util.*
-import java.util.Date
+import org.joda.time.DateTime
+import java.util.UUID
 
 class SurveyAggregateSpec : ShouldSpec() {
     private val projectionDatabase = Database.connect("jdbc:h2:mem:test;DB_CLOSE_DELAY=-1;", driver = "org.h2.Driver")
@@ -25,10 +25,10 @@ class SurveyAggregateSpec : ShouldSpec() {
         val surveyNamesQuery = SurveyNamesQuery(projectionDatabase)
         val surveyNamesCommandProjector = SurveyNamesCommandProjector(projectionDatabase)
 
-        val namedAt = Date()
-        val createdAt = Date()
-        val deletedAt = Date()
-        val restoredAt = Date()
+        val namedAt = DateTime()
+        val createdAt = DateTime()
+        val deletedAt = DateTime()
+        val restoredAt = DateTime()
         val name = mapOf(Locale.en to "name")
         val accountId = UUID.randomUUID()
         val aggregateId = UUID.randomUUID()
@@ -44,7 +44,7 @@ class SurveyAggregateSpec : ShouldSpec() {
         "Renamed" {
             should("updated the name for one Locale") {
                 SurveyAggregate(Created(name, accountId, createdAt))
-                    .updated(Renamed("rename", Locale.en, Date()))
+                    .updated(Renamed("rename", Locale.en, DateTime()))
                     .name.getValue(Locale.en).shouldBe("rename")
             }
         }
@@ -52,7 +52,7 @@ class SurveyAggregateSpec : ShouldSpec() {
         "Deleted" {
             should("set the deleted flag from true") {
                 SurveyAggregate(Created(name, accountId, createdAt))
-                    .updated(Deleted(Date()))
+                    .updated(Deleted(DateTime()))
                     .deleted.shouldBe(true)
             }
         }
@@ -60,8 +60,8 @@ class SurveyAggregateSpec : ShouldSpec() {
         "Restored" {
             should("set the deleted flag from true") {
                 SurveyAggregate(Created(name, accountId, createdAt))
-                    .updated(Deleted(Date()))
-                    .updated(Restored(Date())).deleted
+                    .updated(Deleted(DateTime()))
+                    .updated(Restored(DateTime())).deleted
                     .shouldBe(false)
             }
         }
@@ -78,7 +78,7 @@ class SurveyAggregateSpec : ShouldSpec() {
 
             "when Survey name already taken" {
                 should("fail with SurveyNameNotUnique") {
-                    surveyNamesCommandProjector.project(Created(name, UUID.randomUUID(), Date()), UUID.randomUUID())
+                    surveyNamesCommandProjector.project(Created(name, UUID.randomUUID(), DateTime()), UUID.randomUUID())
                     SurveyAggregate
                         .create(
                             surveyNamesQuery,
@@ -106,7 +106,7 @@ class SurveyAggregateSpec : ShouldSpec() {
 
             "when the name is taken by another aggregate" {
                 should("fail with SurveyNameNotUnique") {
-                    surveyNamesCommandProjector.project(Created(mapOf(Locale.en to "rename"), UUID.randomUUID(), Date()), UUID.randomUUID())
+                    surveyNamesCommandProjector.project(Created(mapOf(Locale.en to "rename"), UUID.randomUUID(), DateTime()), UUID.randomUUID())
                     SurveyAggregate(Created(name, accountId, createdAt))
                         .update(surveyNamesQuery, Rename(aggregateId, "rename", Locale.en, namedAt))
                         .shouldBe(Left(SurveyNameNotUnique))
@@ -117,7 +117,7 @@ class SurveyAggregateSpec : ShouldSpec() {
 
             "when the name is the same but for a different locale" {
                 should("return Renamed event") {
-                    surveyNamesCommandProjector.project(Created(name, UUID.randomUUID(), Date()), UUID.randomUUID())
+                    surveyNamesCommandProjector.project(Created(name, UUID.randomUUID(), DateTime()), UUID.randomUUID())
                     SurveyAggregate(Created(name, accountId, createdAt))
                         .update(
                             surveyNamesQuery,

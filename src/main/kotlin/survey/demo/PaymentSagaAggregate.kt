@@ -1,17 +1,18 @@
 package survey.demo
 
 import eventsourcing.*
+import org.joda.time.DateTime
 import java.util.*
 
 object PaymentSagaAggregate : Aggregate {
     fun create(command: StartPaymentSaga): Either<CommandError, PaymentSagaStarted> = with(command) {
-        Right(PaymentSagaStarted(fromUserId, toUserBankDetails, dollarAmount, Date()))
+        Right(PaymentSagaStarted(fromUserId, toUserBankDetails, dollarAmount, DateTime()))
     }
 
     fun update(command: PaymentSagaUpdateCommand): Either<CommandError, List<PaymentSagaUpdateEvent>> = when (command) {
         is StartThirdPartyPayment -> Right.list(StartedThirdPartyPayment(command.startedAt))
-        is RegisterThirdPartySuccess -> Right.list(FinishedThirdPartyPayment(Date()))
-        is RegisterThirdPartyFailure -> Right.list(FailedThirdPartyPayment(Date()))
+        is RegisterThirdPartySuccess -> Right.list(FinishedThirdPartyPayment(DateTime()))
+        is RegisterThirdPartyFailure -> Right.list(FailedThirdPartyPayment(DateTime()))
         is StartThirdPartyEmailNotification -> Right.list(StartedThirdPartyEmailNotification(command.message, command.startedAt))
     }
 }
@@ -26,8 +27,8 @@ data class StartPaymentSaga(
 ) : PaymentSagaCommand(), CreationCommand
 
 sealed class PaymentSagaUpdateCommand : PaymentSagaCommand(), UpdateCommand
-data class StartThirdPartyPayment(override val aggregateId: UUID, val startedAt: Date) : PaymentSagaUpdateCommand()
-data class StartThirdPartyEmailNotification(override val aggregateId: UUID, val message: String, val startedAt: Date) : PaymentSagaUpdateCommand()
+data class StartThirdPartyPayment(override val aggregateId: UUID, val startedAt: DateTime) : PaymentSagaUpdateCommand()
+data class StartThirdPartyEmailNotification(override val aggregateId: UUID, val message: String, val startedAt: DateTime) : PaymentSagaUpdateCommand()
 data class RegisterThirdPartySuccess(override val aggregateId: UUID) : PaymentSagaUpdateCommand()
 data class RegisterThirdPartyFailure(override val aggregateId: UUID) : PaymentSagaUpdateCommand()
 
@@ -36,15 +37,15 @@ data class PaymentSagaStarted(
     val fromUserId: UUID,
     val toUserBankDetails: String,
     val dollarAmount: Int,
-    val startedAt: Date
+    val startedAt: DateTime
 ) : PaymentSagaEvent(), CreationEvent
 
 sealed class PaymentSagaUpdateEvent : PaymentSagaEvent(), UpdateEvent
 
-data class StartedThirdPartyPayment(val startedAt: Date) : PaymentSagaUpdateEvent()
-data class FinishedThirdPartyPayment(val finishedAt: Date) : PaymentSagaUpdateEvent()
-data class FailedThirdPartyPayment(val failedAt: Date) : PaymentSagaUpdateEvent()
+data class StartedThirdPartyPayment(val startedAt: DateTime) : PaymentSagaUpdateEvent()
+data class FinishedThirdPartyPayment(val finishedAt: DateTime) : PaymentSagaUpdateEvent()
+data class FailedThirdPartyPayment(val failedAt: DateTime) : PaymentSagaUpdateEvent()
 
-data class StartedThirdPartyEmailNotification(val message: String, val startedAt: Date) : PaymentSagaUpdateEvent()
-data class FinishedThirdPartyEmailNotification(val finishedAt: Date) : PaymentSagaUpdateEvent()
-data class FailedThirdPartyEmailNotification(val error: CommandError, val failedAt: Date) : PaymentSagaUpdateEvent()
+data class StartedThirdPartyEmailNotification(val message: String, val startedAt: DateTime) : PaymentSagaUpdateEvent()
+data class FinishedThirdPartyEmailNotification(val finishedAt: DateTime) : PaymentSagaUpdateEvent()
+data class FailedThirdPartyEmailNotification(val error: CommandError, val failedAt: DateTime) : PaymentSagaUpdateEvent()

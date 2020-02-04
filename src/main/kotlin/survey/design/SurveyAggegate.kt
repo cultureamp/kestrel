@@ -1,6 +1,7 @@
 package survey.design
 
 import eventsourcing.*
+import org.joda.time.DateTime
 import java.util.*
 
 data class SurveyAggregate(val name: Map<Locale, String>, val accountId: UUID, val deleted: Boolean = false) : Aggregate {
@@ -47,20 +48,20 @@ data class CreateSurvey(
     val surveyCaptureLayoutAggregateId: UUID,
     val name: Map<Locale, String>,
     val accountId: UUID,
-    val createdAt: Date
+    val createdAt: DateTime
 ) : SurveyCreationCommand()
 sealed class SurveyUpdateCommand : SurveyCommand(), UpdateCommand
-data class Rename(override val aggregateId: UUID, val newName: String, val locale: Locale, val renamedAt: Date) : SurveyUpdateCommand()
-data class Delete(override val aggregateId: UUID, val deletedAt: Date) : SurveyUpdateCommand()
-data class Restore(override val aggregateId: UUID, val restoredAt: Date) : SurveyUpdateCommand()
+data class Rename(override val aggregateId: UUID, val newName: String, val locale: Locale, val renamedAt: DateTime) : SurveyUpdateCommand()
+data class Delete(override val aggregateId: UUID, val deletedAt: DateTime) : SurveyUpdateCommand()
+data class Restore(override val aggregateId: UUID, val restoredAt: DateTime) : SurveyUpdateCommand()
 
 
 sealed class SurveyEvent : DomainEvent
-data class Created(val name: Map<Locale, String>, val accountId: UUID, val createdAt: Date) : SurveyEvent(), CreationEvent
+data class Created(val name: Map<Locale, String>, val accountId: UUID, val createdAt: DateTime) : SurveyEvent(), CreationEvent
 sealed class SurveyUpdateEvent : SurveyEvent(), UpdateEvent
-data class Renamed(val name: String, val locale: Locale, val namedAt: Date) : SurveyUpdateEvent()
-data class Deleted(val deletedAt: Date) : SurveyUpdateEvent()
-data class Restored(val restoredAt: Date) : SurveyUpdateEvent()
+data class Renamed(val name: String, val locale: Locale, val namedAt: DateTime) : SurveyUpdateEvent()
+data class Deleted(val deletedAt: DateTime) : SurveyUpdateEvent()
+data class Restored(val restoredAt: DateTime) : SurveyUpdateEvent()
 
 sealed class SurveyError : CommandError
 object SurveyNameNotUnique : SurveyError()

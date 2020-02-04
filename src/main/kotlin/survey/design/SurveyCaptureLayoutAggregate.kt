@@ -1,9 +1,9 @@
 package survey.design
 
 import eventsourcing.*
+import org.joda.time.DateTime
 import survey.design.DemographicSectionPosition.bottom
 import survey.design.DemographicSectionPosition.top
-import java.util.Date
 import java.util.UUID
 
 
@@ -216,7 +216,7 @@ enum class Status {
 sealed class SurveyCaptureLayoutCommand : Command
 
 sealed class SurveyCaptureLayoutCreationCommand : SurveyCaptureLayoutCommand(), CreationCommand
-data class Generate(override val aggregateId: UUID, val surveyId: UUID, val generatedAt: Date) : SurveyCaptureLayoutCreationCommand()
+data class Generate(override val aggregateId: UUID, val surveyId: UUID, val generatedAt: DateTime) : SurveyCaptureLayoutCreationCommand()
 
 sealed class SurveyCaptureLayoutUpdateCommand : SurveyCaptureLayoutCommand(), UpdateCommand
 data class AddSection(
@@ -228,7 +228,7 @@ data class AddSection(
     val intendedPurpose: IntendedPurpose,
     val code: String,
     val positionedAfterSectionId: UUID?,
-    val addedAt: Date
+    val addedAt: DateTime
 ) : SurveyCaptureLayoutUpdateCommand() {
     init {
         require(name.isNotEmpty())
@@ -239,19 +239,19 @@ data class MoveSection(
     override val aggregateId: UUID,
     val sectionId: UUID,
     val positionedAfterSectionId: UUID?,
-    val movedAt: Date
+    val movedAt: DateTime
 ) : SurveyCaptureLayoutUpdateCommand()
 
 data class RemoveSection(
     override val aggregateId: UUID,
     val sectionId: UUID,
-    val removedAt: Date
+    val removedAt: DateTime
 ) : SurveyCaptureLayoutUpdateCommand()
 
 data class RestoreSection(
     override val aggregateId: UUID,
     val sectionId: UUID,
-    val restoredAt: Date
+    val restoredAt: DateTime
 ) : SurveyCaptureLayoutUpdateCommand()
 
 data class RenameSection(
@@ -259,7 +259,7 @@ data class RenameSection(
     val sectionId: UUID,
     val name: String,
     val locale: Locale,
-    val renamedAt: Date
+    val renamedAt: DateTime
 ) : SurveyCaptureLayoutUpdateCommand() {
     init {
         require(name.length <= MAX_TEXT_SIZE)
@@ -271,7 +271,7 @@ data class ChangeSectionShortDescription(
     val sectionId: UUID,
     val text: String,
     val locale: Locale,
-    val changedAt: Date
+    val changedAt: DateTime
 ) : SurveyCaptureLayoutUpdateCommand() {
     init {
         require(text.length <= MAX_TEXT_SIZE)
@@ -283,7 +283,7 @@ data class ChangeSectionLongDescription(
     val sectionId: UUID,
     val text: String,
     val locale: Locale,
-    val changedAt: Date
+    val changedAt: DateTime
 ) : SurveyCaptureLayoutUpdateCommand() {
     init {
         require(text.length <= MAX_TEXT_SIZE)
@@ -293,7 +293,7 @@ data class ChangeSectionLongDescription(
 data class RemoveSectionDescriptions(
     override val aggregateId: UUID,
     val sectionId: UUID,
-    val removedAt: Date
+    val removedAt: DateTime
 ) : SurveyCaptureLayoutUpdateCommand()
 
 data class PositionQuestion(
@@ -301,26 +301,26 @@ data class PositionQuestion(
     val questionId: UUID,
     val positionedAfterQuestionId: UUID?,
     val sectionId: UUID,
-    val positionedAt: Date
+    val positionedAt: DateTime
 ) : SurveyCaptureLayoutUpdateCommand()
 
 data class PositionDemographicSections(
     override val aggregateId: UUID,
     val placement: DemographicSectionPosition,
-    val positionedAt: Date
+    val positionedAt: DateTime
 ) : SurveyCaptureLayoutUpdateCommand()
 
 data class HideQuestionFromCapture(
     override val aggregateId: UUID,
     val questionId: UUID,
-    val hiddenAt: Date
+    val hiddenAt: DateTime
 ) : SurveyCaptureLayoutUpdateCommand()
 
 sealed class SurveyCaptureLayoutEvent : DomainEvent
 sealed class SurveyCaptureLayoutCreationEvent : SurveyCaptureLayoutEvent(), CreationEvent
 data class Generated(
     val surveyId: UUID,
-    val generatedAt: Date
+    val generatedAt: DateTime
 ) : SurveyCaptureLayoutCreationEvent()
 data class Snapshot(
     val sectionsForIntendedPurpose: Map<IntendedPurpose, List<Section>> = emptyMap(),
@@ -337,44 +337,44 @@ data class SectionAdded(
     val intendedPurpose: IntendedPurpose,
     val code: String,
     val positionedAfterSectionId: UUID?,
-    val addedAt: Date
+    val addedAt: DateTime
 ) : SurveyCaptureLayoutUpdateEvent()
 
 data class SectionMoved(
     val sectionId: UUID,
     val positionedAfterSectionId: UUID?,
-    val movedAt: Date
+    val movedAt: DateTime
 ) : SurveyCaptureLayoutUpdateEvent()
 
 data class SectionRemoved(
     val sectionId: UUID,
-    val removedAt: Date
+    val removedAt: DateTime
 ) : SurveyCaptureLayoutUpdateEvent()
 
 data class SectionRestored(
     val sectionId: UUID,
-    val restoredAt: Date
+    val restoredAt: DateTime
 ) : SurveyCaptureLayoutUpdateEvent()
 
 data class SectionRenamed(
     val sectionId: UUID,
     val name: String,
     val locale: Locale,
-    val renamedAt: Date
+    val renamedAt: DateTime
 ) : SurveyCaptureLayoutUpdateEvent()
 
 data class SectionShortDescriptionChanged(
     val sectionId: UUID,
     val text: String,
     val locale: Locale,
-    val changedAt: Date
+    val changedAt: DateTime
 ) : SurveyCaptureLayoutUpdateEvent()
 
 data class SectionLongDescriptionChanged(
     val sectionId: UUID,
     val text: String,
     val locale: Locale,
-    val changedAt: Date
+    val changedAt: DateTime
 ) : SurveyCaptureLayoutUpdateEvent()
 
 data class SectionDescriptionChanged(
@@ -382,32 +382,32 @@ data class SectionDescriptionChanged(
     val shortDescription: String,
     val longDescription: String,
     val locale: Locale,
-    val changedAt: Date
+    val changedAt: DateTime
 ) : SurveyCaptureLayoutUpdateEvent()
 
 data class SectionDescriptionsRemoved(
     val sectionId: UUID,
-    val removedAt: Date
+    val removedAt: DateTime
 ) : SurveyCaptureLayoutUpdateEvent()
 
 data class QuestionPositioned(
     val questionId: UUID,
     val positionedAfterQuestionId: UUID?,
     val sectionId: UUID,
-    val positionedAt: Date
+    val positionedAt: DateTime
 ) : SurveyCaptureLayoutUpdateEvent()
 
 data class DemographicSectionsPositionedAtTop(
-    val positionedAt: Date
+    val positionedAt: DateTime
 ) : SurveyCaptureLayoutUpdateEvent()
 
 data class DemographicSectionsPositionedAtBottom(
-    val positionedAt: Date
+    val positionedAt: DateTime
 ) : SurveyCaptureLayoutUpdateEvent()
 
 data class QuestionHiddenFromCapture(
     val questionId: UUID,
-    val hiddenAt: Date
+    val hiddenAt: DateTime
 ) : SurveyCaptureLayoutUpdateEvent()
 
 sealed class SurveyCaptureLayoutCommandError : CommandError

@@ -1,7 +1,9 @@
 package eventsourcing
 
 import com.fasterxml.jackson.core.json.ReaderBasedJsonParser
+import com.fasterxml.jackson.databind.SerializationFeature.WRITE_DATES_AS_TIMESTAMPS
 import com.fasterxml.jackson.databind.exc.MismatchedInputException
+import com.fasterxml.jackson.datatype.joda.JodaModule
 import com.fasterxml.jackson.module.kotlin.MissingKotlinParameterException
 import io.ktor.application.ApplicationCall
 import io.ktor.application.call
@@ -26,7 +28,9 @@ object Ktor {
     fun startEmbeddedCommandServer(commandGateway: CommandGateway, eventStore: EventStore) {
         embeddedServer(Netty, 8080) {
             install(ContentNegotiation) {
-                jackson {}
+                jackson {
+                    registerModule(JodaModule()).configure(WRITE_DATES_AS_TIMESTAMPS , false);
+                }
             }
             routing {
                 post("/command/{command}") {
