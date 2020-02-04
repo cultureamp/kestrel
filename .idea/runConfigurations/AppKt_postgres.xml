@@ -1,5 +1,5 @@
 <component name="ProjectRunConfigurationManager">
-  <configuration default="false" name="AppKt" type="JetRunConfigurationType" factoryName="Kotlin" nameIsGenerated="true">
+  <configuration default="false" name="AppKt postgres" type="JetRunConfigurationType" factoryName="Kotlin">
     <module name="kotlin-cqrs-eventsourcing.main" />
     <option name="VM_PARAMETERS" value="" />
     <option name="PROGRAM_PARAMETERS" value="" />
