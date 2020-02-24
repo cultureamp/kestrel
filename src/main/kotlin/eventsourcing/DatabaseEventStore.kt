@@ -5,6 +5,7 @@ import com.fasterxml.jackson.databind.SerializationFeature.WRITE_DATES_AS_TIMEST
 import com.fasterxml.jackson.datatype.joda.JodaModule
 import com.fasterxml.jackson.module.kotlin.registerKotlinModule
 import database.jsonb
+import org.jetbrains.exposed.exceptions.ExposedSQLException
 import org.jetbrains.exposed.sql.*
 import org.jetbrains.exposed.sql.transactions.transaction
 import org.joda.time.DateTime
@@ -23,22 +24,32 @@ class DatabaseEventStore private constructor(private val db: Database) : EventSt
 
     override lateinit var listeners: List<EventListener>
 
-    override fun sink(newEvents: List<Event>, aggregateId: UUID, aggregateType: String) {
-        transaction(db) {
-            newEvents.forEach { event ->
-                Events.insert { row ->
-                    row[Events.aggregateSequence] = event.aggregateSequence
-                    row[Events.eventId] = event.id
-                    row[Events.aggregateId] = aggregateId
-                    row[Events.aggregateType] = aggregateType
-                    row[Events.eventType] = event.domainEvent.javaClass.canonicalName
-                    row[Events.createdAt] = DateTime.now()
-                    row[Events.body] = om.writeValueAsString(event.domainEvent)
-                    row[Events.metadata] = om.writeValueAsString(event.metadata)
+    override fun sink(newEvents: List<Event>, aggregateId: UUID, aggregateType: String): Either<CommandError, Unit> {
+        return try {
+            return transaction(db) {
+                newEvents.forEach { event ->
+                    Events.insert { row ->
+                        row[Events.aggregateSequence] = event.aggregateSequence
+                        row[Events.eventId] = event.id
+                        row[Events.aggregateId] = aggregateId
+                        row[Events.aggregateType] = aggregateType
+                        row[Events.eventType] = event.domainEvent.javaClass.canonicalName
+                        row[Events.createdAt] = DateTime.now()
+                        row[Events.body] = om.writeValueAsString(event.domainEvent)
+                        row[Events.metadata] = om.writeValueAsString(event.metadata)
+                    }
                 }
+
+                notifyListeners(newEvents, aggregateId) // TODO make sure all listeners use the same database
+                Right(Unit)
+            }
+        } catch (e: ExposedSQLException) {
+            if (e.message.orEmpty().contains("violates unique constraint")) {
+                Left(ConcurrencyError)
+            } else {
+                throw e
             }
         }
-        notifyListeners(newEvents, aggregateId) // TODO should this be in the same transaction?
     }
 
     override fun eventsFor(aggregateId: UUID): List<Event> {
@@ -80,3 +91,5 @@ object Events : Table() {
     val body = jsonb("json_body")
     val metadata = jsonb("metadata")
 }
+
+object ConcurrencyError : RetriableError

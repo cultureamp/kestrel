@@ -5,7 +5,7 @@ import java.util.UUID
 interface EventStore {
     var listeners: List<EventListener>
 
-    fun sink(newEvents: List<Event>, aggregateId: UUID, aggregateType: String)
+    fun sink(newEvents: List<Event>, aggregateId: UUID, aggregateType: String): Either<CommandError, Unit>
 
     fun eventsFor(aggregateId: UUID): List<Event>
 

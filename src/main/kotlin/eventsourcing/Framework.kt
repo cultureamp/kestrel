@@ -106,7 +106,7 @@ data class Configuration<CC : CreationCommand, CE : CreationEvent, Err : Command
         }
     }
 
-    fun create(creationCommand: CC, eventStore: EventStore) = create(creationCommand).map { domainEvent ->
+    fun create(creationCommand: CC, eventStore: EventStore): Either<CommandError, Unit> = create(creationCommand).map { domainEvent ->
         val aggregate = created(domainEvent)
         val event = Event(
             id = UUID.randomUUID(),
@@ -116,16 +116,16 @@ data class Configuration<CC : CreationCommand, CE : CreationEvent, Err : Command
             metadata = Metadata(UUID.randomUUID()), // TODO use "real" account id in metadata
             domainEvent = domainEvent)
         eventStore.sink(listOf(event), creationCommand.aggregateId, aggregate.aggregateType())
-    }
+    }.flatten()
 
     @Suppress("UNCHECKED_CAST")
-    fun update(updateCommand: UC, events: List<Event>, eventStore: EventStore): Either<Err, Unit> {
+    fun update(updateCommand: UC, events: List<Event>, eventStore: EventStore): Either<CommandError, Unit> {
         val creationEvent = events.first().domainEvent as CreationEvent
         val updateEvents = events.slice(1 until events.size).map { it.domainEvent as UpdateEvent }
         val aggregate = rehydrated(creationEvent as CE, updateEvents as List<UE>)
         return update(aggregate, updateCommand).map { domainEvents ->
             val updated = updated(aggregate, domainEvents)
-            val offset = events.last().aggregateSequence + 1
+            val offset = events.last().aggregateSequence + 0
             val createdAt = DateTime()
             val events = domainEvents.withIndex().map { (index, domainEvent) ->
                 Event(
@@ -138,7 +138,7 @@ data class Configuration<CC : CreationCommand, CE : CreationEvent, Err : Command
                 )
             }
             eventStore.sink(events, updateCommand.aggregateId, updated.aggregateType())
-        }
+        }.flatten()
     }
 
     private fun rehydrated(creationEvent: CE, updateEvents: List<UE>): A = updated(created(creationEvent), updateEvents)
@@ -204,6 +204,8 @@ interface AlreadyActionedCommandError : CommandError
 
 interface AuthorizationCommandError : CommandError
 
+interface RetriableError : CommandError
+
 sealed class Either<out E, out V>
 data class Left<E>(val error: E) : Either<E, Nothing>()
 data class Right<V>(val value: V) : Either<Nothing, V>() {
@@ -215,6 +217,11 @@ data class Right<V>(val value: V) : Either<Nothing, V>() {
 fun <E, V, R> Either<E, V>.map(transform: (V) -> R): Either<E, R> = when (this) {
     is Right -> Right(transform(this.value))
     is Left -> this
+}
+
+fun <E, V> Either<E, Either<E,V>>.flatten(): Either<E, V> = when (this) {
+    is Left -> this
+    is Right -> this.value
 }
 
 fun <A, B, C> KFunction2<A, B, C>.partial(a: A): (B) -> C {
