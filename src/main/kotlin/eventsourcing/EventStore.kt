@@ -16,18 +16,3 @@ interface EventStore {
         }
     }
 }
-
-class InMemoryEventStore : EventStore {
-    val eventStore: HashMap<UUID, List<Event>> = hashMapOf()
-    override lateinit var listeners: List<EventListener>
-
-    override fun sink(newEvents: List<Event>, aggregateId: UUID, aggregateType: String) {
-        val oldEvents = eventStore[aggregateId] ?: emptyList()
-        eventStore[aggregateId] = oldEvents + newEvents
-        notifyListeners(newEvents, aggregateId)
-    }
-
-    override fun eventsFor(aggregateId: UUID): List<Event> {
-        return eventStore.getValue(aggregateId)
-    }
-}
