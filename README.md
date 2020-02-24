@@ -134,3 +134,7 @@ returns `400`
 # Infrastructure
 
 https://github.com/cultureamp/base-infrastructure-for-services/pull/924
+
+# Trello
+
+https://trello.com/b/9mZdY0ZS/kotlin-event-sourcing
