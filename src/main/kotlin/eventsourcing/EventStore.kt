@@ -9,8 +9,6 @@ interface EventStore {
 
     fun eventsFor(aggregateId: UUID): List<Event>
 
-    fun isTaken(aggregateId: UUID): Boolean
-
     // TODO this should be removed and implemented as separate threads/workers that poll the event-store
     fun notifyListeners(newEvents: List<Event>, aggregateId: UUID) {
         newEvents.forEach { event ->
@@ -31,9 +29,5 @@ class InMemoryEventStore : EventStore {
 
     override fun eventsFor(aggregateId: UUID): List<Event> {
         return eventStore.getValue(aggregateId)
-    }
-
-    override fun isTaken(aggregateId: UUID): Boolean {
-        return eventStore.containsKey(aggregateId)
     }
 }

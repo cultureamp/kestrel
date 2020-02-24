@@ -61,15 +61,6 @@ class DatabaseEventStore private constructor(private val db: Database) : EventSt
                 }
         }
     }
-
-    override fun isTaken(aggregateId: UUID): Boolean {
-        return transaction(db) {
-            Events
-                .select { Events.aggregateId eq aggregateId }
-                .count() > 0
-        }
-    }
-
 }
 
 private fun <T> String.asClass(): Class<out T>? {
