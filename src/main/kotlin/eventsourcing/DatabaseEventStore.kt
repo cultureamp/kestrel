@@ -43,7 +43,7 @@ class DatabaseEventStore private constructor(private val db: Database) : EventSt
 
     override fun eventsFor(aggregateId: UUID): List<Event> {
         return transaction(db) {
-            return@transaction Events
+            Events
                 .select { Events.aggregateId eq aggregateId }
                 .orderBy(Events.sequence)
                 .map { row ->

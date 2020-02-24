@@ -46,6 +46,7 @@ object Ktor {
                                 when (result) {
                                     is Right -> {
                                         val statusCode = successToStatusCode(result.value)
+                                        // TODO this shouldn't exist in the production code - just here for debugging
                                         val events = eventStore.eventsFor(command.value.aggregateId)
                                         val domainEvents = events.map { it.domainEvent }
                                         Pair(statusCode, AggregateData(command.value.aggregateId, domainEvents.map { EventData(it::class.simpleName!!, it) }))
@@ -81,6 +82,7 @@ data class BadData(val field: String, val invalidValue: String?)
 @Suppress("UNCHECKED_CAST")
 private suspend fun PipelineContext<Unit, ApplicationCall>.command(commandClassName: String): Either<BadData?, Command> {
     return try {
+        // TODO check if Class.forName is always secure - can you hydrate dangerous classes? prepend package name for safety?
         Right(call.receive(Class.forName(commandClassName).kotlin as KClass<Command>))
     } catch (e: ClassNotFoundException) {
         Left(BadData("commandClassName", commandClassName))
