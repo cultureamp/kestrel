@@ -9,13 +9,13 @@ import survey.thing.AlwaysBoppable
 import survey.thing.ThingAggregate
 
 fun main() {
-    val projectionDatabase = Database.connect(DatabaseConfig.fromEnvironment("PROJECTIONS").toDataSource("projections"))
-    transaction(projectionDatabase) {
+    val eventStoreDatabase = Database.connect(DatabaseConfig.fromEnvironment("EVENT_STORE").toDataSource("event_store"))
+    transaction(eventStoreDatabase) {
         addLogger(StdOutSqlLogger)
     }
 
-    val (surveyNamesCommandQuery, surveyNamesCommandProjector) = SurveyNamesCommandProjection.create(projectionDatabase)
-    val (_, surveyCommandProjector) = SurveyCommandProjection.create(projectionDatabase)
+    val (surveyNamesCommandQuery, surveyNamesCommandProjector) = SurveyNamesCommandProjection.create(eventStoreDatabase)
+    val (_, surveyCommandProjector) = SurveyCommandProjection.create(eventStoreDatabase)
 
     val thingCommandProjection = AlwaysBoppable
 
@@ -50,15 +50,11 @@ fun main() {
         ),
         Configuration.from(ThingAggregate, thingCommandProjection)
     )
-    val eventStoreDatabase = Database.connect(DatabaseConfig.fromEnvironment("EVENT_STORE").toDataSource("event_store"))
-    transaction(eventStoreDatabase) {
-        addLogger(StdOutSqlLogger)
-    }
     val eventStore = DatabaseEventStore.create(eventStoreDatabase)
     val commandGateway = CommandGateway(eventStore, registry)
     val paymentService = PaymentService()
     val emailService = EmailService()
-    val paymentSagaReactor = PaymentSagaReactor(commandGateway, paymentService, emailService, projectionDatabase)
+    val paymentSagaReactor = PaymentSagaReactor(commandGateway, paymentService, emailService, eventStoreDatabase)
     val surveySagaReactor = SurveySagaReactor(commandGateway)
 
     // TODO this should be done as separate threads/workers that poll the event-store
