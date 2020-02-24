@@ -119,9 +119,7 @@ data class Configuration<CC : CreationCommand, CE : CreationEvent, Err : Command
     }
 
     @Suppress("UNCHECKED_CAST")
-    fun update(updateCommand: UC, eventStore: EventStore): Either<Err, Unit> {
-        val events = eventStore.eventsFor(updateCommand.aggregateId)
-        // TODO fail hard if no events found
+    fun update(updateCommand: UC, events: List<Event>, eventStore: EventStore): Either<Err, Unit> {
         val creationEvent = events.first().domainEvent as CreationEvent
         val updateEvents = events.slice(1 until events.size).map { it.domainEvent as UpdateEvent }
         val aggregate = rehydrated(creationEvent as CE, updateEvents as List<UE>)

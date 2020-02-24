@@ -104,7 +104,7 @@ private suspend fun PipelineContext<Unit, ApplicationCall>.command(commandClassN
 private fun errorToStatusCode(commandError: CommandError) = when (commandError) {
     is AlreadyActionedCommandError -> HttpStatusCode.NotModified
     is AuthorizationCommandError -> HttpStatusCode.Unauthorized
-    is AggregateIdAlreadyTaken -> HttpStatusCode.Conflict
+    is AggregateAlreadyExists -> HttpStatusCode.Conflict
     is UnrecognizedCommandType, NoConstructorForCommand -> HttpStatusCode.NotImplemented
     else -> HttpStatusCode.Forbidden
 }

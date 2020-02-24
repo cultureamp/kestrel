@@ -38,6 +38,12 @@ fun main() {
             ::SurveySagaAggregate
         ),
         Configuration.from(
+            ParticipantAggregate.Companion::create,
+            ParticipantAggregate::update,
+            ParticipantAggregate.Companion::created,
+            ParticipantAggregate::updated
+        ),
+        Configuration.from(
             PaymentSagaAggregate::create,
             PaymentSagaAggregate::update,
             PaymentSagaAggregate
