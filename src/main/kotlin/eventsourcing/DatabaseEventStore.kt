@@ -5,11 +5,7 @@ import com.fasterxml.jackson.databind.SerializationFeature.WRITE_DATES_AS_TIMEST
 import com.fasterxml.jackson.datatype.joda.JodaModule
 import com.fasterxml.jackson.module.kotlin.registerKotlinModule
 import database.jsonb
-import org.jetbrains.exposed.dao.LongIdTable
-import org.jetbrains.exposed.sql.Database
-import org.jetbrains.exposed.sql.SchemaUtils
-import org.jetbrains.exposed.sql.insert
-import org.jetbrains.exposed.sql.select
+import org.jetbrains.exposed.sql.*
 import org.jetbrains.exposed.sql.transactions.transaction
 import org.joda.time.DateTime
 import java.util.*
@@ -42,14 +38,14 @@ class DatabaseEventStore private constructor(private val db: Database) : EventSt
                 }
             }
         }
-        notifyListeners(newEvents, aggregateId)
+        notifyListeners(newEvents, aggregateId) // TODO should this be in the same transaction?
     }
 
     override fun eventsFor(aggregateId: UUID): List<Event> {
         return transaction(db) {
             return@transaction Events
                 .select { Events.aggregateId eq aggregateId }
-                .orderBy(Events.id)
+                .orderBy(Events.sequence)
                 .map { row ->
                     val type = row[Events.eventType].asClass<DomainEvent>()
                     val domainEvent = om.readValue(row[Events.body], type)
@@ -82,10 +78,11 @@ private fun <T> String.asClass(): Class<out T>? {
 
 val om = ObjectMapper().registerKotlinModule().registerModule(JodaModule()).configure(WRITE_DATES_AS_TIMESTAMPS, false)
 
-object Events : LongIdTable(columnName = "sequence") {
-    val aggregateSequence = long("aggregate_sequence")
+object Events : Table() {
+    val sequence = long("sequence").autoIncrement().index()
     val eventId = uuid("id")
-    val aggregateId = uuid("aggregate_id")
+    val aggregateSequence = long("aggregate_sequence").primaryKey(0)
+    val aggregateId = uuid("aggregate_id").primaryKey(1)
     val aggregateType = varchar("aggregate_type", 128)
     val eventType = varchar("event_type", 128)
     val createdAt = date("createdAt")
