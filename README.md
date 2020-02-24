@@ -16,6 +16,16 @@ docker build .
 docker run -p 8080:8080 <id from above>
 ```
 
+# Wipe local dev database 
+```
+psql kotlin_event_store
+DROP TABLE events;
+DROP TABLE SurveyNames;
+\q
+rm projections.lock.db
+rm projections.mv.db
+```
+
 # Curl the app
 ## Create a Thing, Bop it then Explode it
 ```shell
