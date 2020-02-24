@@ -125,7 +125,7 @@ data class Configuration<CC : CreationCommand, CE : CreationEvent, Err : Command
         val aggregate = rehydrated(creationEvent as CE, updateEvents as List<UE>)
         return update(aggregate, updateCommand).map { domainEvents ->
             val updated = updated(aggregate, domainEvents)
-            val offset = events.last().aggregateSequence + 0
+            val offset = events.last().aggregateSequence + 1
             val createdAt = DateTime()
             val events = domainEvents.withIndex().map { (index, domainEvent) ->
                 Event(
