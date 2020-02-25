@@ -24,7 +24,7 @@ data class ParticipantAggregate(val state: State) : Aggregate {
         when (command) {
             is Invite -> when (state) {
                 INVITED -> Left(AlreadyInvitedException)
-                UNINVITED -> with(command) { Right.list(Invited(surveyPeriodId, employeeId, invitedAt)) }
+                UNINVITED -> with(command) { Right.list(Reinvited(invitedAt)) }
             }
             is Uninvite -> when (state) {
                 UNINVITED -> Left(AlreadyUninvitedException)
