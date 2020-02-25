@@ -1,5 +1,6 @@
-import eventsourcing.*
+import com.cultureamp.eventsourcing.*
 import org.jetbrains.exposed.sql.Database
+import org.jetbrains.exposed.sql.SchemaUtils
 import org.jetbrains.exposed.sql.StdOutSqlLogger
 import org.jetbrains.exposed.sql.addLogger
 import org.jetbrains.exposed.sql.transactions.transaction
@@ -50,20 +51,22 @@ fun main() {
         ),
         Configuration.from(ThingAggregate, thingCommandProjection)
     )
-    val eventStore = DatabaseEventStore.create(eventStoreDatabase)
+    val eventStore = PostgresDatabaseEventStore.create(eventStoreDatabase)
+    eventStore.setup()
     val commandGateway = CommandGateway(eventStore, registry)
     val paymentService = PaymentService()
     val emailService = EmailService()
-    val paymentSagaReactor = PaymentSagaReactor(commandGateway, paymentService, emailService, eventStoreDatabase)
+    val paymentSagaReactor = PaymentSagaReactor(commandGateway, paymentService, emailService, eventStoreDatabase);
+    paymentSagaReactor.setup()
     val surveySagaReactor = SurveySagaReactor(commandGateway)
 
     // TODO this should be done as separate threads/workers that poll the event-store
-    eventStore.listeners = listOf(
+    eventStore.listeners.addAll(listOf(
         EventListener.from(paymentSagaReactor::react),
         EventListener.from(surveySagaReactor::react),
         EventListener.from(surveyNamesCommandProjector::project),
         EventListener.from(surveyCommandProjector::first, surveyCommandProjector::second)
-    )
+    ))
 
     Ktor.startEmbeddedCommandServer(commandGateway, eventStore)
 }

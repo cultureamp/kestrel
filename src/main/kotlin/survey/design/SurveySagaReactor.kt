@@ -1,6 +1,9 @@
 package survey.design
 
-import eventsourcing.*
+import com.cultureamp.eventsourcing.CommandGateway
+import com.cultureamp.eventsourcing.Left
+import com.cultureamp.eventsourcing.Right
+import com.cultureamp.eventsourcing.Updated
 import org.joda.time.DateTime
 import java.util.*
 

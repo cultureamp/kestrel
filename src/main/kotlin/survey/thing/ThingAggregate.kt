@@ -1,6 +1,6 @@
 package survey.thing
 
-import eventsourcing.*
+import com.cultureamp.eventsourcing.*
 import java.util.UUID
 
 sealed class ThingCommand : Command
