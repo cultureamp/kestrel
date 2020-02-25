@@ -40,7 +40,7 @@ class DatabaseEventStore private constructor(private val db: Database) : EventSt
                     }
                 }
 
-                notifyListeners(newEvents, aggregateId) // TODO make sure all listeners use the same database
+                notifyListeners(newEvents, aggregateId)
                 Right(Unit)
             }
         } catch (e: ExposedSQLException) {
