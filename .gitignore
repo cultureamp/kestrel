@@ -3,3 +3,4 @@
 out/
 build/
 .idea/
+kotlin-cqrs-eventsourcing.iml
