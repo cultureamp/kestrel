@@ -105,6 +105,7 @@ private fun errorToStatusCode(commandError: CommandError) = when (commandError) 
     is AuthorizationCommandError -> HttpStatusCode.Unauthorized
     is AggregateAlreadyExists -> HttpStatusCode.Conflict
     is NoConstructorForCommand -> HttpStatusCode.NotImplemented
+    is RetriableError -> HttpStatusCode.InternalServerError
     else -> HttpStatusCode.Forbidden
 }
 

@@ -30,14 +30,18 @@ class PostgresDatabaseEventStore private constructor(private val db: Database) :
         return try {
             return transaction(db) {
                 newEvents.forEach { event ->
+                    val body = om.writeValueAsString(event.domainEvent)
+                    val eventType = event.domainEvent.javaClass
+                    // prove that json body can be deserialized, which catches invalid fields types, e.g. interfaces
+                    om.readValue<DomainEvent>(body, eventType)
                     Events.insert { row ->
                         row[Events.aggregateSequence] = event.aggregateSequence
                         row[Events.eventId] = event.id
                         row[Events.aggregateId] = aggregateId
                         row[Events.aggregateType] = aggregateType
-                        row[Events.eventType] = event.domainEvent.javaClass.canonicalName
+                        row[Events.eventType] = eventType.canonicalName
                         row[Events.createdAt] = DateTime.now()
-                        row[Events.body] = om.writeValueAsString(event.domainEvent)
+                        row[Events.body] = body
                         row[Events.metadata] = om.writeValueAsString(event.metadata)
                     }
                 }
