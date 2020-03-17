@@ -1,4 +1,4 @@
-package eventsourcing
+package com.cultureamp.eventsourcing
 
 import org.joda.time.DateTime
 import java.util.*

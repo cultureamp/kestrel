@@ -1,6 +1,6 @@
 package survey.demo
 
-import eventsourcing.*
+import com.cultureamp.eventsourcing.*
 import org.joda.time.DateTime
 import java.util.*
 

@@ -1,28 +1,30 @@
-package eventsourcing
+package com.cultureamp.eventsourcing
 
 import com.fasterxml.jackson.databind.ObjectMapper
 import com.fasterxml.jackson.databind.SerializationFeature.WRITE_DATES_AS_TIMESTAMPS
 import com.fasterxml.jackson.datatype.joda.JodaModule
 import com.fasterxml.jackson.module.kotlin.registerKotlinModule
-import database.jsonb
 import org.jetbrains.exposed.exceptions.ExposedSQLException
 import org.jetbrains.exposed.sql.*
 import org.jetbrains.exposed.sql.transactions.transaction
 import org.joda.time.DateTime
 import java.util.*
 
-class DatabaseEventStore private constructor(private val db: Database) : EventStore {
+class PostgresDatabaseEventStore private constructor(private val db: Database) : EventStore {
     companion object {
-        fun create(db: Database): DatabaseEventStore {
-            transaction(db) {
-                // TODO don't do this if pointing directly to Murmur DB or potentially introduce separate migrations
-                SchemaUtils.create(Events)
-            }
-            return DatabaseEventStore(db)
+        fun create(db: Database): PostgresDatabaseEventStore {
+            return PostgresDatabaseEventStore(db)
         }
     }
 
-    override lateinit var listeners: List<EventListener>
+    override val listeners: MutableList<EventListener> = mutableListOf()
+
+    override fun setup() {
+        transaction(db) {
+            // TODO don't do this if pointing directly to Murmur DB or potentially introduce separate migrations
+            SchemaUtils.create(Events)
+        }
+    }
 
     override fun sink(newEvents: List<Event>, aggregateId: UUID, aggregateType: String): Either<CommandError, Unit> {
         return try {
@@ -52,24 +54,38 @@ class DatabaseEventStore private constructor(private val db: Database) : EventSt
         }
     }
 
+    private fun rowToEvent(row: ResultRow): Event = row.let {
+        val type = row[Events.eventType].asClass<DomainEvent>()
+        val domainEvent = om.readValue(row[Events.body], type)
+        val metadata = om.readValue(row[Events.metadata], Metadata::class.java)
+        Event(
+            id = row[Events.eventId],
+            aggregateId = row[Events.aggregateId],
+            aggregateSequence = row[Events.aggregateSequence],
+            createdAt = row[Events.createdAt],
+            metadata = metadata,
+            domainEvent = domainEvent
+        )
+    }
+
+    override fun replay(aggregateType: String, project: (Event) -> Unit) {
+        return transaction(db) {
+            Events
+                .select {
+                    Events.aggregateType eq aggregateType
+                }
+                .orderBy(Events.sequence)
+                .mapLazy(::rowToEvent)
+                .forEach(project)
+        }
+    }
+
     override fun eventsFor(aggregateId: UUID): List<Event> {
         return transaction(db) {
             Events
                 .select { Events.aggregateId eq aggregateId }
                 .orderBy(Events.sequence)
-                .map { row ->
-                    val type = row[Events.eventType].asClass<DomainEvent>()
-                    val domainEvent = om.readValue(row[Events.body], type)
-                    val metadata = om.readValue(row[Events.metadata], Metadata::class.java)
-                    Event(
-                        id = row[Events.eventId],
-                        aggregateId = aggregateId,
-                        aggregateSequence = row[Events.aggregateSequence],
-                        createdAt = row[Events.createdAt],
-                        metadata = metadata,
-                        domainEvent = domainEvent
-                    )
-                }
+                .map(::rowToEvent)
         }
     }
 }

@@ -1,7 +1,7 @@
 package survey.design
 
-import eventsourcing.Left
-import eventsourcing.Right
+import com.cultureamp.eventsourcing.Left
+import com.cultureamp.eventsourcing.Right
 import io.kotlintest.Description
 import io.kotlintest.shouldBe
 import io.kotlintest.specs.ShouldSpec

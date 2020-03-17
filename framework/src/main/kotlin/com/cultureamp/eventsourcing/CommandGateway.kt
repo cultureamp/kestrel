@@ -1,4 +1,4 @@
-package eventsourcing
+package com.cultureamp.eventsourcing
 
 class CommandGateway(private val eventStore: EventStore, private val registry: List<Configuration<*, *, *, *, *, *>>) {
 

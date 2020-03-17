@@ -1,5 +1,4 @@
-package eventsourcing
-
+import com.cultureamp.eventsourcing.*
 import com.fasterxml.jackson.core.json.ReaderBasedJsonParser
 import com.fasterxml.jackson.databind.SerializationFeature.WRITE_DATES_AS_TIMESTAMPS
 import com.fasterxml.jackson.databind.exc.MismatchedInputException
@@ -60,7 +59,7 @@ object Ktor {
                         }
                         call.respond(
                             status = statusCode,
-                            message = message
+                            message = message ?: "Something went wrong"
                         )
                     } catch (e: Throwable) {
                         logStacktrace(e)

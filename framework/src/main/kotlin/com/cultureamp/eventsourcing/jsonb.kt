@@ -1,9 +1,7 @@
-package database
+package com.cultureamp.eventsourcing
 
 
-import com.fasterxml.jackson.databind.ObjectMapper
 import org.jetbrains.exposed.sql.Column
-import org.jetbrains.exposed.sql.ColumnType
 import org.jetbrains.exposed.sql.StringColumnType
 import org.jetbrains.exposed.sql.Table
 import org.postgresql.util.PGobject

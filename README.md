@@ -1,3 +1,9 @@
+# Build framework jar
+```
+./gradlew jar
+```
+Places jar in `/framework/build/libs/framework.jar`
+
 # Run tests
 
 ```

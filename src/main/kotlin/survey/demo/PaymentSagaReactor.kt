@@ -1,8 +1,8 @@
 package survey.demo
 
-import eventsourcing.CommandGateway
-import eventsourcing.Right
-import eventsourcing.Updated
+import com.cultureamp.eventsourcing.CommandGateway
+import com.cultureamp.eventsourcing.Right
+import com.cultureamp.eventsourcing.Updated
 import org.jetbrains.exposed.sql.*
 import org.jetbrains.exposed.sql.transactions.transaction
 import org.joda.time.DateTime
@@ -14,6 +14,11 @@ class PaymentSagaReactor(
     private val emailService: EmailService,
     private val database: Database
     ) {
+    fun setup() {
+        transaction(database) {
+            SchemaUtils.create(Payments);
+        }
+    }
     fun react(event: PaymentSagaEvent, aggregateId: UUID) = when (event) {
         is PaymentSagaStarted -> with(event) {
             transaction(database) {
