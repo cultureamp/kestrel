@@ -10,8 +10,7 @@ import org.jetbrains.exposed.sql.transactions.transaction
 import org.joda.time.DateTime
 import java.util.*
 
-class PostgresDatabaseEventStore private constructor(private val db: Database) :
-    EventStore {
+class PostgresDatabaseEventStore private constructor(private val db: Database) : EventStore {
     companion object {
         fun create(db: Database): PostgresDatabaseEventStore {
             return PostgresDatabaseEventStore(db)
@@ -23,7 +22,7 @@ class PostgresDatabaseEventStore private constructor(private val db: Database) :
     override fun setup() {
         transaction(db) {
             // TODO don't do this if pointing directly to Murmur DB or potentially introduce separate migrations
-            SchemaUtils.createMissingTablesAndColumns(Events)
+            SchemaUtils.create(Events)
         }
     }
 
