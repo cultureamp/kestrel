@@ -99,8 +99,8 @@ val om = ObjectMapper().registerKotlinModule().registerModule(JodaModule()).conf
 object Events : Table() {
     val sequence = long("sequence").autoIncrement().index()
     val eventId = uuid("id")
-    val aggregateSequence = long("aggregate_sequence").primaryKey(0)
-    val aggregateId = uuid("aggregate_id").primaryKey(1)
+    val aggregateSequence = long("aggregate_sequence").primaryKey(1)
+    val aggregateId = uuid("aggregate_id").primaryKey(0)
     val aggregateType = varchar("aggregate_type", 128)
     val eventType = varchar("event_type", 128)
     val createdAt = date("createdAt")
