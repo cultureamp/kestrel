@@ -15,6 +15,13 @@ Places jar in `/framework/build/libs/framework.jar`
 ```
 ./gradlew run"
 ```
+or run `App.kt` from inside IntelliJ
+
+In either case, you'll need the following environment variables configured to point to postgres:
+```
+EVENT_STORE_DBNAME=kotlin_event_store;EVENT_STORE_HOST=localhost;EVENT_STORE_USERNAME=william.boxhall;EVENT_STORE_PORT=5432;EVENT_STORE_SSL=false
+```
+You sadly can't use in-memory h2sql to run the app because it doesn't support the `jsonb` data type
 
 # Run with Docker
 ```
