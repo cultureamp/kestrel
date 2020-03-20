@@ -52,7 +52,13 @@ fun main() {
         ),
         Configuration.from(ThingAggregate, thingCommandProjection)
     )
-    val eventStore = PostgresDatabaseEventStore.create(eventStoreDatabase)
+
+    val synchronousProjectors = listOf(
+        EventListener.from(surveyNamesCommandProjector::project),
+        EventListener.from(surveyCommandProjector::first, surveyCommandProjector::second)
+    )
+
+    val eventStore = PostgresDatabaseEventStore.create(synchronousProjectors, eventStoreDatabase)
     eventStore.setup()
     val commandGateway = CommandGateway(eventStore, registry)
     val paymentService = PaymentService()
@@ -60,13 +66,6 @@ fun main() {
     val paymentSagaReactor = PaymentSagaReactor(commandGateway, paymentService, emailService, eventStoreDatabase);
     paymentSagaReactor.setup()
     val surveySagaReactor = SurveySagaReactor(commandGateway)
-
-    val synchronousProjectors = listOf(
-        EventListener.from(surveyNamesCommandProjector::project),
-        EventListener.from(surveyCommandProjector::first, surveyCommandProjector::second)
-    )
-
-    eventStore.listeners.addAll(synchronousProjectors)
 
     val asynchronousReactors = listOf(
         PaymentSagaReactor::class to EventListener.from(paymentSagaReactor::react),

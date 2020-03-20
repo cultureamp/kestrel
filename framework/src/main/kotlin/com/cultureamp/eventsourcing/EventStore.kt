@@ -3,6 +3,7 @@ package com.cultureamp.eventsourcing
 import java.util.UUID
 
 interface EventStore {
+    @Deprecated("Use synchronousProjectors constructor parameter")
     val listeners: MutableList<EventListener>
 
     fun sink(newEvents: List<Event>, aggregateId: UUID, aggregateType: String): Either<CommandError, Unit>

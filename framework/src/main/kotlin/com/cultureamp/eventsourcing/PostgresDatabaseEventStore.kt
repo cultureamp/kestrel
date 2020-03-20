@@ -10,14 +10,14 @@ import org.jetbrains.exposed.sql.transactions.transaction
 import org.joda.time.DateTime
 import java.util.*
 
-class PostgresDatabaseEventStore private constructor(private val db: Database) : EventStore {
+class PostgresDatabaseEventStore private constructor(private val db: Database, synchronousProjectors: List<EventListener>) : EventStore {
     companion object {
-        fun create(db: Database): PostgresDatabaseEventStore {
-            return PostgresDatabaseEventStore(db)
+        fun create(synchronousProjectors: List<EventListener>, db: Database): PostgresDatabaseEventStore {
+            return PostgresDatabaseEventStore(db, synchronousProjectors)
         }
     }
 
-    override val listeners: MutableList<EventListener> = mutableListOf()
+    override val listeners: MutableList<EventListener> = synchronousProjectors.toMutableList()
 
     override fun setup() {
         transaction(db) {
