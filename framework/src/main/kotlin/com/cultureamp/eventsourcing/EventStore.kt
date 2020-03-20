@@ -11,10 +11,7 @@ interface EventStore {
 
     // TODO this should be removed and implemented as separate threads/workers that poll the event-store
     fun notifyListeners(newEvents: List<Event>, aggregateId: UUID) {
-        newEvents.forEach { event ->
-            listeners.flatMap { it.handlers.filterKeys { it.isInstance(event.domainEvent) }.values }
-                .forEach { it(event.domainEvent, aggregateId) }
-        }
+        newEvents.forEach { event -> listeners.forEach { it.handle(event) } }
     }
 
     fun setup()
