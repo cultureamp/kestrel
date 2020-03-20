@@ -188,6 +188,8 @@ data class Event(
     val domainEvent: DomainEvent
 )
 
+data class SequencedEvent(val event: Event, val sequence: Long)
+
 data class Metadata(
     val account_id: UUID,
     val user_id: UUID? = null,
