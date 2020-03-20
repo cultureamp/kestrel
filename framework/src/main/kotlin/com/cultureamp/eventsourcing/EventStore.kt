@@ -21,5 +21,5 @@ interface EventStore {
      */
     fun replay(aggregateType: String, project: (Event) -> Unit)
 
-    fun getAfter(sequence: Long, batchSize: Int) : Iterable<SequencedEvent>
+    fun getAfter(sequence: Long, batchSize: Int) : List<SequencedEvent>
 }

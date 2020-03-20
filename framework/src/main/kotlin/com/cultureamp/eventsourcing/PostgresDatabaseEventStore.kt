@@ -85,7 +85,7 @@ class PostgresDatabaseEventStore private constructor(private val db: Database) :
         }
     }
 
-    override fun getAfter(sequence: Long, batchSize: Int): Iterable<SequencedEvent> {
+    override fun getAfter(sequence: Long, batchSize: Int): List<SequencedEvent> {
         return transaction(db) {
             Events
                 .select {
@@ -93,7 +93,7 @@ class PostgresDatabaseEventStore private constructor(private val db: Database) :
                 }
                 .orderBy(Events.sequence)
                 .limit(batchSize)
-                .mapLazy(::rowToSequencedEvent)
+                .map(::rowToSequencedEvent)
         }
     }
 
