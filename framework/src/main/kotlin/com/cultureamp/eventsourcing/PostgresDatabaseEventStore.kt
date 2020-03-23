@@ -10,14 +10,14 @@ import org.jetbrains.exposed.sql.transactions.transaction
 import org.joda.time.DateTime
 import java.util.*
 
-class PostgresDatabaseEventStore private constructor(private val db: Database) : EventStore {
+class PostgresDatabaseEventStore private constructor(private val db: Database, synchronousProjectors: List<EventListener>) : EventStore {
     companion object {
-        fun create(db: Database): PostgresDatabaseEventStore {
-            return PostgresDatabaseEventStore(db)
+        fun create(synchronousProjectors: List<EventListener>, db: Database): PostgresDatabaseEventStore {
+            return PostgresDatabaseEventStore(db, synchronousProjectors)
         }
     }
 
-    override val listeners: MutableList<EventListener> = mutableListOf()
+    override val listeners: MutableList<EventListener> = synchronousProjectors.toMutableList()
 
     override fun setup() {
         transaction(db) {
@@ -58,18 +58,18 @@ class PostgresDatabaseEventStore private constructor(private val db: Database) :
         }
     }
 
-    private fun rowToEvent(row: ResultRow): Event = row.let {
+    private fun rowToSequencedEvent(row: ResultRow): SequencedEvent = row.let {
         val type = row[Events.eventType].asClass<DomainEvent>()
         val domainEvent = om.readValue(row[Events.body], type)
         val metadata = om.readValue(row[Events.metadata], Metadata::class.java)
-        Event(
+        SequencedEvent(Event(
             id = row[Events.eventId],
             aggregateId = row[Events.aggregateId],
             aggregateSequence = row[Events.aggregateSequence],
             createdAt = row[Events.createdAt],
             metadata = metadata,
             domainEvent = domainEvent
-        )
+        ), row[Events.sequence])
     }
 
     override fun replay(aggregateType: String, project: (Event) -> Unit) {
@@ -79,8 +79,21 @@ class PostgresDatabaseEventStore private constructor(private val db: Database) :
                     Events.aggregateType eq aggregateType
                 }
                 .orderBy(Events.sequence)
-                .mapLazy(::rowToEvent)
+                .mapLazy(::rowToSequencedEvent)
+                .mapLazy { it.event }
                 .forEach(project)
+        }
+    }
+
+    override fun getAfter(sequence: Long, batchSize: Int): List<SequencedEvent> {
+        return transaction(db) {
+            Events
+                .select {
+                    Events.sequence greater sequence
+                }
+                .orderBy(Events.sequence)
+                .limit(batchSize)
+                .map(::rowToSequencedEvent)
         }
     }
 
@@ -89,7 +102,8 @@ class PostgresDatabaseEventStore private constructor(private val db: Database) :
             Events
                 .select { Events.aggregateId eq aggregateId }
                 .orderBy(Events.sequence)
-                .map(::rowToEvent)
+                .map(::rowToSequencedEvent)
+                .map { it.event }
         }
     }
 }

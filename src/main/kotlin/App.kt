@@ -1,6 +1,5 @@
 import com.cultureamp.eventsourcing.*
 import org.jetbrains.exposed.sql.Database
-import org.jetbrains.exposed.sql.SchemaUtils
 import org.jetbrains.exposed.sql.StdOutSqlLogger
 import org.jetbrains.exposed.sql.addLogger
 import org.jetbrains.exposed.sql.transactions.transaction
@@ -8,6 +7,8 @@ import survey.demo.*
 import survey.design.*
 import survey.thing.AlwaysBoppable
 import survey.thing.ThingAggregate
+import kotlin.concurrent.thread
+import com.cultureamp.common.toSnakeCase
 
 fun main() {
     val eventStoreDatabase = Database.connect(DatabaseConfig.fromEnvironment("EVENT_STORE").toDataSource("event_store"))
@@ -51,7 +52,13 @@ fun main() {
         ),
         Configuration.from(ThingAggregate, thingCommandProjection)
     )
-    val eventStore = PostgresDatabaseEventStore.create(eventStoreDatabase)
+
+    val synchronousProjectors = listOf(
+        EventListener.from(surveyNamesCommandProjector::project),
+        EventListener.from(surveyCommandProjector::first, surveyCommandProjector::second)
+    )
+
+    val eventStore = PostgresDatabaseEventStore.create(synchronousProjectors, eventStoreDatabase)
     eventStore.setup()
     val commandGateway = CommandGateway(eventStore, registry)
     val paymentService = PaymentService()
@@ -60,13 +67,24 @@ fun main() {
     paymentSagaReactor.setup()
     val surveySagaReactor = SurveySagaReactor(commandGateway)
 
-    // TODO this should be done as separate threads/workers that poll the event-store
-    eventStore.listeners.addAll(listOf(
-        EventListener.from(paymentSagaReactor::react),
-        EventListener.from(surveySagaReactor::react),
-        EventListener.from(surveyNamesCommandProjector::project),
-        EventListener.from(surveyCommandProjector::first, surveyCommandProjector::second)
-    ))
+    val asynchronousReactors = listOf(
+        PaymentSagaReactor::class to EventListener.from(paymentSagaReactor::react),
+        SurveySagaReactor::class to EventListener.from(surveySagaReactor::react)
+    )
+
+    val bookmarkStore = InMemoryBookmarkStore()
+    asynchronousReactors
+        .map { it.first.java.canonicalName.toSnakeCase() to it.second }
+        .map {
+            thread(start = true, isDaemon = true, name = it.first) {
+                transaction(eventStoreDatabase) {
+                    addLogger(StdOutSqlLogger)
+                }
+                System.out.println("${it.first} reactor service starting")
+                AsyncEventProcessor(eventStore, bookmarkStore, it.first, it.second, 1).run()
+                System.out.println("${it.first} reactor service ending")
+            }
+        }
 
     Ktor.startEmbeddedCommandServer(commandGateway, eventStore)
 }

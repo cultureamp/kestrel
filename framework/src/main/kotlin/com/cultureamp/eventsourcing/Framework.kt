@@ -148,6 +148,10 @@ data class Configuration<CC : CreationCommand, CE : CreationEvent, Err : Command
 }
 
 data class EventListener(val handlers: Map<KClass<DomainEvent>, (DomainEvent, UUID) -> Any?>) {
+    fun handle(event: Event) {
+        handlers.filterKeys { it.isInstance(event.domainEvent) }.values.forEach { it(event.domainEvent, event.aggregateId)}
+    }
+
     @Suppress("UNCHECKED_CAST")
     companion object {
         inline fun <reified E : DomainEvent> from(noinline handle: (E, UUID) -> Any?): EventListener {
@@ -183,6 +187,8 @@ data class Event(
     val metadata: Metadata,
     val domainEvent: DomainEvent
 )
+
+data class SequencedEvent(val event: Event, val sequence: Long)
 
 data class Metadata(
     val account_id: UUID,
