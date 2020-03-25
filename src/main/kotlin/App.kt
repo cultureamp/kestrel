@@ -58,12 +58,12 @@ fun main() {
         EventListener.from(surveyCommandProjector::first, surveyCommandProjector::second)
     )
 
-    val eventStore = PostgresDatabaseEventStore.create(synchronousProjectors, eventStoreDatabase)
+    val eventStore = RelationalDatabaseEventStore.create(synchronousProjectors, eventStoreDatabase)
     eventStore.setup()
     val commandGateway = CommandGateway(eventStore, registry)
     val paymentService = PaymentService()
     val emailService = EmailService()
-    val paymentSagaReactor = PaymentSagaReactor(commandGateway, paymentService, emailService, eventStoreDatabase);
+    val paymentSagaReactor = PaymentSagaReactor(commandGateway, paymentService, emailService, eventStoreDatabase)
     paymentSagaReactor.setup()
     val surveySagaReactor = SurveySagaReactor(commandGateway)
 
