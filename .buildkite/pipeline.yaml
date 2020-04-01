@@ -1,22 +1,36 @@
 steps:
 
-  - name: ":docker: Build and push image"
-    command: "bin/ci_build_and_push.sh"
+  - name: docker_gradle
+    branches: "master"
+    command: bin/ci_build
     agents:
-      queue: ${BUILD_AGENT}
-    plugins:
-      cultureamp/aws-assume-role:
-        role: ${BUILD_ROLE}
+      queue: docker_gradle-restricted
 
-  - block: "Deploy to Development"
-    prompt: Select farms
+  - wait
+
+  - name: deploy
+    branches: "master"
+    command: bin/ci_deploy
+    agents:
+      queue: docker_gradle-restricted
+
+  - name: docker_gradle
+    branches: "!master"
+    command: bin/ci_build
+    agents:
+      queue: docker_gradle-unrestricted
+
+  - block: 'Push to Nexus'
+    branches: "!master"
+    prompt: Push to Nexus?
     fields:
-      - select: 'Ibex'
-        key: 'deploy-ibex'
-        options: ['deploy', 'skip']
-        default: 'skip'
+      - select: 'Push'
+        key: 'allow-deploy'
+        options: ['yes', 'no']
+        default: 'no'
 
-  - name: ":gear: Create CI farm steps"
-    command: "bin/ci_farm_steps.sh"
+  - name: deploy
+    branches: "!master"
+    command: bin/ci_deploy
     agents:
-      queue: build-unrestricted-small
+      queue: docker_gradle-unrestricted
