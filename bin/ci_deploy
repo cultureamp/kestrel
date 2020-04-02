@@ -1,2 +1,2 @@
 #!/bin/bash
-exec bin/ci_gradle deploy
+exec bin/ci_gradle publish
