@@ -106,20 +106,20 @@ data class Configuration<CC : CreationCommand, CE : CreationEvent, Err : Command
         }
     }
 
-    fun create(creationCommand: CC, eventStore: EventStore): Either<CommandError, Unit> = create(creationCommand).map { domainEvent ->
+    fun create(creationCommand: CC, metadata: Metadata, eventStore: EventStore): Either<CommandError, Unit> = create(creationCommand).map { domainEvent ->
         val aggregate = created(domainEvent)
         val event = Event(
             id = UUID.randomUUID(),
             aggregateId = creationCommand.aggregateId,
             aggregateSequence = 1,
             createdAt = DateTime(),
-            metadata = Metadata(UUID.randomUUID()), // TODO use "real" account id in metadata
+            metadata = metadata,
             domainEvent = domainEvent)
         eventStore.sink(listOf(event), creationCommand.aggregateId, aggregate.aggregateType())
     }.flatten()
 
     @Suppress("UNCHECKED_CAST")
-    fun update(updateCommand: UC, events: List<Event>, eventStore: EventStore): Either<CommandError, Unit> {
+    fun update(updateCommand: UC, metadata: Metadata, events: List<Event>, eventStore: EventStore): Either<CommandError, Unit> {
         val creationEvent = events.first().domainEvent as CreationEvent
         val updateEvents = events.slice(1 until events.size).map { it.domainEvent as UpdateEvent }
         val aggregate = rehydrated(creationEvent as CE, updateEvents as List<UE>)
@@ -133,7 +133,7 @@ data class Configuration<CC : CreationCommand, CE : CreationEvent, Err : Command
                     aggregateId = updateCommand.aggregateId,
                     aggregateSequence = offset + index,
                     createdAt = createdAt,
-                    metadata = Metadata(UUID.randomUUID()), // TODO use "real" account id in metadata
+                    metadata = metadata,
                     domainEvent = domainEvent
                 )
             }
@@ -190,13 +190,23 @@ data class Event(
 
 data class SequencedEvent(val event: Event, val sequence: Long)
 
-data class Metadata(
-    val account_id: UUID,
+interface Metadata
+
+/**
+ * Standard Culture Amp metadata. You probably want to consider logging these fields (but note they are optional).
+ * If you know these fields at all times, you can probably create a new `Metadata` subclass.
+ *
+ * @property account_id: The aggregate ID of the account that owns the event’s aggregate instance
+ * @property executor_id: The aggregate ID of the user that executed the command that resulted in the event
+ * @property causation_id: If the event is the result of an action performed by a reactor, the ID of the causal event
+ * @property correlation_id: The identifier of a correlated action, request or event
+ */
+data class CAStandardMetadata(
+    val account_id: UUID? = null,
     val user_id: UUID? = null,
     val correlation_id: UUID? = null,
-    val causation_id: UUID? = null,
-    val migrated: Boolean? = null
-)
+    val causation_id: UUID? = null
+): Metadata
 
 interface DomainEvent
 

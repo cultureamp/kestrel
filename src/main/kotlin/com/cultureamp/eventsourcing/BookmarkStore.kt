@@ -7,7 +7,7 @@ interface BookmarkStore {
 }
 
 class InMemoryBookmarkStore : BookmarkStore {
-    val map = hashMapOf<String, Bookmark>().withDefault { Bookmark(0) }
+    private val map = hashMapOf<String, Bookmark>().withDefault { Bookmark(0) }
 
     override fun findOrCreate(bookmarkName: String) = map.getValue(bookmarkName)
 
