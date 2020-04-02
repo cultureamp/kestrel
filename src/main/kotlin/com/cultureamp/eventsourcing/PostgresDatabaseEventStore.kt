@@ -13,13 +13,20 @@ import org.joda.time.DateTime
 import java.lang.UnsupportedOperationException
 import java.util.*
 
-class RelationalDatabaseEventStore internal constructor(private val db: Database, private val events: Events, synchronousProjectors: List<EventListener>) : EventStore {
+class RelationalDatabaseEventStore internal constructor(
+    private val db: Database,
+    private val events: Events,
+    synchronousProjectors: List<EventListener>
+) : EventStore {
     companion object {
-        fun create(synchronousProjectors: List<EventListener>, db: Database): RelationalDatabaseEventStore = when (db.dialect) {
-            is H2Dialect -> H2DatabaseEventStore.create(synchronousProjectors, db)
-            is PostgreSQLDialect -> PostgresDatabaseEventStore.create(synchronousProjectors, db)
-            else -> throw UnsupportedOperationException("${db.dialect} not currently supported")
-        }
+        fun create(synchronousProjectors: List<EventListener>, db: Database): RelationalDatabaseEventStore =
+            when (db.dialect) {
+                is H2Dialect -> H2DatabaseEventStore.create(synchronousProjectors, db)
+                is PostgreSQLDialect -> PostgresDatabaseEventStore.create(synchronousProjectors, db)
+                else -> throw UnsupportedOperationException("${db.dialect} not currently supported")
+            }
+
+        fun create(db: Database) = create(emptyList(), db)
     }
 
     override val listeners: MutableList<EventListener> = synchronousProjectors.toMutableList()
@@ -67,14 +74,16 @@ class RelationalDatabaseEventStore internal constructor(private val db: Database
         val type = row[events.eventType].asClass<DomainEvent>()
         val domainEvent = om.readValue(row[events.body], type)
         val metadata = om.readValue(row[events.metadata], Metadata::class.java)
-        SequencedEvent(Event(
-            id = row[events.eventId],
-            aggregateId = row[events.aggregateId],
-            aggregateSequence = row[events.aggregateSequence],
-            createdAt = row[events.createdAt],
-            metadata = metadata,
-            domainEvent = domainEvent
-        ), row[events.sequence])
+        SequencedEvent(
+            Event(
+                id = row[events.eventId],
+                aggregateId = row[events.aggregateId],
+                aggregateSequence = row[events.aggregateSequence],
+                createdAt = row[events.createdAt],
+                metadata = metadata,
+                domainEvent = domainEvent
+            ), row[events.sequence]
+        )
     }
 
     override fun replay(aggregateType: String, project: (Event) -> Unit) {
@@ -114,7 +123,12 @@ class RelationalDatabaseEventStore internal constructor(private val db: Database
 }
 
 object PostgresDatabaseEventStore {
-    @Deprecated("Use RelationalDatabaseEventStore.create(...)")
+    @Deprecated(
+        "Use RelationalDatabaseEventStore.create(...)", ReplaceWith(
+            "RelationalDatabaseEventStore.create(db, synchronousProjectors)",
+            "com.cultureamp.eventsourcing.RelationalDatabaseEventStore"
+        )
+    )
     fun create(synchronousProjectors: List<EventListener>, db: Database): RelationalDatabaseEventStore {
         return RelationalDatabaseEventStore(db, Events(Table::jsonb), synchronousProjectors)
     }
