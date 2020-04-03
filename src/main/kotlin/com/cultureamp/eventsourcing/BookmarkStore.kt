@@ -1,5 +1,9 @@
 package com.cultureamp.eventsourcing
 
+import org.jetbrains.exposed.sql.*
+import org.jetbrains.exposed.sql.transactions.transaction
+import org.joda.time.DateTime
+
 interface BookmarkStore {
     fun findOrCreate(bookmarkName: String): Bookmark
     fun save(bookmarkName: String, bookmark: Bookmark)
@@ -16,4 +20,43 @@ class InMemoryBookmarkStore : BookmarkStore {
     }
 }
 
+class RelationalDatabaseBookmarkStore(val db: Database, val table: BookmarksTable) : BookmarkStore {
+    override fun findOrCreate(bookmarkName: String): Bookmark = transaction(db) {
+        val matchingRows = rowsForBookmark(bookmarkName)
+        val bookmarkVal = when (matchingRows.count()) {
+            0 -> 0L
+            else -> matchingRows.single()[table.value]
+        }
+        Bookmark(bookmarkVal)
+    }
+
+    override fun save(bookmarkName: String, bookmark: Bookmark): Unit = transaction(db) {
+        when (rowsForBookmark(bookmarkName).count()) {
+            0 -> table.insert {
+                it[name] = bookmarkName
+                it[value] = bookmark.sequence
+                it[createdAt] = DateTime.now()
+                it[updatedAt] = DateTime.now()
+
+            }
+            else -> table.update {
+                it[name] = bookmarkName
+                it[value] = bookmark.sequence
+                it[updatedAt] = DateTime.now()
+            }
+        }
+    }
+
+    private fun rowsForBookmark(bookmarkName: String) = table.select { table.name eq bookmarkName }
+
+}
+
+class BookmarksTable(name: String = "bookmarks") : Table(name) {
+    val name = varchar("name", 160).primaryKey().uniqueIndex()
+    val value = long("value")
+    val createdAt = datetime("created_at")
+    val updatedAt = datetime("updated_at")
+}
+
 data class Bookmark(val sequence: Long)
+
