@@ -9,7 +9,7 @@ import org.jetbrains.exposed.sql.transactions.transaction
 class RelationalDatabaseBookmarkStoreTest : DescribeSpec({
     val h2DbUrl = "jdbc:h2:mem:test;MODE=MySQL;DB_CLOSE_DELAY=-1;"
     val h2Driver = "org.h2.Driver"
-    var db = Database.connect(url = h2DbUrl, driver = h2Driver)
+    val db = Database.connect(url = h2DbUrl, driver = h2Driver)
     val table = BookmarksTable()
     val store = RelationalDatabaseBookmarkStore(db, table)
 
@@ -32,10 +32,8 @@ class RelationalDatabaseBookmarkStoreTest : DescribeSpec({
         }
 
         it("returns zero for an unknown bookmark") {
-            val store = RelationalDatabaseBookmarkStore(db, table)
             store.findOrCreate("other-new-bookmark") shouldBe Bookmark(0L)
         }
-
     }
 })
 
