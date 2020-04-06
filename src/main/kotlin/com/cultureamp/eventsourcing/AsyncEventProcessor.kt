@@ -12,7 +12,7 @@ class AsyncEventProcessor(
 ) {
 
     fun run() {
-        ExponentialBackoff(onFailure = { error, consecutiveFailures -> error.printStackTrace() }).run(::projectOneBatch)
+        ExponentialBackoff(onFailure = { error, _ -> error.printStackTrace() }).run(::projectOneBatch)
     }
 
     private fun projectOneBatch(): Action {
@@ -22,7 +22,7 @@ class AsyncEventProcessor(
 
         val (count, sequence) = eventStore.getAfter(bookmark.sequence, batchSize).foldIndexed(
             0 to bookmark.sequence
-        ) { index, acc, sequencedEvent ->
+        ) { index, _, sequencedEvent ->
             eventListener.handle(sequencedEvent.event)
             index + 1 to sequencedEvent.sequence
         }

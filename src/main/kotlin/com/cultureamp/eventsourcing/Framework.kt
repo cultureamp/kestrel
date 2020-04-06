@@ -127,7 +127,7 @@ data class Configuration<CC : CreationCommand, CE : CreationEvent, Err : Command
             val updated = updated(aggregate, domainEvents)
             val offset = events.last().aggregateSequence + 1
             val createdAt = DateTime()
-            val events = domainEvents.withIndex().map { (index, domainEvent) ->
+            val storableEvents = domainEvents.withIndex().map { (index, domainEvent) ->
                 Event(
                     id = UUID.randomUUID(),
                     aggregateId = updateCommand.aggregateId,
@@ -137,7 +137,7 @@ data class Configuration<CC : CreationCommand, CE : CreationEvent, Err : Command
                     domainEvent = domainEvent
                 )
             }
-            eventStore.sink(events, updateCommand.aggregateId, updated.aggregateType())
+            eventStore.sink(storableEvents, updateCommand.aggregateId, updated.aggregateType())
         }.flatten()
     }
 

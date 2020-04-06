@@ -123,13 +123,7 @@ class RelationalDatabaseEventStore internal constructor(
 }
 
 object PostgresDatabaseEventStore {
-    @Deprecated(
-        "Use RelationalDatabaseEventStore.create(...)", ReplaceWith(
-            "RelationalDatabaseEventStore.create(db, synchronousProjectors)",
-            "com.cultureamp.eventsourcing.RelationalDatabaseEventStore"
-        )
-    )
-    fun create(synchronousProjectors: List<EventListener>, db: Database): RelationalDatabaseEventStore {
+    internal fun create(synchronousProjectors: List<EventListener>, db: Database): RelationalDatabaseEventStore {
         return RelationalDatabaseEventStore(db, Events(Table::jsonb), synchronousProjectors)
     }
 }
