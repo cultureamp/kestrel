@@ -1,8 +1,0 @@
-environment: 'production-eu'
-crsFarm: 'prod-euw1'
-cpu: 2048
-memory: 16384
-snapshotterCpu: 4096
-snapshotterMemory: 22528
-desiredCount: 2
-minCount: 2

@@ -6,26 +6,50 @@ buildscript {
 
     dependencies {
         classpath "org.jetbrains.kotlin:kotlin-gradle-plugin:$kotlin_version"
-        classpath "com.github.jengelman.gradle.plugins:shadow:2.0.1"
         classpath("com.cinnober.gradle:semver-git:2.3.1")
     }
 }
 
-apply plugin: 'application'
-
-apply plugin: 'com.github.johnrengelman.shadow'
-
 apply plugin: 'kotlin'
-group 'com.cultureamp'
+apply plugin: 'maven-publish' // for local publishing in dev, not for pushing to Nexus
+
+group group_id
+version "$base_version$version_suffix"
+
 sourceSets {
     main.kotlin.srcDirs = main.java.srcDirs = ["src/main/kotlin"]
     test.kotlin.srcDirs = test.java.srcDirs = ["src/test/kotlin"]
 }
+
+java {
+    withJavadocJar()
+    withSourcesJar()
+}
+
+publishing {
+    publications {
+        library(MavenPublication) {
+            from components.java
+        }
+    }
+
+    repositories {
+        maven {
+            name 'nexus'
+            def isSnapshot = version.endsWith('SNAPSHOT')
+            url "$nexus_repository_root/${isSnapshot ? 'snapshots' : 'releases'}"
+            credentials {
+                username = System.getenv('NEXUS_USERNAME')
+                password = System.getenv('NEXUS_PASSWORD')
+            }
+        }
+    }
+}
+
 repositories {
     mavenCentral()
     mavenLocal()
     jcenter()
-    maven { url 'https://kotlin.bintray.com/ktor' }
 }
 
 compileKotlin {
@@ -33,11 +57,6 @@ compileKotlin {
 }
 compileTestKotlin {
     kotlinOptions.jvmTarget = "1.8"
-}
-
-
-test {
-    environment "CONNECT_TO_DATABASE", "false"
 }
 
 test {
@@ -59,44 +78,18 @@ compileKotlin {
 }
 
 
-
-
 dependencies {
     implementation "com.fasterxml.jackson.module:jackson-module-kotlin:2.8.9"
     implementation "org.jetbrains.kotlin:kotlin-stdlib-jdk8:$kotlin_version"
     implementation "joda-time:joda-time:2.10.1"
     implementation group: 'com.fasterxml.jackson.datatype', name: 'jackson-datatype-joda', version: '2.8.9'
-    testCompile 'io.kotlintest:kotlintest-runner-junit5:3.3.0'
+    testImplementation 'io.kotlintest:kotlintest-runner-junit5:3.3.0'
     implementation "org.jetbrains.kotlin:kotlin-reflect:$kotlin_version"
     implementation "org.jetbrains.exposed:exposed:$exposed_version"
     implementation "io.github.microutils:kotlin-logging:1.4.4"
-    implementation "ch.qos.logback:logback-classic:1.0.13"
     implementation 'io.arrow-kt:arrow-core-data:0.9.0'
     implementation 'io.arrow-kt:arrow-effects-data:0.9.0'
     implementation 'org.postgresql:postgresql:42.2.5'
-    implementation "io.ktor:ktor-server-core:$ktor_version"
-    implementation "io.ktor:ktor-server-netty:$ktor_version"
-    implementation "io.ktor:ktor-jackson:$ktor_version"
-    implementation 'com.zaxxer:HikariCP:2.7.8'
-    implementation 'com.amazonaws:aws-java-sdk-iam:1.11.560'
-    implementation 'com.amazonaws:aws-java-sdk-rds:1.11.560'
-    implementation project(":framework")
-
 }
 
-
-//plugins {
-//    id 'org.jetbrains.kotlin.jvm' version $kotlin_version
-//}
-
-
-version '0.0.1-SNAPSHOT'
-mainClassName = 'AppKt'
-
-
-shadowJar {
-    baseName = 'main-with-deps'
-    classifier = null
-    version = null
-}
 

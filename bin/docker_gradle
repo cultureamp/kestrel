@@ -1,0 +1,34 @@
+#!/bin/bash
+set -e
+set -o pipefail
+set -u
+# required env:
+#   VERSION_SUFFIX
+#   NEXUS_USERNAME (for uploading)
+#   NEXUS_PASSWORD (for uploading)
+
+BASE="$(realpath $(dirname $0/..))" # probably can't handle dirs with spaces
+
+GRADLE_IMAGE="gradle:4.7.0-jdk8-alpine"
+
+TARGET="${1}"
+VERSION_SUFFIX="${VERSION_SUFFIX:-}"
+
+echo "--- :docker: pulling $GRADLE_IMAGE"
+docker pull "$GRADLE_IMAGE"
+
+echo "--- running 'gradle $TARGET' for version $VERSION_SUFFIX"
+# create and mount target dir as read-write, mount codebase as read-only
+mkdir -p "$BASE/build"
+
+docker run \
+  --rm \
+  --volume "$BASE:/home/gradle/src" \
+  --volume "$BASE/build:/home/gradle/src/build" \
+  --workdir /home/gradle/src \
+  --env NEXUS_PASSWORD \
+  --env NEXUS_USERNAME \
+  "$GRADLE_IMAGE" \
+  gradle \
+    -Pversion_suffix=$VERSION_SUFFIX \
+    $TARGET

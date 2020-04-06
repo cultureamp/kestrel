@@ -1,9 +1,0 @@
-environment: 'production-us'
-crsFarm: 'production'
-hasDBPrefix: false
-cpu: 4096
-memory: 30720
-snapshotterCpu: 4096
-snapshotterMemory: 30720
-desiredCount: 2
-minCount: 2
