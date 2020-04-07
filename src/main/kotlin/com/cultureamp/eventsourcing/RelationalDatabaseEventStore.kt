@@ -1,6 +1,7 @@
 package com.cultureamp.eventsourcing
 
 import com.fasterxml.jackson.databind.ObjectMapper
+import com.fasterxml.jackson.databind.SerializationFeature
 import com.fasterxml.jackson.databind.SerializationFeature.WRITE_DATES_AS_TIMESTAMPS
 import com.fasterxml.jackson.datatype.joda.JodaModule
 import com.fasterxml.jackson.module.kotlin.registerKotlinModule
@@ -31,7 +32,7 @@ class RelationalDatabaseEventStore internal constructor(
 
     override val listeners: MutableList<EventListener> = synchronousProjectors.toMutableList()
 
-    override fun setup() {
+    override fun setUp() {
         transaction(db) {
             // TODO don't do this if pointing directly to Murmur DB or potentially introduce separate migrations
             SchemaUtils.create(events)
@@ -42,10 +43,10 @@ class RelationalDatabaseEventStore internal constructor(
         return try {
             return transaction(db) {
                 newEvents.forEach { event ->
-                    val body = om.writeValueAsString(event.domainEvent)
+                    val body = OBJECT_MAPPER.writeValueAsString(event.domainEvent)
                     val eventType = event.domainEvent.javaClass
                     // prove that json body can be deserialized, which catches invalid fields types, e.g. interfaces
-                    om.readValue<DomainEvent>(body, eventType)
+                    OBJECT_MAPPER.readValue<DomainEvent>(body, eventType)
                     events.insert { row ->
                         row[events.aggregateSequence] = event.aggregateSequence
                         row[events.eventId] = event.id
@@ -54,7 +55,7 @@ class RelationalDatabaseEventStore internal constructor(
                         row[events.eventType] = eventType.canonicalName
                         row[events.createdAt] = DateTime.now()
                         row[events.body] = body
-                        row[events.metadata] = om.writeValueAsString(event.metadata)
+                        row[events.metadata] = OBJECT_MAPPER.writeValueAsString(event.metadata)
                     }
                 }
 
@@ -72,8 +73,8 @@ class RelationalDatabaseEventStore internal constructor(
 
     private fun rowToSequencedEvent(row: ResultRow): SequencedEvent = row.let {
         val type = row[events.eventType].asClass<DomainEvent>()
-        val domainEvent = om.readValue(row[events.body], type)
-        val metadata = om.readValue(row[events.metadata], Metadata::class.java)
+        val domainEvent = OBJECT_MAPPER.readValue(row[events.body], type)
+        val metadata = OBJECT_MAPPER.readValue(row[events.metadata], EventMetadata::class.java)
         SequencedEvent(
             Event(
                 id = row[events.eventId],
@@ -130,15 +131,18 @@ object PostgresDatabaseEventStore {
 
 object H2DatabaseEventStore {
     internal fun create(synchronousProjectors: List<EventListener>, db: Database): RelationalDatabaseEventStore {
-        return RelationalDatabaseEventStore(db, Events { name -> this.varchar(name, 128) }, synchronousProjectors)
+        return RelationalDatabaseEventStore(db, eventsTable(), synchronousProjectors)
     }
+
+    fun eventsTable() = Events { name -> this.text(name) }
 }
 
 private fun <T> String.asClass(): Class<out T>? {
     return Class.forName(this) as Class<out T>?
 }
 
-val om = ObjectMapper().registerKotlinModule().registerModule(JodaModule()).configure(WRITE_DATES_AS_TIMESTAMPS, false)
+private val OBJECT_MAPPER  = ObjectMapper().registerKotlinModule().registerModule(JodaModule()).configure(
+    WRITE_DATES_AS_TIMESTAMPS, false)
 
 class Events(jsonb: Table.(String) -> Column<String>) : Table() {
     val sequence = long("sequence").autoIncrement().index()

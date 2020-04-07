@@ -15,7 +15,7 @@ interface EventStore {
         newEvents.forEach { event -> listeners.forEach { it.handle(event) } }
     }
 
-    fun setup()
+    fun setUp()
 
     /**
      * Replay all the events in the store on the project function, for an aggregateType
