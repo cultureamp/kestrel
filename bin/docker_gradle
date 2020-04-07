@@ -20,6 +20,8 @@ echo "--- running 'gradle $TARGET' for version suffix '$VERSION_SUFFIX'"
 # create and mount target dir as read-write, mount codebase as read-only
 mkdir -p "$BASE/build"
 
+echo "--- NEXUS_USERNAME=$(echo -n ${NEXUS_USERNAME:-} | tr -C '', '*')"
+
 docker run \
   --rm \
   --volume "$BASE:/home/gradle/src" \
