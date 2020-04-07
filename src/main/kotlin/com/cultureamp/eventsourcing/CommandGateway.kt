@@ -4,7 +4,7 @@ import kotlinx.coroutines.delay
 
 class CommandGateway(private val eventStore: EventStore, private val registry: List<Configuration<*, *, *, *, *, *>>) {
 
-    tailrec suspend fun dispatch(command: Command, metadata: Metadata, retries: Int = 5): Either<CommandError, SuccessStatus> {
+    tailrec suspend fun dispatch(command: Command, metadata: EventMetadata, retries: Int = 5): Either<CommandError, SuccessStatus> {
         val result = createOrUpdate(command, metadata)
         return if (result is Left && result.error is RetriableError && retries > 0) {
             delay(500L)
@@ -14,7 +14,7 @@ class CommandGateway(private val eventStore: EventStore, private val registry: L
         }
     }
 
-    private fun createOrUpdate(command: Command, metadata: Metadata): Either<CommandError, SuccessStatus> {
+    private fun createOrUpdate(command: Command, metadata: EventMetadata): Either<CommandError, SuccessStatus> {
         val configuration = configurationFor(command) ?: return Left(NoConstructorForCommand)
         val events = eventStore.eventsFor(command.aggregateId)
         return if (events.isEmpty()) when (command) {
