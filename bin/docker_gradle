@@ -6,10 +6,9 @@ set -u
 #   VERSION_SUFFIX
 #   NEXUS_USERNAME (for uploading)
 #   NEXUS_PASSWORD (for uploading)
+BASE="$(pwd)"
 
-BASE="$(realpath $(dirname $0/..))" # probably can't handle dirs with spaces
-
-GRADLE_IMAGE="gradle:4.7.0-jdk8-alpine"
+GRADLE_IMAGE="gradle:6.3-jdk8"
 
 TARGET="${1}"
 VERSION_SUFFIX="${VERSION_SUFFIX:-}"
