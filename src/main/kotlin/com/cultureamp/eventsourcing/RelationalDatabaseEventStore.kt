@@ -151,7 +151,7 @@ class Events(jsonb: Table.(String) -> Column<String>) : Table() {
     val aggregateId = uuid("aggregate_id").primaryKey(0)
     val aggregateType = varchar("aggregate_type", 128)
     val eventType = varchar("event_type", 128)
-    val createdAt = date("createdAt")
+    val createdAt = date("created_at")
     val body = jsonb("json_body")
     val metadata = jsonb("metadata")
 }
