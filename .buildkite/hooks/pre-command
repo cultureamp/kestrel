@@ -67,11 +67,6 @@ set_maven_version_suffix() {
   echo "exporting MAVEN_VERSION_SUFFIX=${MAVEN_VERSION_SUFFIX}"
 }
 
-set_nexus_url() {
-  export NEXUS_REPOSITORY="https://package-repository.continuous-integration.cultureamp.net"
-  echo "NEXUS_REPOSITORY=${NEXUS_REPOSITORY}"
-}
-
 main() {
   local account; account=$(aws sts get-caller-identity --query Account --output text)
   local branch_qualifier; branch_qualifier=$(branch_qualifier "${BUILDKITE_BRANCH}")
@@ -87,8 +82,6 @@ main() {
   echo "--- Setting :maven: version suffix"
   set_maven_version_suffix "$branch_qualifier"
 
-  echo "--- Setting :nexus: URL"
-  set_nexus_url
 }
 
 main
