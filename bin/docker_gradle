@@ -10,13 +10,12 @@ BASE="$(pwd)"
 
 GRADLE_IMAGE="gradle:6.3-jdk8"
 
-TARGET="${1}"
 VERSION_SUFFIX="${VERSION_SUFFIX:-}"
 
 echo "--- :docker: pulling $GRADLE_IMAGE"
 docker pull "$GRADLE_IMAGE"
 
-echo "--- running 'gradle $TARGET' for version suffix '$VERSION_SUFFIX'"
+echo "--- running 'gradle -Pversion_suffix=$VERSION_SUFFIX $*"
 # create and mount target dir as read-write, mount codebase as read-only
 mkdir -p "$BASE/build"
 
@@ -32,4 +31,4 @@ docker run \
   "$GRADLE_IMAGE" \
   gradle \
     -Pversion_suffix=$VERSION_SUFFIX \
-    $TARGET
+    $*
