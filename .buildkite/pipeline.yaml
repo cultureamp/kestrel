@@ -1,6 +1,6 @@
 steps:
 
-  - name: docker_gradle
+  - name: build
     branches: "master"
     command: bin/ci_build
     agents:
@@ -14,7 +14,7 @@ steps:
     agents:
       queue: build-restricted
 
-  - name: docker_gradle
+  - name: build
     branches: "!master"
     command: bin/ci_build
     agents:
