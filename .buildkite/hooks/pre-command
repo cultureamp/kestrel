@@ -67,20 +67,6 @@ set_maven_version_suffix() {
   echo "exporting MAVEN_VERSION_SUFFIX=${MAVEN_VERSION_SUFFIX}"
 }
 
-set_ecr_repository_prefix() {
-  local account=$1
-  local branch_qualifier=$2
-  local pipeline=$3
-  export ECR_REPOSITORY="${account}.dkr.ecr.us-west-2.amazonaws.com"
-  export ECR_IMAGE_PREFIX="${branch_qualifier}/${pipeline}"
-  echo "exporting ECR_REPOSITORY=$ECR_REPOSITORY"
-  echo "exporting ECR_IMAGE_PREFIX=$ECR_IMAGE_PREFIX"
-}
-
-login_to_ecr() {
-  $(aws ecr get-login --no-include-email)
-}
-
 set_nexus_url() {
   export NEXUS_REPOSITORY="https://package-repository.continuous-integration.cultureamp.net"
   echo "NEXUS_REPOSITORY=${NEXUS_REPOSITORY}"
