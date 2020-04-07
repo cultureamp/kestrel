@@ -3,7 +3,10 @@ package com.cultureamp.eventsourcing.sample
 import com.cultureamp.eventsourcing.*
 import java.util.*
 
-data class CreateClassicPizza(val baseStyle: PizzaStyle, override val aggregateId: UUID) : PizzaCreationCommand()
+data class CreateClassicPizza(
+    override val aggregateId: UUID,
+    val baseStyle: PizzaStyle
+) : PizzaCreationCommand()
 
 enum class PizzaTopping {
     CHEESE,
@@ -13,15 +16,18 @@ enum class PizzaTopping {
     PINEAPPLE
 
 }
+
 enum class PizzaStyle {
     MARGHERITA,
     HAWAIIAN
 
 }
+
 sealed class PizzaCommand : Command
 
 sealed class PizzaCreationCommand : PizzaCommand(),
     CreationCommand
+
 sealed class PizzaUpdateCommand : PizzaCommand(), UpdateCommand
 
 data class AddTopping(override val aggregateId: UUID, val topping: PizzaTopping) : PizzaUpdateCommand()
@@ -81,14 +87,16 @@ data class PizzaAggregate(
         }
     }
 
-    override fun update(command: PizzaUpdateCommand): Either<PizzaError, List<PizzaUpdateEvent>> = when (command) {
-        is AddTopping -> when (toppings.contains(command.topping)) {
-            true -> Left(ToppingAlreadyPresent())
-            false -> Right(listOf(PizzaToppingAdded(command.topping)))
-        }
-        is EatPizza -> when (isEaten) {
+    override fun update(command: PizzaUpdateCommand): Either<PizzaError, List<PizzaUpdateEvent>> {
+        return when (isEaten) {
             true -> Left(PizzaAlreadyEaten())
-            false -> Right(listOf(PizzaEaten()))
+            false -> when (command) {
+                is AddTopping -> when (toppings.contains(command.topping)) {
+                    true -> Left(ToppingAlreadyPresent())
+                    false -> Right(listOf(PizzaToppingAdded(command.topping)))
+                }
+                is EatPizza -> Right(listOf(PizzaEaten()))
+            }
         }
     }
 }
