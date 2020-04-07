@@ -47,6 +47,8 @@ class RelationalDatabaseEventStore internal constructor(
                     val eventType = event.domainEvent.javaClass
                     // prove that json body can be deserialized, which catches invalid fields types, e.g. interfaces
                     OBJECT_MAPPER.readValue<DomainEvent>(body, eventType)
+                    val metadata = OBJECT_MAPPER.writeValueAsString(event.metadata)
+                    OBJECT_MAPPER.readValue<EventMetadata>(metadata, event.metadata.javaClass)
                     events.insert { row ->
                         row[events.aggregateSequence] = event.aggregateSequence
                         row[events.eventId] = event.id
@@ -55,7 +57,7 @@ class RelationalDatabaseEventStore internal constructor(
                         row[events.eventType] = eventType.canonicalName
                         row[events.createdAt] = DateTime.now()
                         row[events.body] = body
-                        row[events.metadata] = OBJECT_MAPPER.writeValueAsString(event.metadata)
+                        row[events.metadata] = metadata
                     }
                 }
 
