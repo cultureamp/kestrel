@@ -20,7 +20,7 @@ class InMemoryBookmarkStore : BookmarkStore {
     }
 }
 
-class RelationalDatabaseBookmarkStore(val db: Database, val table: BookmarksTable) : BookmarkStore {
+class RelationalDatabaseBookmarkStore(val db: Database, val table: Bookmarks) : BookmarkStore {
     override fun findOrCreate(bookmarkName: String): Bookmark = transaction(db) {
         val matchingRows = rowsForBookmark(bookmarkName)
         val bookmarkVal = when (matchingRows.count()) {
@@ -51,7 +51,7 @@ class RelationalDatabaseBookmarkStore(val db: Database, val table: BookmarksTabl
 
 }
 
-class BookmarksTable(name: String = "bookmarks") : Table(name) {
+class Bookmarks(name: String = "bookmarks") : Table(name) {
     val name = varchar("name", 160).primaryKey().uniqueIndex()
     val value = long("value")
     val createdAt = datetime("created_at")
