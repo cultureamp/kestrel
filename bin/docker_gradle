@@ -16,7 +16,7 @@ VERSION_SUFFIX="${VERSION_SUFFIX:-}"
 echo "--- :docker: pulling $GRADLE_IMAGE"
 docker pull "$GRADLE_IMAGE"
 
-echo "--- running 'gradle $TARGET' for version $VERSION_SUFFIX"
+echo "--- running 'gradle $TARGET' for version suffix '$VERSION_SUFFIX'"
 # create and mount target dir as read-write, mount codebase as read-only
 mkdir -p "$BASE/build"
 
