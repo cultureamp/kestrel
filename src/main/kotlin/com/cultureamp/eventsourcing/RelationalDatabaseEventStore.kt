@@ -1,5 +1,6 @@
 package com.cultureamp.eventsourcing
 
+import com.fasterxml.jackson.core.JsonProcessingException
 import com.fasterxml.jackson.databind.ObjectMapper
 import com.fasterxml.jackson.databind.SerializationFeature.WRITE_DATES_AS_TIMESTAMPS
 import com.fasterxml.jackson.datatype.joda.JodaModule
@@ -9,7 +10,6 @@ import org.jetbrains.exposed.sql.*
 import org.jetbrains.exposed.sql.transactions.transaction
 import org.jetbrains.exposed.sql.vendors.H2Dialect
 import org.jetbrains.exposed.sql.vendors.PostgreSQLDialect
-import org.joda.time.DateTime
 import java.lang.UnsupportedOperationException
 import java.util.*
 import kotlin.reflect.full.companionObjectInstance
@@ -25,14 +25,23 @@ class RelationalDatabaseEventStore internal constructor(
     private val defaultMetadataClass: Class<out EventMetadata>
 ) : EventStore {
     companion object {
-        fun create(synchronousProjectors: List<EventListener>, db: Database, defaultMetadataClass: Class<out EventMetadata> = EventMetadata::class.java): RelationalDatabaseEventStore =
+        fun create(
+            synchronousProjectors: List<EventListener>,
+            db: Database,
+            defaultMetadataClass: Class<out EventMetadata> = EventMetadata::class.java
+        ): RelationalDatabaseEventStore =
             when (db.dialect) {
                 is H2Dialect -> H2DatabaseEventStore.create(synchronousProjectors, db, defaultMetadataClass)
-                is PostgreSQLDialect -> PostgresDatabaseEventStore.create(synchronousProjectors, db, defaultMetadataClass)
+                is PostgreSQLDialect -> PostgresDatabaseEventStore.create(
+                    synchronousProjectors,
+                    db,
+                    defaultMetadataClass
+                )
                 else -> throw UnsupportedOperationException("${db.dialect} not currently supported")
             }
 
-        fun create(db: Database, defaultMetadataClass: Class<out EventMetadata> = EventMetadata::class.java) = create(emptyList(), db, defaultMetadataClass)
+        fun create(db: Database, defaultMetadataClass: Class<out EventMetadata> = EventMetadata::class.java) =
+            create(emptyList(), db, defaultMetadataClass)
     }
 
     override val listeners: MutableList<EventListener> = synchronousProjectors.toMutableList()
@@ -44,16 +53,15 @@ class RelationalDatabaseEventStore internal constructor(
         }
     }
 
+
     override fun sink(newEvents: List<Event>, aggregateId: UUID, aggregateType: String): Either<CommandError, Unit> {
         return try {
             return transaction(db) {
                 newEvents.forEach { event ->
                     val body = OBJECT_MAPPER.writeValueAsString(event.domainEvent)
                     val eventType = event.domainEvent.javaClass
-                    // prove that json body can be deserialized, which catches invalid fields types, e.g. interfaces
-                    OBJECT_MAPPER.readValue<DomainEvent>(body, eventType)
                     val metadata = OBJECT_MAPPER.writeValueAsString(event.metadata)
-                    OBJECT_MAPPER.readValue(metadata, metadataClassFor(eventType))
+                    validateSerialization(eventType, body, metadata)
                     events.insert { row ->
                         row[events.aggregateSequence] = event.aggregateSequence
                         row[events.eventId] = event.id
@@ -75,6 +83,21 @@ class RelationalDatabaseEventStore internal constructor(
             } else {
                 throw e
             }
+        }
+    }
+
+    private fun validateSerialization(eventType: Class<DomainEvent>, body: String, metadata: String) {
+        // prove that json body can be deserialized, which catches invalid fields types, e.g. interfaces
+        try {
+            OBJECT_MAPPER.readValue<DomainEvent>(body, eventType)
+        } catch (e: JsonProcessingException) {
+            throw EventBodySerializationException(e)
+        }
+
+        try {
+            OBJECT_MAPPER.readValue(metadata, metadataClassFor(eventType))
+        } catch (e: JsonProcessingException) {
+            throw EventMetadataSerializationException(e)
         }
     }
 
@@ -139,14 +162,26 @@ class RelationalDatabaseEventStore internal constructor(
     }
 }
 
+open class EventDataException(e: Exception): Throwable(e)
+class EventBodySerializationException(e: Exception) : EventDataException(e)
+class EventMetadataSerializationException(e: Exception) : EventDataException(e)
+
 object PostgresDatabaseEventStore {
-    internal fun create(synchronousProjectors: List<EventListener>, db: Database, defaultMetadataClass: Class<out EventMetadata>): RelationalDatabaseEventStore {
+    internal fun create(
+        synchronousProjectors: List<EventListener>,
+        db: Database,
+        defaultMetadataClass: Class<out EventMetadata>
+    ): RelationalDatabaseEventStore {
         return RelationalDatabaseEventStore(db, Events(Table::jsonb), synchronousProjectors, defaultMetadataClass)
     }
 }
 
 object H2DatabaseEventStore {
-    internal fun create(synchronousProjectors: List<EventListener>, db: Database, defaultMetadataClass: Class<out EventMetadata>): RelationalDatabaseEventStore {
+    internal fun create(
+        synchronousProjectors: List<EventListener>,
+        db: Database,
+        defaultMetadataClass: Class<out EventMetadata>
+    ): RelationalDatabaseEventStore {
         return RelationalDatabaseEventStore(db, eventsTable(), synchronousProjectors, defaultMetadataClass)
     }
 
@@ -157,8 +192,9 @@ private fun <T> String.asClass(): Class<out T>? {
     return Class.forName(this) as Class<out T>?
 }
 
-private val OBJECT_MAPPER  = ObjectMapper().registerKotlinModule().registerModule(JodaModule()).configure(
-    WRITE_DATES_AS_TIMESTAMPS, false)
+private val OBJECT_MAPPER = ObjectMapper().registerKotlinModule().registerModule(JodaModule()).configure(
+    WRITE_DATES_AS_TIMESTAMPS, false
+)
 
 class Events(jsonb: Table.(String) -> Column<String>) : Table() {
     val sequence = long("sequence").autoIncrement().index()

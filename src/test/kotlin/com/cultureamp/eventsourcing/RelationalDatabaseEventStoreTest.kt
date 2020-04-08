@@ -7,6 +7,7 @@ import org.jetbrains.exposed.sql.Database
 import org.jetbrains.exposed.sql.SchemaUtils
 import org.jetbrains.exposed.sql.transactions.transaction
 import org.joda.time.DateTime
+import org.junit.jupiter.api.assertThrows
 import java.util.*
 
 class RelationalDatabaseEventStoreTest : DescribeSpec({
@@ -59,10 +60,50 @@ class RelationalDatabaseEventStoreTest : DescribeSpec({
                 )
             )
 
-            store.sink(events, aggregateId, "pizza")
-            store.sink(otherEvents, otherAggregateId, "pizza")
+            store.sink(events, aggregateId, "pizza") shouldBe Right(Unit)
+            store.sink(otherEvents, otherAggregateId, "pizza") shouldBe Right(Unit)
 
             store.eventsFor(aggregateId) shouldBe events
+            store.eventsFor(otherAggregateId) shouldBe otherEvents
+
+            val expectedSequenceEvents = (events + otherEvents).mapIndexed { seq, ev -> SequencedEvent(ev, (seq + 1).toLong()) }
+            store.getAfter(0L, 100) shouldBe expectedSequenceEvents
+        }
+
+        it ("fails when non-default metadata is passed in and event uses default") {
+            val aggregateId = UUID.randomUUID()
+            val events = listOf(
+                event(
+                    PizzaToppingAdded(PizzaTopping.HAM),
+                    aggregateId,
+                    1,
+                    EmptyMetadata()
+                )
+            )
+
+            assertThrows<EventMetadataSerializationException> {
+                store.sink(events, aggregateId, "pizza")
+            }
+        }
+        
+        it ("fails when invalid metadata for the event is passed in") {
+            val aggregateId = UUID.randomUUID()
+            val basicPizzaCreated = PizzaCreated(
+                PizzaStyle.MARGHERITA,
+                listOf(PizzaTopping.TOMATO_PASTE, PizzaTopping.BASIL, PizzaTopping.CHEESE)
+            )
+            val events = listOf(
+                event(
+                    basicPizzaCreated,
+                    aggregateId,
+                    1,
+                    StandardEventMetadata("invalid_metadata")
+                )
+            )
+
+            assertThrows<EventMetadataSerializationException> {
+                store.sink(events, aggregateId, "pizza")
+            }
         }
     }
 })
