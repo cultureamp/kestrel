@@ -13,10 +13,10 @@ if [ "$allow_step" == "yes" ]; then
   VERSION_SUFFIX=""
 
   if [[ "$BUILDKITE_BRANCH" != master ]]; then
-    VERSION_SUFFIX="$BUILD_NUMBER-${BUILDKITE_BRANCH//\//-}-SNAPSHOT"
+    VERSION_SUFFIX="-${BUILDKITE_BRANCH//\//-}-SNAPSHOT"
   fi;
 
-  export $VERSION_SUFFIX
+  export VERSION_SUFFIX
   bin/docker_gradle $TARGET
 else
   echo "Skipping $TARGET"
