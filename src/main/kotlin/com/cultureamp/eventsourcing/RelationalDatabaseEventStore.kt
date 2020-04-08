@@ -19,7 +19,7 @@ interface MetadataClassProvider {
     val metadataClass: Class<out EventMetadata>
 }
 
-private val OBJECT_MAPPER = ObjectMapper()
+val defaultObjectMapper = ObjectMapper()
     .registerKotlinModule()
     .registerModule(JodaModule())
     .configure(WRITE_DATES_AS_TIMESTAMPS, false)
@@ -31,6 +31,14 @@ class RelationalDatabaseEventStore internal constructor(
     synchronousProjectors: List<EventListener>,
     private val defaultMetadataClass: Class<out EventMetadata>
 ) : EventStore {
+
+    private var _objectMapper = defaultObjectMapper
+    var objectMapper: ObjectMapper
+        get() = _objectMapper
+        set(value) {
+            _objectMapper = value
+        }
+
     companion object {
         fun create(
             synchronousProjectors: List<EventListener>,
@@ -65,9 +73,9 @@ class RelationalDatabaseEventStore internal constructor(
         return try {
             return transaction(db) {
                 newEvents.forEach { event ->
-                    val body = OBJECT_MAPPER.writeValueAsString(event.domainEvent)
+                    val body = objectMapper.writeValueAsString(event.domainEvent)
                     val eventType = event.domainEvent.javaClass
-                    val metadata = OBJECT_MAPPER.writeValueAsString(event.metadata)
+                    val metadata = objectMapper.writeValueAsString(event.metadata)
                     validateSerialization(eventType, body, metadata)
                     events.insert { row ->
                         row[events.aggregateSequence] = event.aggregateSequence
@@ -96,13 +104,13 @@ class RelationalDatabaseEventStore internal constructor(
     private fun validateSerialization(eventType: Class<DomainEvent>, body: String, metadata: String) {
         // prove that json body can be deserialized, which catches invalid fields types, e.g. interfaces
         try {
-            OBJECT_MAPPER.readValue<DomainEvent>(body, eventType)
+            objectMapper.readValue<DomainEvent>(body, eventType)
         } catch (e: JsonProcessingException) {
             throw EventBodySerializationException(e)
         }
 
         try {
-            OBJECT_MAPPER.readValue(metadata, metadataClassFor(eventType))
+            objectMapper.readValue(metadata, metadataClassFor(eventType))
         } catch (e: JsonProcessingException) {
             throw EventMetadataSerializationException(e)
         }
@@ -110,8 +118,8 @@ class RelationalDatabaseEventStore internal constructor(
 
     private fun rowToSequencedEvent(row: ResultRow): SequencedEvent = row.let {
         val eventType = row[events.eventType].asClass<DomainEvent>()!!
-        val domainEvent = OBJECT_MAPPER.readValue(row[events.body], eventType)
-        val metadata = OBJECT_MAPPER.readValue(row[events.metadata], metadataClassFor(eventType))
+        val domainEvent = objectMapper.readValue(row[events.body], eventType)
+        val metadata = objectMapper.readValue(row[events.metadata], metadataClassFor(eventType))
 
         SequencedEvent(
             Event(
@@ -169,7 +177,7 @@ class RelationalDatabaseEventStore internal constructor(
     }
 }
 
-open class EventDataException(e: Exception): Throwable(e)
+open class EventDataException(e: Exception) : Throwable(e)
 class EventBodySerializationException(e: Exception) : EventDataException(e)
 class EventMetadataSerializationException(e: Exception) : EventDataException(e)
 
