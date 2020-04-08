@@ -48,7 +48,12 @@ data class PizzaCreated(val baseStyle: PizzaStyle, val initialToppings: List<Piz
 sealed class PizzaUpdateEvent : PizzaEvent(), UpdateEvent
 data class PizzaToppingAdded(val newTopping: PizzaTopping) : PizzaUpdateEvent()
 
-class PizzaEaten : PizzaUpdateEvent()
+class PizzaEaten : PizzaUpdateEvent() {
+    override fun equals(other: Any?) = other?.javaClass == PizzaEaten::class.java
+    override fun hashCode(): Int {
+        return javaClass.hashCode()
+    }
+}
 
 sealed class PizzaError : CommandError
 class ToppingAlreadyPresent : PizzaError()
