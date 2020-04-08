@@ -2,6 +2,7 @@ package com.cultureamp.eventsourcing
 
 import com.fasterxml.jackson.core.JsonProcessingException
 import com.fasterxml.jackson.databind.ObjectMapper
+import com.fasterxml.jackson.databind.PropertyNamingStrategy
 import com.fasterxml.jackson.databind.SerializationFeature.WRITE_DATES_AS_TIMESTAMPS
 import com.fasterxml.jackson.datatype.joda.JodaModule
 import com.fasterxml.jackson.module.kotlin.registerKotlinModule
@@ -17,6 +18,12 @@ import kotlin.reflect.full.companionObjectInstance
 interface MetadataClassProvider {
     val metadataClass: Class<out EventMetadata>
 }
+
+private val OBJECT_MAPPER = ObjectMapper()
+    .registerKotlinModule()
+    .registerModule(JodaModule())
+    .configure(WRITE_DATES_AS_TIMESTAMPS, false)
+    .setPropertyNamingStrategy(PropertyNamingStrategy.SNAKE_CASE)
 
 class RelationalDatabaseEventStore internal constructor(
     private val db: Database,
@@ -191,10 +198,6 @@ object H2DatabaseEventStore {
 private fun <T> String.asClass(): Class<out T>? {
     return Class.forName(this) as Class<out T>?
 }
-
-private val OBJECT_MAPPER = ObjectMapper().registerKotlinModule().registerModule(JodaModule()).configure(
-    WRITE_DATES_AS_TIMESTAMPS, false
-)
 
 class Events(jsonb: Table.(String) -> Column<String>) : Table() {
     val sequence = long("sequence").autoIncrement().index()
