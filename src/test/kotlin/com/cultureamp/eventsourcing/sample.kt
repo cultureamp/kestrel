@@ -3,6 +3,10 @@ package com.cultureamp.eventsourcing.sample
 import com.cultureamp.eventsourcing.*
 import java.util.*
 
+data class StandardEventMetadata(val executor_id: String): EventMetadata()
+
+data class PizzaCreationEventMetadata(val executor_id: String, val restaurant_id: String): EventMetadata()
+
 data class CreateClassicPizza(
     override val aggregateId: UUID,
     val baseStyle: PizzaStyle
@@ -14,7 +18,6 @@ enum class PizzaTopping {
     BASIL,
     HAM,
     PINEAPPLE
-
 }
 
 enum class PizzaStyle {
@@ -36,7 +39,11 @@ data class EatPizza(override val aggregateId: UUID) : PizzaUpdateCommand()
 sealed class PizzaEvent : DomainEvent
 
 sealed class PizzaCreationEvent : PizzaEvent(), CreationEvent
-data class PizzaCreated(val baseStyle: PizzaStyle, val initialToppings: List<PizzaTopping>) : PizzaCreationEvent()
+data class PizzaCreated(val baseStyle: PizzaStyle, val initialToppings: List<PizzaTopping>) : PizzaCreationEvent() {
+    companion object: MetadataClassProvider {
+        override val metadataClass = PizzaCreationEventMetadata::class.java
+    }
+}
 
 sealed class PizzaUpdateEvent : PizzaEvent(), UpdateEvent
 data class PizzaToppingAdded(val newTopping: PizzaTopping) : PizzaUpdateEvent()

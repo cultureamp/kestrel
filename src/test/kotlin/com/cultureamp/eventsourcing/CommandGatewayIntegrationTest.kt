@@ -17,7 +17,7 @@ class CommandGatewayIntegrationTest : DescribeSpec({
     val h2Driver = "org.h2.Driver"
     val db = Database.connect(url = h2DbUrl, driver = h2Driver)
     val eventsTable = H2DatabaseEventStore.eventsTable()
-    val eventStore = RelationalDatabaseEventStore.create(db)
+    val eventStore = RelationalDatabaseEventStore.create(db, defaultMetadataClass = StandardEventMetadata::class.java)
     val registry = listOf(
         Configuration.from(PizzaAggregate)
     )
@@ -34,9 +34,11 @@ class CommandGatewayIntegrationTest : DescribeSpec({
     }
 
 
+    val creationEventMetadata = PizzaCreationEventMetadata("alice", "123")
+
     describe("CommandGateway") {
         it("accepts a creation event") {
-            val result = gateway.dispatch(CreateClassicPizza(UUID.randomUUID(), PizzaStyle.MARGHERITA), EmptyMetadata())
+            val result = gateway.dispatch(CreateClassicPizza(UUID.randomUUID(), PizzaStyle.MARGHERITA), creationEventMetadata)
             result shouldBe Right(Created)
             transaction(db) {
                 eventsTable.selectAll().count() shouldBe 1
@@ -45,9 +47,9 @@ class CommandGatewayIntegrationTest : DescribeSpec({
 
         it("fails on creation with duplicate UUIDs") {
             val aggregateId = UUID.randomUUID()
-            val result = gateway.dispatch(CreateClassicPizza(aggregateId, PizzaStyle.MARGHERITA), EmptyMetadata())
+            val result = gateway.dispatch(CreateClassicPizza(aggregateId, PizzaStyle.MARGHERITA), creationEventMetadata)
             result shouldBe Right(Created)
-            val result2 = gateway.dispatch(CreateClassicPizza(aggregateId, PizzaStyle.HAWAIIAN), EmptyMetadata())
+            val result2 = gateway.dispatch(CreateClassicPizza(aggregateId, PizzaStyle.HAWAIIAN), creationEventMetadata)
             result2 shouldBe Left(AggregateAlreadyExists)
             transaction(db) {
                 eventsTable.selectAll().count() shouldBe 1
@@ -56,9 +58,9 @@ class CommandGatewayIntegrationTest : DescribeSpec({
 
         it("accepts a creation then update event") {
             val aggregateId = UUID.randomUUID()
-            val result = gateway.dispatch(CreateClassicPizza(aggregateId, PizzaStyle.MARGHERITA), EmptyMetadata())
+            val result = gateway.dispatch(CreateClassicPizza(aggregateId, PizzaStyle.MARGHERITA), creationEventMetadata)
             result shouldBe Right(Created)
-            val result2 = gateway.dispatch(AddTopping(aggregateId, PizzaTopping.PINEAPPLE), EmptyMetadata())
+            val result2 = gateway.dispatch(AddTopping(aggregateId, PizzaTopping.PINEAPPLE), StandardEventMetadata("alice"))
             result2 shouldBe Right(Updated)
             transaction(db) {
                 eventsTable.selectAll().count() shouldBe 2
@@ -67,11 +69,11 @@ class CommandGatewayIntegrationTest : DescribeSpec({
 
         it("rejects command when invalid event sequence is provided") {
             val aggregateId = UUID.randomUUID()
-            val result = gateway.dispatch(CreateClassicPizza(aggregateId, PizzaStyle.MARGHERITA), EmptyMetadata())
+            val result = gateway.dispatch(CreateClassicPizza(aggregateId, PizzaStyle.MARGHERITA), creationEventMetadata)
             result shouldBe Right(Created)
-            val result2 = gateway.dispatch(EatPizza(aggregateId), EmptyMetadata())
+            val result2 = gateway.dispatch(EatPizza(aggregateId), StandardEventMetadata("alice"))
             result2 shouldBe Right(Updated)
-            val result3 = gateway.dispatch(AddTopping(aggregateId, PizzaTopping.PINEAPPLE), EmptyMetadata())
+            val result3 = gateway.dispatch(AddTopping(aggregateId, PizzaTopping.PINEAPPLE), creationEventMetadata)
             result3.shouldBeInstanceOf<Left<PizzaAlreadyEaten>>()
             transaction(db) {
                 eventsTable.selectAll().count() shouldBe 2
@@ -80,7 +82,7 @@ class CommandGatewayIntegrationTest : DescribeSpec({
 
         it("fails on updating with unknown UUID") {
             val aggregateId = UUID.randomUUID()
-            val result1 = gateway.dispatch(AddTopping(aggregateId, PizzaTopping.PINEAPPLE), EmptyMetadata())
+            val result1 = gateway.dispatch(AddTopping(aggregateId, PizzaTopping.PINEAPPLE), creationEventMetadata)
             result1 shouldBe Left(AggregateNotFound)
             transaction(db) {
                 eventsTable.selectAll().count() shouldBe 0
