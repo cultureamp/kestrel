@@ -60,7 +60,7 @@ class RelationalDatabaseEventStore internal constructor(
                         row[events.aggregateId] = aggregateId
                         row[events.aggregateType] = aggregateType
                         row[events.eventType] = eventType.canonicalName
-                        row[events.createdAt] = DateTime.now()
+                        row[events.createdAt] = event.createdAt
                         row[events.body] = body
                         row[events.metadata] = metadata
                     }
