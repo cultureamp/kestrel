@@ -1,10 +1,10 @@
 steps:
 
-  - name: docker_gradle
+  - name: build
     branches: "master"
     command: bin/ci_build
     agents:
-      queue: docker_gradle-restricted
+      queue: build-restricted
 
   - wait
 
@@ -12,13 +12,13 @@ steps:
     branches: "master"
     command: bin/ci_deploy
     agents:
-      queue: docker_gradle-restricted
+      queue: build-restricted
 
-  - name: docker_gradle
+  - name: build
     branches: "!master"
     command: bin/ci_build
     agents:
-      queue: docker_gradle-unrestricted
+      queue: build-unrestricted
 
   - block: 'Push to Nexus'
     branches: "!master"
@@ -33,4 +33,4 @@ steps:
     branches: "!master"
     command: bin/ci_deploy
     agents:
-      queue: docker_gradle-unrestricted
+      queue: build-unrestricted
