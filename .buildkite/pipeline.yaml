@@ -4,7 +4,7 @@ steps:
     branches: "master"
     command: bin/ci_build
     agents:
-      queue: build-unrestricted
+      queue: build-restricted
 
   - wait
 
