@@ -37,7 +37,7 @@ publishing {
         maven {
             name 'nexus'
             def isSnapshot = version.endsWith('SNAPSHOT')
-            url "$nexus_repository_root/${isSnapshot ? 'snapshots' : 'releases'}"
+            url "$nexus_repository_root${isSnapshot ? 'snapshots' : 'releases'}/"
             credentials {
                 username = System.getenv('NEXUS_USERNAME')
                 password = System.getenv('NEXUS_PASSWORD')
