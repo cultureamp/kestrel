@@ -1,12 +1,12 @@
 package com.cultureamp.common
 
 import com.cultureamp.common.Action.*
-import io.kotlintest.shouldBe
-import io.kotlintest.specs.FunSpec
+import io.kotest.core.spec.style.DescribeSpec
+import io.kotest.matchers.shouldBe
 
-class ExponentialBackoffTest : FunSpec({
-	context("Successful task") {
-		test("Does not retry a successful task") {
+class ExponentialBackoffTest : DescribeSpec({
+	describe("ExponentialBackoff") {
+		it("Does not retry a successful task") {
 			val worker = ExponentialBackoff(idleTimeMs = 0,
 				failureBackoffMs = { 0 },
 				sleeper = {},
@@ -22,7 +22,7 @@ class ExponentialBackoffTest : FunSpec({
 			runCount shouldBe 1
 		}
 
-		test("Will rerun the task without sleeping on Continue") {
+		it("Will rerun the task without sleeping on Continue") {
 			var sleepCount = 0
 			val worker = ExponentialBackoff(idleTimeMs = 0,
 				failureBackoffMs = { 0 },
@@ -44,7 +44,7 @@ class ExponentialBackoffTest : FunSpec({
 			sleepCount shouldBe 0
 		}
 
-		test("Will rerun the task after sleeping on Wait") {
+		it("Will rerun the task after sleeping on Wait") {
 			var sleepCount = 0
 			val worker = ExponentialBackoff(idleTimeMs = 0,
 				failureBackoffMs = { 0 },
@@ -67,8 +67,8 @@ class ExponentialBackoffTest : FunSpec({
 		}
 	}
 
-	context("Failed task") {
-		test("Will log the reason for failure") {
+	describe("Failed task") {
+		it("Will log the reason for failure") {
 			var errorMessage = ""
 			val worker = ExponentialBackoff(idleTimeMs = 0,
 				failureBackoffMs = { 0 },
@@ -88,7 +88,7 @@ class ExponentialBackoffTest : FunSpec({
 			errorMessage shouldBe "boom"
 		}
 
-		test("Will retry the failed task") {
+		it("Will retry the failed task") {
 			val worker = ExponentialBackoff(idleTimeMs = 0,
 				failureBackoffMs = { 0 },
 				sleeper = {},
@@ -108,7 +108,7 @@ class ExponentialBackoffTest : FunSpec({
 			runCount shouldBe 3
 		}
 
-		test("Will sleep on failed task") {
+		it("Will sleep on failed task") {
 			var sleepCount = 0
 			val worker = ExponentialBackoff(idleTimeMs = 0,
 				failureBackoffMs = { 0 },
