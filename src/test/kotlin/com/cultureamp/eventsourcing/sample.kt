@@ -70,6 +70,8 @@ data class PizzaAggregate(
 ) : TypedAggregate<PizzaUpdateCommand, PizzaUpdateEvent, PizzaError, PizzaAggregate> {
     constructor(event: PizzaCreated) : this(baseStyle = event.baseStyle, toppings = event.initialToppings)
 
+    override fun aggregateType() = "pizza"
+
     override fun updated(event: PizzaUpdateEvent): PizzaAggregate = when (event) {
         is PizzaToppingAdded -> this.copy(toppings = this.toppings + event.newTopping)
         is PizzaEaten -> this.copy(isEaten = true)
