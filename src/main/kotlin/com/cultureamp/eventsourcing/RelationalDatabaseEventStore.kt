@@ -61,7 +61,7 @@ class RelationalDatabaseEventStore internal constructor(
 
     override val listeners: MutableList<EventListener> = synchronousProjectors.toMutableList()
 
-    override fun setUp() {
+    fun createSchema() {
         transaction(db) {
             // TODO don't do this if pointing directly to Murmur DB or potentially introduce separate migrations
             SchemaUtils.create(events)
@@ -200,7 +200,7 @@ object H2DatabaseEventStore {
         return RelationalDatabaseEventStore(db, eventsTable(), synchronousProjectors, defaultMetadataClass)
     }
 
-    fun eventsTable() = Events { name -> this.text(name) }
+    internal fun eventsTable() = Events { name -> this.text(name) }
 }
 
 private fun <T> String.asClass(): Class<out T>? {

@@ -30,7 +30,7 @@ class CommandGatewayIntegrationTest : DescribeSpec({
     }
 
     beforeTest {
-        eventStore.setUp()
+        eventStore.createSchema()
     }
 
 

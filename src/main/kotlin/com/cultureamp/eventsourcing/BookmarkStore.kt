@@ -25,7 +25,7 @@ class RelationalDatabaseBookmarkStore(val db: Database, val table: Bookmarks) : 
         val matchingRows = rowsForBookmark(bookmarkName)
         val bookmarkVal = when (matchingRows.count()) {
             0 -> 0L
-            else -> matchingRows.single()[table.value]
+            else -> matchingRows.single()[table.sequence]
         }
         Bookmark(bookmarkVal)
     }
@@ -34,14 +34,14 @@ class RelationalDatabaseBookmarkStore(val db: Database, val table: Bookmarks) : 
         when (rowsForBookmark(bookmarkName).count()) {
             0 -> table.insert {
                 it[name] = bookmarkName
-                it[value] = bookmark.sequence
+                it[sequence] = bookmark.sequence
                 it[createdAt] = DateTime.now()
                 it[updatedAt] = DateTime.now()
 
             }
             else -> table.update {
                 it[name] = bookmarkName
-                it[value] = bookmark.sequence
+                it[sequence] = bookmark.sequence
                 it[updatedAt] = DateTime.now()
             }
         }
@@ -53,7 +53,7 @@ class RelationalDatabaseBookmarkStore(val db: Database, val table: Bookmarks) : 
 
 class Bookmarks(name: String = "bookmarks") : Table(name) {
     val name = varchar("name", 160).primaryKey().uniqueIndex()
-    val value = long("value")
+    val sequence = long("value")
     val createdAt = datetime("created_at")
     val updatedAt = datetime("updated_at")
 }
