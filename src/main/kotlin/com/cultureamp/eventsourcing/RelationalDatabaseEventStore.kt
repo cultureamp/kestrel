@@ -13,11 +13,6 @@ import org.jetbrains.exposed.sql.vendors.H2Dialect
 import org.jetbrains.exposed.sql.vendors.PostgreSQLDialect
 import java.lang.UnsupportedOperationException
 import java.util.*
-import kotlin.reflect.full.companionObjectInstance
-
-interface MetadataClassProvider {
-    val metadataClass: Class<out EventMetadata>
-}
 
 val defaultObjectMapper = ObjectMapper()
     .registerKotlinModule()
@@ -29,7 +24,7 @@ class RelationalDatabaseEventStore @PublishedApi internal constructor(
     private val db: Database,
     private val events: Events,
     synchronousProjectors: List<EventListener>,
-    private val defaultMetadataClass: Class<out EventMetadata>,
+    private val metadataClass: Class<out EventMetadata>,
     private val objectMapper: ObjectMapper
 ) : EventStore {
 
@@ -102,7 +97,7 @@ class RelationalDatabaseEventStore @PublishedApi internal constructor(
         }
 
         try {
-            objectMapper.readValue(metadata, defaultMetadataClass)
+            objectMapper.readValue(metadata, metadataClass)
         } catch (e: JsonProcessingException) {
             throw EventMetadataSerializationException(e)
         }
@@ -111,7 +106,7 @@ class RelationalDatabaseEventStore @PublishedApi internal constructor(
     private fun rowToSequencedEvent(row: ResultRow): SequencedEvent = row.let {
         val eventType = row[events.eventType].asClass<DomainEvent>()!!
         val domainEvent = objectMapper.readValue(row[events.body], eventType)
-        val metadata = objectMapper.readValue(row[events.metadata], defaultMetadataClass)
+        val metadata = objectMapper.readValue(row[events.metadata], metadataClass)
 
         SequencedEvent(
             Event(
