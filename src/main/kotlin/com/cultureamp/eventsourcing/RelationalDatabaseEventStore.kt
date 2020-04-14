@@ -29,36 +29,33 @@ class RelationalDatabaseEventStore @PublishedApi internal constructor(
     private val db: Database,
     private val events: Events,
     synchronousProjectors: List<EventListener>,
-    private val defaultMetadataClass: Class<out EventMetadata>
+    private val defaultMetadataClass: Class<out EventMetadata>,
+    private val objectMapper: ObjectMapper
 ) : EventStore {
-
-    private var _objectMapper = defaultObjectMapper
-    var objectMapper: ObjectMapper
-        get() = _objectMapper
-        set(value) {
-            _objectMapper = value
-        }
 
     companion object {
         inline fun <reified T: EventMetadata> create(
             synchronousProjectors: List<EventListener>,
-            db: Database
+            db: Database,
+            objectMapper: ObjectMapper = defaultObjectMapper
         ): RelationalDatabaseEventStore =
             when (db.dialect) {
-                is H2Dialect -> H2DatabaseEventStore.create<T>(synchronousProjectors, db)
-                is PostgreSQLDialect -> PostgresDatabaseEventStore.create<T>(synchronousProjectors, db)
+                is H2Dialect -> H2DatabaseEventStore.create<T>(synchronousProjectors, db, objectMapper)
+                is PostgreSQLDialect -> PostgresDatabaseEventStore.create<T>(synchronousProjectors, db, objectMapper)
                 else -> throw UnsupportedOperationException("${db.dialect} not currently supported")
             }
 
-        inline fun <reified T: EventMetadata> create(db: Database) =
-            create<T>(emptyList(), db)
+        inline fun <reified T : EventMetadata> create(
+            db: Database,
+            objectMapper: ObjectMapper = defaultObjectMapper
+        ) =
+            create<T>(emptyList(), db, objectMapper)
     }
 
     override val listeners: MutableList<EventListener> = synchronousProjectors.toMutableList()
 
     fun createSchemaIfNotExists() {
         transaction(db) {
-            // TODO don't do this if pointing directly to Murmur DB or potentially introduce separate migrations
             SchemaUtils.create(events)
         }
     }
@@ -179,9 +176,10 @@ class EventMetadataSerializationException(e: Exception) : EventDataException(e)
 object PostgresDatabaseEventStore {
     @PublishedApi internal inline fun <reified T: EventMetadata> create(
         synchronousProjectors: List<EventListener>,
-        db: Database
+        db: Database,
+        objectMapper: ObjectMapper
     ): RelationalDatabaseEventStore {
-        return RelationalDatabaseEventStore(db, Events(Table::jsonb), synchronousProjectors, T::class.java)
+        return RelationalDatabaseEventStore(db, Events(Table::jsonb), synchronousProjectors, T::class.java, objectMapper)
     }
 }
 
@@ -189,9 +187,10 @@ object H2DatabaseEventStore {
     // need a `@PublishedApi` here to make it callable from `RelationalDatabaseEventStore.create()`
     @PublishedApi internal inline fun <reified T: EventMetadata> create(
         synchronousProjectors: List<EventListener>,
-        db: Database
+        db: Database,
+        objectMapper: ObjectMapper
     ): RelationalDatabaseEventStore {
-        return RelationalDatabaseEventStore(db, eventsTable(), synchronousProjectors, T::class.java)
+        return RelationalDatabaseEventStore(db, eventsTable(), synchronousProjectors, T::class.java, objectMapper)
     }
 
     @PublishedApi internal fun eventsTable() = Events { name -> this.text(name) }
