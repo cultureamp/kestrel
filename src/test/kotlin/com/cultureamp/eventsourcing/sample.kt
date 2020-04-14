@@ -1,8 +1,8 @@
 package com.cultureamp.eventsourcing.sample
 
 import com.cultureamp.eventsourcing.*
-import com.fasterxml.jackson.annotation.JsonIgnore
 import java.util.*
+import kotlin.reflect.full.companionObjectInstance
 
 
 abstract class BaseMetadata: EventMetadata() {
@@ -51,7 +51,15 @@ data class PizzaCreated(val baseStyle: PizzaStyle, val initialToppings: List<Piz
 sealed class PizzaUpdateEvent : PizzaEvent(), UpdateEvent
 data class PizzaToppingAdded(val newTopping: PizzaTopping) : PizzaUpdateEvent()
 
-data class PizzaEaten(@JsonIgnore private val _ignored: Boolean = false) : PizzaUpdateEvent()
+// not necessarily the best way to handle no-data events, but
+// works for now – we can't use a bare singleton
+// as it gets deserialised as a different reference:
+// https://github.com/FasterXML/jackson-module-kotlin/issues/141
+object PizzaEaten : PizzaUpdateEvent() {
+    override fun equals(other: Any?) = other?.javaClass == javaClass
+    override fun hashCode(): Int = javaClass.hashCode()
+    operator fun invoke() = PizzaEaten
+}
 
 sealed class PizzaError : CommandError
 class ToppingAlreadyPresent : PizzaError()
