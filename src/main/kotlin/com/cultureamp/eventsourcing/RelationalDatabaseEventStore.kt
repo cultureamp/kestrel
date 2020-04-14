@@ -102,7 +102,7 @@ class RelationalDatabaseEventStore @PublishedApi internal constructor(
         }
 
         try {
-            objectMapper.readValue(metadata, metadataClassFor(eventType))
+            objectMapper.readValue(metadata, defaultMetadataClass)
         } catch (e: JsonProcessingException) {
             throw EventMetadataSerializationException(e)
         }
@@ -111,7 +111,7 @@ class RelationalDatabaseEventStore @PublishedApi internal constructor(
     private fun rowToSequencedEvent(row: ResultRow): SequencedEvent = row.let {
         val eventType = row[events.eventType].asClass<DomainEvent>()!!
         val domainEvent = objectMapper.readValue(row[events.body], eventType)
-        val metadata = objectMapper.readValue(row[events.metadata], metadataClassFor(eventType))
+        val metadata = objectMapper.readValue(row[events.metadata], defaultMetadataClass)
 
         SequencedEvent(
             Event(
@@ -157,14 +157,6 @@ class RelationalDatabaseEventStore @PublishedApi internal constructor(
                 .orderBy(events.sequence)
                 .map(::rowToSequencedEvent)
                 .map { it.event }
-        }
-    }
-
-    private fun metadataClassFor(eventType: Class<out DomainEvent>): Class<out EventMetadata> {
-        return try {
-            (eventType.kotlin.companionObjectInstance as MetadataClassProvider).metadataClass
-        } catch (_: ClassCastException) {
-            defaultMetadataClass
         }
     }
 }

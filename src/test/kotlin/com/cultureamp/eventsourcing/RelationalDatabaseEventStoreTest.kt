@@ -42,7 +42,7 @@ class RelationalDatabaseEventStoreTest : DescribeSpec({
                     basicPizzaCreated,
                     aggregateId,
                     1,
-                    PizzaCreationEventMetadata("alice", "123")
+                    StandardEventMetadata("alice", "123")
                 ),
                 event(
                     PizzaEaten(),
@@ -56,7 +56,7 @@ class RelationalDatabaseEventStoreTest : DescribeSpec({
                     basicPizzaCreated,
                     otherAggregateId,
                     1,
-                    PizzaCreationEventMetadata("bob", "321")
+                    StandardEventMetadata("bob", "321")
                 )
             )
 
@@ -70,7 +70,7 @@ class RelationalDatabaseEventStoreTest : DescribeSpec({
             store.getAfter(0L, 100) shouldBe expectedSequenceEvents
         }
 
-        it ("fails when non-default metadata is passed in and event uses default") {
+        it ("fails when the metadata passed in does not match the type specified for the store") {
             val aggregateId = UUID.randomUUID()
             val events = listOf(
                 event(
@@ -78,26 +78,6 @@ class RelationalDatabaseEventStoreTest : DescribeSpec({
                     aggregateId,
                     1,
                     EmptyMetadata()
-                )
-            )
-
-            assertThrows<EventMetadataSerializationException> {
-                store.sink(events, aggregateId, "pizza")
-            }
-        }
-        
-        it ("fails when invalid metadata for the event is passed in") {
-            val aggregateId = UUID.randomUUID()
-            val basicPizzaCreated = PizzaCreated(
-                PizzaStyle.MARGHERITA,
-                listOf(PizzaTopping.TOMATO_PASTE, PizzaTopping.BASIL, PizzaTopping.CHEESE)
-            )
-            val events = listOf(
-                event(
-                    basicPizzaCreated,
-                    aggregateId,
-                    1,
-                    StandardEventMetadata("invalid_metadata")
                 )
             )
 

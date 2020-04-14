@@ -34,7 +34,7 @@ class CommandGatewayIntegrationTest : DescribeSpec({
     }
 
 
-    val creationEventMetadata = PizzaCreationEventMetadata("alice", "123")
+    val creationEventMetadata = StandardEventMetadata("alice", "123")
 
     describe("CommandGateway") {
         it("accepts a creation event") {

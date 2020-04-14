@@ -1,15 +1,17 @@
 package com.cultureamp.eventsourcing.sample
 
 import com.cultureamp.eventsourcing.*
+import com.fasterxml.jackson.annotation.JsonInclude
+import com.fasterxml.jackson.annotation.JsonInclude.Include
 import java.util.*
-import kotlin.reflect.full.companionObjectInstance
 
 
-abstract class BaseMetadata: EventMetadata() {
+abstract class RequiredMetadata: EventMetadata() {
     abstract val executorId: String
 }
-data class StandardEventMetadata(override val executorId: String): BaseMetadata()
-data class PizzaCreationEventMetadata(override val executorId: String, val restaurantId: String): BaseMetadata()
+
+@JsonInclude(Include.NON_NULL) // don't want to store optional fields we don't need on all classes
+data class StandardEventMetadata(override val executorId: String, val restaurantId: String? = null): RequiredMetadata()
 
 data class CreateClassicPizza(
     override val aggregateId: UUID,
@@ -42,11 +44,7 @@ data class EatPizza(override val aggregateId: UUID) : PizzaUpdateCommand()
 sealed class PizzaEvent : DomainEvent
 
 sealed class PizzaCreationEvent : PizzaEvent(), CreationEvent
-data class PizzaCreated(val baseStyle: PizzaStyle, val initialToppings: List<PizzaTopping>) : PizzaCreationEvent() {
-    companion object: MetadataClassProvider {
-        override val metadataClass = PizzaCreationEventMetadata::class.java
-    }
-}
+data class PizzaCreated(val baseStyle: PizzaStyle, val initialToppings: List<PizzaTopping>) : PizzaCreationEvent()
 
 sealed class PizzaUpdateEvent : PizzaEvent(), UpdateEvent
 data class PizzaToppingAdded(val newTopping: PizzaTopping) : PizzaUpdateEvent()
