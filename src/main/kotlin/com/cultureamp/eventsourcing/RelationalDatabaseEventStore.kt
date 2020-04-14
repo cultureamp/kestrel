@@ -56,7 +56,7 @@ class RelationalDatabaseEventStore @PublishedApi internal constructor(
 
     override val listeners: MutableList<EventListener> = synchronousProjectors.toMutableList()
 
-    fun createSchema() {
+    fun createSchemaIfNotExists() {
         transaction(db) {
             // TODO don't do this if pointing directly to Murmur DB or potentially introduce separate migrations
             SchemaUtils.create(events)
