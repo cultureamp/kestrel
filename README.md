@@ -30,7 +30,7 @@ Making sure the version matches the one that you want.
 
 ## Getting Started
 
-See the [sample code](../src/test/kotlin/com/cultureamp/eventsourcing/sample.kt) for an example of how to use this.
+See the [sample code](src/test/kotlin/com/cultureamp/eventsourcing/sample.kt) for an example of how to use this.
 
 
 # Trello
