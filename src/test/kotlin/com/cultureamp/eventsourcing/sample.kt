@@ -1,6 +1,7 @@
 package com.cultureamp.eventsourcing.sample
 
 import com.cultureamp.eventsourcing.*
+import com.fasterxml.jackson.annotation.JsonIgnore
 import java.util.*
 
 
@@ -50,12 +51,7 @@ data class PizzaCreated(val baseStyle: PizzaStyle, val initialToppings: List<Piz
 sealed class PizzaUpdateEvent : PizzaEvent(), UpdateEvent
 data class PizzaToppingAdded(val newTopping: PizzaTopping) : PizzaUpdateEvent()
 
-class PizzaEaten : PizzaUpdateEvent() {
-    override fun equals(other: Any?) = other?.javaClass == PizzaEaten::class.java
-    override fun hashCode(): Int {
-        return javaClass.hashCode()
-    }
-}
+data class PizzaEaten(@JsonIgnore private val _ignored: Boolean = false) : PizzaUpdateEvent()
 
 sealed class PizzaError : CommandError
 class ToppingAlreadyPresent : PizzaError()
