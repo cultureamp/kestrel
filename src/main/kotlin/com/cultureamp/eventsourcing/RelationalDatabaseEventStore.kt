@@ -25,7 +25,7 @@ val defaultObjectMapper = ObjectMapper()
     .configure(WRITE_DATES_AS_TIMESTAMPS, false)
     .setPropertyNamingStrategy(PropertyNamingStrategy.SNAKE_CASE)
 
-class RelationalDatabaseEventStore internal constructor(
+class RelationalDatabaseEventStore @PublishedApi internal constructor(
     private val db: Database,
     private val events: Events,
     synchronousProjectors: List<EventListener>,
@@ -40,23 +40,18 @@ class RelationalDatabaseEventStore internal constructor(
         }
 
     companion object {
-        fun create(
+        inline fun <reified T: EventMetadata> create(
             synchronousProjectors: List<EventListener>,
-            db: Database,
-            defaultMetadataClass: Class<out EventMetadata> = EventMetadata::class.java
+            db: Database
         ): RelationalDatabaseEventStore =
             when (db.dialect) {
-                is H2Dialect -> H2DatabaseEventStore.create(synchronousProjectors, db, defaultMetadataClass)
-                is PostgreSQLDialect -> PostgresDatabaseEventStore.create(
-                    synchronousProjectors,
-                    db,
-                    defaultMetadataClass
-                )
+                is H2Dialect -> H2DatabaseEventStore.create<T>(synchronousProjectors, db)
+                is PostgreSQLDialect -> PostgresDatabaseEventStore.create<T>(synchronousProjectors, db)
                 else -> throw UnsupportedOperationException("${db.dialect} not currently supported")
             }
 
-        fun create(db: Database, defaultMetadataClass: Class<out EventMetadata> = EventMetadata::class.java) =
-            create(emptyList(), db, defaultMetadataClass)
+        inline fun <reified T: EventMetadata> create(db: Database) =
+            create<T>(emptyList(), db)
     }
 
     override val listeners: MutableList<EventListener> = synchronousProjectors.toMutableList()
@@ -182,25 +177,24 @@ class EventBodySerializationException(e: Exception) : EventDataException(e)
 class EventMetadataSerializationException(e: Exception) : EventDataException(e)
 
 object PostgresDatabaseEventStore {
-    internal fun create(
+    @PublishedApi internal inline fun <reified T: EventMetadata> create(
         synchronousProjectors: List<EventListener>,
-        db: Database,
-        defaultMetadataClass: Class<out EventMetadata>
+        db: Database
     ): RelationalDatabaseEventStore {
-        return RelationalDatabaseEventStore(db, Events(Table::jsonb), synchronousProjectors, defaultMetadataClass)
+        return RelationalDatabaseEventStore(db, Events(Table::jsonb), synchronousProjectors, T::class.java)
     }
 }
 
 object H2DatabaseEventStore {
-    internal fun create(
+    // need a `@PublishedApi` here to make it callable from `RelationalDatabaseEventStore.create()`
+    @PublishedApi internal inline fun <reified T: EventMetadata> create(
         synchronousProjectors: List<EventListener>,
-        db: Database,
-        defaultMetadataClass: Class<out EventMetadata>
+        db: Database
     ): RelationalDatabaseEventStore {
-        return RelationalDatabaseEventStore(db, eventsTable(), synchronousProjectors, defaultMetadataClass)
+        return RelationalDatabaseEventStore(db, eventsTable(), synchronousProjectors, T::class.java)
     }
 
-    internal fun eventsTable() = Events { name -> this.text(name) }
+    @PublishedApi internal fun eventsTable() = Events { name -> this.text(name) }
 }
 
 private fun <T> String.asClass(): Class<out T>? {

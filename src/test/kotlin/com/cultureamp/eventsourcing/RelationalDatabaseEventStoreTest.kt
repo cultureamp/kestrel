@@ -15,7 +15,7 @@ class RelationalDatabaseEventStoreTest : DescribeSpec({
     val h2Driver = "org.h2.Driver"
     val db = Database.connect(url = h2DbUrl, driver = h2Driver)
     val table = H2DatabaseEventStore.eventsTable()
-    val store =  RelationalDatabaseEventStore.create(db, defaultMetadataClass = StandardEventMetadata::class.java)
+    val store =  RelationalDatabaseEventStore.create<StandardEventMetadata>(db)
 
     beforeTest {
         transaction(db) {

@@ -17,7 +17,7 @@ class CommandGatewayIntegrationTest : DescribeSpec({
     val h2Driver = "org.h2.Driver"
     val db = Database.connect(url = h2DbUrl, driver = h2Driver)
     val eventsTable = H2DatabaseEventStore.eventsTable()
-    val eventStore = RelationalDatabaseEventStore.create(db, defaultMetadataClass = StandardEventMetadata::class.java)
+    val eventStore = RelationalDatabaseEventStore.create<StandardEventMetadata>(db)
     val registry = listOf(
         Configuration.from(PizzaAggregate)
     )
