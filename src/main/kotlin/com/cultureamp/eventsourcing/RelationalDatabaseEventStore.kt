@@ -204,6 +204,7 @@ object H2DatabaseEventStore {
 }
 
 private fun <T> String.asClass(): Class<out T>? {
+    @Suppress("UNCHECKED_CAST")
     return Class.forName(this) as Class<out T>?
 }
 
