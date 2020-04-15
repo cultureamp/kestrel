@@ -22,7 +22,7 @@ val defaultObjectMapper = ObjectMapper()
 
 class RelationalDatabaseEventStore @PublishedApi internal constructor(
     private val db: Database,
-    private val events: Events,
+    val events: Events,
     synchronousProjectors: List<EventListener>,
     private val metadataClass: Class<out EventMetadata>,
     private val objectMapper: ObjectMapper
