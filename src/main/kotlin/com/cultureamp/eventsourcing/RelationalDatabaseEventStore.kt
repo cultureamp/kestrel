@@ -32,19 +32,21 @@ class RelationalDatabaseEventStore @PublishedApi internal constructor(
         inline fun <reified T: EventMetadata> create(
             synchronousProjectors: List<EventListener>,
             db: Database,
-            objectMapper: ObjectMapper = defaultObjectMapper
+            objectMapper: ObjectMapper = defaultObjectMapper,
+            tableName: String = "events"
         ): RelationalDatabaseEventStore =
             when (db.dialect) {
-                is H2Dialect -> H2DatabaseEventStore.create<T>(synchronousProjectors, db, objectMapper)
-                is PostgreSQLDialect -> PostgresDatabaseEventStore.create<T>(synchronousProjectors, db, objectMapper)
+                is H2Dialect -> H2DatabaseEventStore.create<T>(synchronousProjectors, db, objectMapper, tableName)
+                is PostgreSQLDialect -> PostgresDatabaseEventStore.create<T>(synchronousProjectors, db, objectMapper, tableName)
                 else -> throw UnsupportedOperationException("${db.dialect} not currently supported")
             }
 
         inline fun <reified T : EventMetadata> create(
             db: Database,
-            objectMapper: ObjectMapper = defaultObjectMapper
+            objectMapper: ObjectMapper = defaultObjectMapper,
+            tableName: String = "events"
         ) =
-            create<T>(emptyList(), db, objectMapper)
+            create<T>(emptyList(), db, objectMapper, tableName)
     }
 
     override val listeners: MutableList<EventListener> = synchronousProjectors.toMutableList()
@@ -164,9 +166,10 @@ object PostgresDatabaseEventStore {
     @PublishedApi internal inline fun <reified T: EventMetadata> create(
         synchronousProjectors: List<EventListener>,
         db: Database,
-        objectMapper: ObjectMapper
+        objectMapper: ObjectMapper,
+        tableName: String
     ): RelationalDatabaseEventStore {
-        return RelationalDatabaseEventStore(db, Events(Table::jsonb), synchronousProjectors, T::class.java, objectMapper)
+        return RelationalDatabaseEventStore(db, Events(Table::jsonb, tableName), synchronousProjectors, T::class.java, objectMapper)
     }
 }
 
@@ -175,12 +178,13 @@ object H2DatabaseEventStore {
     @PublishedApi internal inline fun <reified T: EventMetadata> create(
         synchronousProjectors: List<EventListener>,
         db: Database,
-        objectMapper: ObjectMapper
+        objectMapper: ObjectMapper,
+        tableName: String
     ): RelationalDatabaseEventStore {
-        return RelationalDatabaseEventStore(db, eventsTable(), synchronousProjectors, T::class.java, objectMapper)
+        return RelationalDatabaseEventStore(db, eventsTable(tableName), synchronousProjectors, T::class.java, objectMapper)
     }
 
-    @PublishedApi internal fun eventsTable() = Events { name -> this.text(name) }
+    @PublishedApi internal fun eventsTable(name: String) = Events({ colName -> this.text(colName) }, name)
 }
 
 private fun <T> String.asClass(): Class<out T>? {
@@ -188,7 +192,7 @@ private fun <T> String.asClass(): Class<out T>? {
     return Class.forName(this) as Class<out T>?
 }
 
-class Events(jsonb: Table.(String) -> Column<String>) : Table() {
+class Events(jsonb: Table.(String) -> Column<String>, name: String = "events") : Table(name) {
     val sequence = long("sequence").autoIncrement().index()
     val eventId = uuid("id")
     val aggregateSequence = long("aggregate_sequence").primaryKey(1)
