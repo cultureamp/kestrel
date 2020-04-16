@@ -240,6 +240,11 @@ fun <E, V> Either<E, Either<E,V>>.flatten(): Either<E, V> = when (this) {
     is Right -> this.value
 }
 
+fun <E, V, R> Either<E, V>.fold(left: (E) -> R, right: (V) -> R): R = when (this) {
+    is Left -> left(this.error)
+    is Right -> right(this.value)
+}
+
 fun <A, B, C> KFunction2<A, B, C>.partial(a: A): (B) -> C {
     return { b -> invoke(a, b) }
 }
