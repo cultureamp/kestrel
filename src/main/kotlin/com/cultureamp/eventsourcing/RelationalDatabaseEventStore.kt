@@ -22,14 +22,11 @@ val defaultObjectMapper = ObjectMapper()
 
 class RelationalDatabaseEventStore @PublishedApi internal constructor(
     private val db: Database,
-    private val events: Events,
+    val table: Events,
     synchronousProjectors: List<EventListener>,
     private val metadataClass: Class<out EventMetadata>,
     private val objectMapper: ObjectMapper
 ) : EventStore {
-
-    val eventsTable: Events
-        get() = events
 
     companion object {
         inline fun <reified T: EventMetadata> create(
@@ -56,7 +53,7 @@ class RelationalDatabaseEventStore @PublishedApi internal constructor(
 
     fun createSchemaIfNotExists() {
         transaction(db) {
-            SchemaUtils.create(events)
+            SchemaUtils.create(table)
         }
     }
 
@@ -69,15 +66,15 @@ class RelationalDatabaseEventStore @PublishedApi internal constructor(
                     val eventType = event.domainEvent.javaClass
                     val metadata = objectMapper.writeValueAsString(event.metadata)
                     validateSerialization(eventType, body, metadata)
-                    events.insert { row ->
-                        row[events.aggregateSequence] = event.aggregateSequence
-                        row[events.eventId] = event.id
-                        row[events.aggregateId] = aggregateId
-                        row[events.aggregateType] = aggregateType
-                        row[events.eventType] = eventType.canonicalName
-                        row[events.createdAt] = event.createdAt
-                        row[events.body] = body
-                        row[events.metadata] = metadata
+                    table.insert { row ->
+                        row[table.aggregateSequence] = event.aggregateSequence
+                        row[table.eventId] = event.id
+                        row[table.aggregateId] = aggregateId
+                        row[table.aggregateType] = aggregateType
+                        row[table.eventType] = eventType.canonicalName
+                        row[table.createdAt] = event.createdAt
+                        row[table.body] = body
+                        row[table.metadata] = metadata
                     }
                 }
 
@@ -109,29 +106,29 @@ class RelationalDatabaseEventStore @PublishedApi internal constructor(
     }
 
     private fun rowToSequencedEvent(row: ResultRow): SequencedEvent = row.let {
-        val eventType = row[events.eventType].asClass<DomainEvent>()!!
-        val domainEvent = objectMapper.readValue(row[events.body], eventType)
-        val metadata = objectMapper.readValue(row[events.metadata], metadataClass)
+        val eventType = row[table.eventType].asClass<DomainEvent>()!!
+        val domainEvent = objectMapper.readValue(row[table.body], eventType)
+        val metadata = objectMapper.readValue(row[table.metadata], metadataClass)
 
         SequencedEvent(
             Event(
-                id = row[events.eventId],
-                aggregateId = row[events.aggregateId],
-                aggregateSequence = row[events.aggregateSequence],
-                createdAt = row[events.createdAt],
+                id = row[table.eventId],
+                aggregateId = row[table.aggregateId],
+                aggregateSequence = row[table.aggregateSequence],
+                createdAt = row[table.createdAt],
                 metadata = metadata,
                 domainEvent = domainEvent
-            ), row[events.sequence]
+            ), row[table.sequence]
         )
     }
 
     override fun replay(aggregateType: String, project: (Event) -> Unit) {
         return transaction(db) {
-            events
+            table
                 .select {
-                    events.aggregateType eq aggregateType
+                    table.aggregateType eq aggregateType
                 }
-                .orderBy(events.sequence)
+                .orderBy(table.sequence)
                 .mapLazy(::rowToSequencedEvent)
                 .mapLazy { it.event }
                 .forEach(project)
@@ -140,11 +137,11 @@ class RelationalDatabaseEventStore @PublishedApi internal constructor(
 
     override fun getAfter(sequence: Long, batchSize: Int): List<SequencedEvent> {
         return transaction(db) {
-            events
+            table
                 .select {
-                    events.sequence greater sequence
+                    table.sequence greater sequence
                 }
-                .orderBy(events.sequence)
+                .orderBy(table.sequence)
                 .limit(batchSize)
                 .map(::rowToSequencedEvent)
         }
@@ -152,9 +149,9 @@ class RelationalDatabaseEventStore @PublishedApi internal constructor(
 
     override fun eventsFor(aggregateId: UUID): List<Event> {
         return transaction(db) {
-            events
-                .select { events.aggregateId eq aggregateId }
-                .orderBy(events.sequence)
+            table
+                .select { table.aggregateId eq aggregateId }
+                .orderBy(table.sequence)
                 .map(::rowToSequencedEvent)
                 .map { it.event }
         }
