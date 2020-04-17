@@ -13,6 +13,12 @@ data class Configuration<CC : CreationCommand, CE : CreationEvent, Err : Command
         val updated: A.(UE) -> A,
         val aggregateType: A.() -> String
 ) {
+    object Builder {
+        inline fun <reified CC : CreationCommand, CE : CreationEvent, Err : CommandError>create(noinline create: (CC) -> Either<Err, CE>): CreateBuilder<CC, CE, Err> {
+            return CreateBuilder(CC::class, create)
+        }
+    }
+
     companion object {
 
         inline fun <reified CC : CreationCommand, CE : CreationEvent, Err : CommandError, reified UC : UpdateCommand, UE : UpdateEvent, reified A : Aggregate> from(
@@ -92,4 +98,44 @@ data class Configuration<CC : CreationCommand, CE : CreationEvent, Err : Command
 
     private fun updated(initial: A, updateEvents: List<UE>): A =
             updateEvents.fold(initial) { aggregate, updateEvent -> updated(aggregate, updateEvent) }
+}
+
+
+class CreateBuilder<CC : CreationCommand, CE : CreationEvent, Err : CommandError>(
+        val creationCommandClass: KClass<CC>,
+        val create: (CC) -> Either<Err, CE>
+) {
+    inline fun <A : Aggregate, reified UC : UpdateCommand, UE : UpdateEvent> update(noinline update: A.(UC) -> Either<Err, List<UE>>) = UpdateBuilder(creationCommandClass, UC::class, create, update)
+}
+
+class UpdateBuilder<CC : CreationCommand, CE : CreationEvent, Err : CommandError, UC : UpdateCommand, UE : UpdateEvent, A : Aggregate>(
+        private val creationCommandClass: KClass<CC>,
+        private val updateCommandClass: KClass<UC>,
+        private val create: (CC) -> Either<Err, CE>,
+        private val update: A.(UC) -> Either<Err, List<UE>>
+) {
+    fun created(created: (CE) -> A) = CreatedBuilder(creationCommandClass, updateCommandClass, create, update, created)
+    fun buildStateless(instance: A, aggregateType: A.() -> String = { this::class.simpleName!! }) = UpdatedBuilder(creationCommandClass, updateCommandClass, create, update, { instance }, { instance }).build(aggregateType)
+}
+
+class CreatedBuilder<CC : CreationCommand, CE : CreationEvent, Err : CommandError, UC : UpdateCommand, UE : UpdateEvent, A : Aggregate>(
+        private val creationCommandClass: KClass<CC>,
+        private val updateCommandClass: KClass<UC>,
+        private val create: (CC) -> Either<Err, CE>,
+        private val update: A.(UC) -> Either<Err, List<UE>>,
+        private val created: (CE) -> A) {
+    fun updated(updated: A.(UE) -> A) = UpdatedBuilder(creationCommandClass, updateCommandClass, create, update, created, updated)
+    fun build() = UpdatedBuilder(creationCommandClass, updateCommandClass, create, update, created, { _ -> this }).build()
+}
+
+class UpdatedBuilder<CC : CreationCommand, CE : CreationEvent, Err : CommandError, UC : UpdateCommand, UE : UpdateEvent, A : Aggregate>(
+        private val creationCommandClass: KClass<CC>,
+        private val updateCommandClass: KClass<UC>,
+        private val create: (CC) -> Either<Err, CE>,
+        private val update: A.(UC) -> Either<Err, List<UE>>,
+        private val created: (CE) -> A,
+        private val updated: A.(UE) -> A
+) {
+    fun build(aggregateType: A.() -> String = { this::class.simpleName!! }) = Configuration(creationCommandClass, updateCommandClass, create, update, created, updated, aggregateType)
+
 }
