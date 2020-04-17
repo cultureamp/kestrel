@@ -78,7 +78,7 @@ data class Configuration<CC : CreationCommand, CE : CreationEvent, Err : Command
             return Configuration(CC::class, UC::class, create, update, created, updated, aggregateType)
         }
 
-        inline fun <reified CC : CreationCommand, CE : CreationEvent, Err : CommandError, reified UC : UpdateCommand, UE : UpdateEvent, reified A : Aggregate> from(
+        inline fun <reified CC : CreationCommand, CE : CreationEvent, Err : CommandError, reified UC : UpdateCommand, UE : UpdateEvent, reified A : Aggregate> fromStateless(
             noinline create: (CC) -> Either<Err, CE>,
             noinline update: (UC) -> Either<Err, List<UE>>,
             instance: A,
@@ -87,7 +87,7 @@ data class Configuration<CC : CreationCommand, CE : CreationEvent, Err : Command
             return from(create, { update(it) }, { instance }, { instance }, aggregateType)
         }
 
-        inline fun <reified CC : CreationCommand, CE : CreationEvent, Err : CommandError, reified UC : UpdateCommand, UE : UpdateEvent, reified Self : TypedAggregate<UC, UE, Err, Self>> from(
+        inline fun <reified CC : CreationCommand, CE : CreationEvent, Err : CommandError, reified UC : UpdateCommand, UE : UpdateEvent, reified Self : TypedAggregate<UC, UE, Err, Self>> fromTypedAggregate(
             aggregateConstructor: AggregateConstructor<CC, CE, Err, UC, UE, Self>
         ): Configuration<CC, CE, Err, UC, UE, Self> {
             val created = aggregateConstructor::created
@@ -98,11 +98,11 @@ data class Configuration<CC : CreationCommand, CE : CreationEvent, Err : Command
             return from(create, update, created, updated, aggregateType)
         }
 
-        inline fun <reified CC : CreationCommand, CE : CreationEvent, Err : CommandError, reified UC : UpdateCommand, UE : UpdateEvent, P, Self : AggregateWithProjection<UC, UE, Err, P, Self>> from(
+        inline fun <reified CC : CreationCommand, CE : CreationEvent, Err : CommandError, reified UC : UpdateCommand, UE : UpdateEvent, P, Self : AggregateWithProjection<UC, UE, Err, P, Self>> fromTypedAggregate(
             aggregateConstructor: AggregateConstructorWithProjection<CC, CE, Err, UC, UE, P, Self>,
             projection: P
         ): Configuration<CC, CE, Err, UC, UE, TypedAggregate<UC, UE, Err, *>> {
-            return from<CC, CE, Err, UC, UE, TypedAggregate<UC, UE, Err, *>>(aggregateConstructor.partial(projection))
+            return fromTypedAggregate<CC, CE, Err, UC, UE, TypedAggregate<UC, UE, Err, *>>(aggregateConstructor.partial(projection))
         }
     }
 
