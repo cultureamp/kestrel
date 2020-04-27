@@ -39,8 +39,7 @@ class RelationalDatabaseBookmarkStore(val db: Database, val table: Bookmarks) : 
                 it[updatedAt] = DateTime.now()
 
             }
-            else -> table.update {
-                it[name] = bookmarkName
+            else -> table.update({ table.name eq bookmarkName }) {
                 it[sequence] = bookmark.sequence
                 it[updatedAt] = DateTime.now()
             }
