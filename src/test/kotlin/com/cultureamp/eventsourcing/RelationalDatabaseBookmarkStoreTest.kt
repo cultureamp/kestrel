@@ -10,18 +10,17 @@ class RelationalDatabaseBookmarkStoreTest : DescribeSpec({
     val h2DbUrl = "jdbc:h2:mem:test;MODE=MySQL;DB_CLOSE_DELAY=-1;"
     val h2Driver = "org.h2.Driver"
     val db = Database.connect(url = h2DbUrl, driver = h2Driver)
-    val table = Bookmarks()
-    val store = RelationalDatabaseBookmarkStore(db, table)
+    val store = RelationalDatabaseBookmarkStore(db)
 
     beforeTest {
         transaction(db) {
-            SchemaUtils.create(table)
+            SchemaUtils.create(store.table)
         }
     }
 
     afterTest {
         transaction(db) {
-            SchemaUtils.drop(table)
+            SchemaUtils.drop(store.table)
         }
     }
 
@@ -41,6 +40,15 @@ class RelationalDatabaseBookmarkStoreTest : DescribeSpec({
             store.save("other-bookmark", Bookmark(456L))
             store.save("update-bookmark", Bookmark(789L))
             store.findOrCreate("update-bookmark") shouldBe Bookmark(789L)
+        }
+
+        it("returns all bookmarks") {
+            store.save("update-bookmark", Bookmark(123L))
+            store.save("other-bookmark", Bookmark(456L))
+            store.all() shouldBe mapOf(
+                "update-bookmark" to Bookmark(123L),
+                "other-bookmark" to Bookmark(456L)
+            )
         }
     }
 })

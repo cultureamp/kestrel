@@ -7,7 +7,7 @@ import org.joda.time.DateTime
 interface BookmarkStore {
     fun findOrCreate(bookmarkName: String): Bookmark
     fun save(bookmarkName: String, bookmark: Bookmark)
-
+    fun all(): Map<String, Bookmark>
 }
 
 class InMemoryBookmarkStore : BookmarkStore {
@@ -18,9 +18,11 @@ class InMemoryBookmarkStore : BookmarkStore {
     override fun save(bookmarkName: String, bookmark: Bookmark) {
         map[bookmarkName] = bookmark
     }
+
+    override fun all(): Map<String, Bookmark> = map
 }
 
-class RelationalDatabaseBookmarkStore(val db: Database, val table: Bookmarks) : BookmarkStore {
+class RelationalDatabaseBookmarkStore(val db: Database, val table: Bookmarks = Bookmarks()) : BookmarkStore {
     override fun findOrCreate(bookmarkName: String): Bookmark = transaction(db) {
         val matchingRows = rowsForBookmark(bookmarkName)
         val bookmarkVal = when (matchingRows.count()) {
@@ -44,6 +46,12 @@ class RelationalDatabaseBookmarkStore(val db: Database, val table: Bookmarks) : 
                 it[updatedAt] = DateTime.now()
             }
         }
+    }
+
+    override fun all(): Map<String, Bookmark> = transaction(db) {
+        table.selectAll().map { row ->
+            row[table.name] to Bookmark(row[table.sequence])
+        }.toMap()
     }
 
     private fun rowsForBookmark(bookmarkName: String) = table.select { table.name eq bookmarkName }
