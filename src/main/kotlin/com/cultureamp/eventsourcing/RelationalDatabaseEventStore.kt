@@ -189,15 +189,23 @@ private fun <T> String.asClass(): Class<out T>? {
 }
 
 class Events(jsonb: Table.(String) -> Column<String>) : Table() {
-    val sequence = long("sequence").autoIncrement().index()
+    val sequence = long("sequence").autoIncrement().primaryKey()
     val eventId = uuid("id")
-    val aggregateSequence = long("aggregate_sequence").primaryKey(1)
-    val aggregateId = uuid("aggregate_id").primaryKey(0)
+    val aggregateSequence = long("aggregate_sequence")
+    val aggregateId = uuid("aggregate_id")
     val aggregateType = varchar("aggregate_type", 128)
     val eventType = varchar("event_type", 256)
     val createdAt = datetime("created_at")
     val body = jsonb("json_body")
     val metadata = jsonb("metadata")
+
+    init {
+        uniqueIndex(eventId)
+        uniqueIndex(aggregateId, aggregateSequence)
+        nonUniqueIndex(aggregateType, eventType)
+    }
 }
+
+private fun Table.nonUniqueIndex(vararg columns: Column<*>) = index(false, *columns)
 
 object ConcurrencyError : RetriableError
