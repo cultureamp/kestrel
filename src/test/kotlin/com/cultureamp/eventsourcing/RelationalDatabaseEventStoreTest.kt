@@ -2,8 +2,7 @@ package com.cultureamp.eventsourcing
 
 import com.cultureamp.eventsourcing.sample.*
 import com.cultureamp.eventsourcing.sample.PizzaStyle.MARGHERITA
-import com.cultureamp.eventsourcing.sample.PizzaTopping.CHEESE
-import com.cultureamp.eventsourcing.sample.PizzaTopping.TOMATO_PASTE
+import com.cultureamp.eventsourcing.sample.PizzaTopping.*
 import io.kotest.core.spec.style.DescribeSpec
 import io.kotest.matchers.shouldBe
 import org.jetbrains.exposed.sql.Database
@@ -36,10 +35,7 @@ class RelationalDatabaseEventStoreTest : DescribeSpec({
         it("sets and retrieves multiple events") {
             val aggregateId = UUID.randomUUID()
             val otherAggregateId = UUID.randomUUID()
-            val basicPizzaCreated = PizzaCreated(
-                PizzaStyle.MARGHERITA,
-                listOf(PizzaTopping.TOMATO_PASTE, PizzaTopping.BASIL, PizzaTopping.CHEESE)
-            )
+            val basicPizzaCreated = PizzaCreated(MARGHERITA, listOf(TOMATO_PASTE, BASIL, CHEESE))
             val events = listOf(
                 event(
                     basicPizzaCreated,
@@ -77,7 +73,7 @@ class RelationalDatabaseEventStoreTest : DescribeSpec({
             val aggregateId = UUID.randomUUID()
             val events = listOf(
                 event(
-                    PizzaToppingAdded(PizzaTopping.HAM),
+                    PizzaToppingAdded(HAM),
                     aggregateId,
                     1,
                     EmptyMetadata()
