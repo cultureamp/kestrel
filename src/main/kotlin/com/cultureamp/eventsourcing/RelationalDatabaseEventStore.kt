@@ -154,6 +154,15 @@ class RelationalDatabaseEventStore @PublishedApi internal constructor(
                 .map { it.event }
         }
     }
+
+    override fun lastSequence(): Long = transaction(db) {
+        val maxSequence = events.sequence.max()
+        events
+            .slice(maxSequence)
+            .selectAll()
+            .map { it[maxSequence] }
+            .first() ?: 0
+    }
 }
 
 open class EventDataException(e: Exception) : Throwable(e)
