@@ -7,8 +7,6 @@ interface EventSink {
 }
 
 interface EventSource {
-    fun eventsFor(aggregateId: UUID): List<Event>
-
     fun getAfter(sequence: Long, batchSize: Int) : List<SequencedEvent>
 
     fun lastSequence(): Long
@@ -22,5 +20,7 @@ interface EventSource {
     fun replay(aggregateType: String, project: (Event) -> Unit)
 }
 
-interface EventStore : EventSink, EventSource
+interface EventStore : EventSink, EventSource {
+    fun eventsFor(aggregateId: UUID): List<Event>
+}
 
