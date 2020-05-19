@@ -9,7 +9,6 @@ interface BookmarkStore {
     fun findOrCreate(bookmarkName: String) = bookmarkFor(bookmarkName)
     fun bookmarkFor(bookmarkName: String): Bookmark
     fun save(bookmarkName: String, bookmark: Bookmark)
-    fun all(): Map<String, Bookmark>
 }
 
 class InMemoryBookmarkStore : BookmarkStore {
@@ -20,8 +19,6 @@ class InMemoryBookmarkStore : BookmarkStore {
     override fun save(bookmarkName: String, bookmark: Bookmark) {
         map[bookmarkName] = bookmark
     }
-
-    override fun all(): Map<String, Bookmark> = map
 }
 
 class RelationalDatabaseBookmarkStore(val db: Database, val table: Bookmarks = Bookmarks()) : BookmarkStore {
@@ -48,12 +45,6 @@ class RelationalDatabaseBookmarkStore(val db: Database, val table: Bookmarks = B
                 it[updatedAt] = DateTime.now()
             }
         }
-    }
-
-    override fun all(): Map<String, Bookmark> = transaction(db) {
-        table.selectAll().map { row ->
-            row[table.name] to Bookmark(row[table.sequence])
-        }.toMap()
     }
 
     private fun rowsForBookmark(bookmarkName: String) = table.select { table.name eq bookmarkName }
