@@ -102,10 +102,10 @@ data class Configuration<CC : CreationCommand, CE : CreationEvent, Err : Command
 
 
 class CreateBuilder<CC : CreationCommand, CE : CreationEvent, Err : CommandError>(
-        val creationCommandClass: KClass<CC>,
-        val create: (CC) -> Either<Err, CE>
+        val _creationCommandClass: KClass<CC>,
+        val _create: (CC) -> Either<Err, CE>
 ) {
-    inline fun <A : Aggregate, reified UC : UpdateCommand, UE : UpdateEvent> update(noinline update: A.(UC) -> Either<Err, List<UE>>) = UpdateBuilder(creationCommandClass, UC::class, create, update)
+    inline fun <A : Aggregate, reified UC : UpdateCommand, UE : UpdateEvent> update(noinline update: A.(UC) -> Either<Err, List<UE>>) = UpdateBuilder(_creationCommandClass, UC::class, _create, update)
 }
 
 class UpdateBuilder<CC : CreationCommand, CE : CreationEvent, Err : CommandError, UC : UpdateCommand, UE : UpdateEvent, A : Aggregate>(
