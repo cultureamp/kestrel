@@ -5,7 +5,9 @@ import org.jetbrains.exposed.sql.transactions.transaction
 import org.joda.time.DateTime
 
 interface BookmarkStore {
-    fun findOrCreate(bookmarkName: String): Bookmark
+    @Deprecated("Method name was misleading", ReplaceWith("bookmarkFor"))
+    fun findOrCreate(bookmarkName: String) = bookmarkFor(bookmarkName)
+    fun bookmarkFor(bookmarkName: String): Bookmark
     fun save(bookmarkName: String, bookmark: Bookmark)
     fun all(): Map<String, Bookmark>
 }
@@ -13,7 +15,7 @@ interface BookmarkStore {
 class InMemoryBookmarkStore : BookmarkStore {
     private val map = hashMapOf<String, Bookmark>().withDefault { Bookmark(0) }
 
-    override fun findOrCreate(bookmarkName: String) = map.getValue(bookmarkName)
+    override fun bookmarkFor(bookmarkName: String) = map.getValue(bookmarkName)
 
     override fun save(bookmarkName: String, bookmark: Bookmark) {
         map[bookmarkName] = bookmark
@@ -23,7 +25,7 @@ class InMemoryBookmarkStore : BookmarkStore {
 }
 
 class RelationalDatabaseBookmarkStore(val db: Database, val table: Bookmarks = Bookmarks()) : BookmarkStore {
-    override fun findOrCreate(bookmarkName: String): Bookmark = transaction(db) {
+    override fun bookmarkFor(bookmarkName: String): Bookmark = transaction(db) {
         val matchingRows = rowsForBookmark(bookmarkName)
         val bookmarkVal = when (matchingRows.count()) {
             0 -> 0L
