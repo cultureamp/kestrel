@@ -4,7 +4,7 @@ import com.cultureamp.common.Action
 import com.cultureamp.common.ExponentialBackoff
 
 class AsyncEventProcessor(
-    private val eventStore: EventStore,
+    private val eventStore: EventSource,
     private val bookmarkStore: BookmarkStore,
     private val bookmarkName: String,
     private val eventListener: EventListener,
