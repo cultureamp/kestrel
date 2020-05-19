@@ -26,29 +26,20 @@ class RelationalDatabaseBookmarkStoreTest : DescribeSpec({
 
     describe("RelationalDatabaseBookmarkStore") {
         it("sets and retrieves a bookmark") {
-            store.save("new-bookmark", Bookmark(123L))
-            store.save("other-bookmark", Bookmark(456L))
-            store.bookmarkFor("new-bookmark") shouldBe Bookmark(123L)
+            store.save(Bookmark("new-bookmark", 123L))
+            store.save(Bookmark("other-bookmark", 456L))
+            store.bookmarkFor("new-bookmark") shouldBe Bookmark("new-bookmark", 123L)
         }
 
         it("returns zero for an unknown bookmark") {
-            store.bookmarkFor("other-new-bookmark") shouldBe Bookmark(0L)
+            store.bookmarkFor("other-new-bookmark") shouldBe Bookmark("other-new-bookmark", 0L)
         }
 
         it("updates the value if the bookmark already exists") {
-            store.save("update-bookmark", Bookmark(123L))
-            store.save("other-bookmark", Bookmark(456L))
-            store.save("update-bookmark", Bookmark(789L))
-            store.bookmarkFor("update-bookmark") shouldBe Bookmark(789L)
-        }
-
-        it("returns all bookmarks") {
-            store.save("update-bookmark", Bookmark(123L))
-            store.save("other-bookmark", Bookmark(456L))
-            store.all() shouldBe mapOf(
-                "update-bookmark" to Bookmark(123L),
-                "other-bookmark" to Bookmark(456L)
-            )
+            store.save(Bookmark("update-bookmark", 123L))
+            store.save(Bookmark("other-bookmark", 456L))
+            store.save(Bookmark("update-bookmark", 789L))
+            store.bookmarkFor("update-bookmark") shouldBe Bookmark("update-bookmark", 789L)
         }
     }
 })
