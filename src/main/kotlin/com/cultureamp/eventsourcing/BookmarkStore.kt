@@ -5,53 +5,38 @@ import org.jetbrains.exposed.sql.transactions.transaction
 import org.joda.time.DateTime
 
 interface BookmarkStore {
-    fun findOrCreate(bookmarkName: String): Bookmark
-    fun save(bookmarkName: String, bookmark: Bookmark)
-    fun all(): Map<String, Bookmark>
-}
-
-class InMemoryBookmarkStore : BookmarkStore {
-    private val map = hashMapOf<String, Bookmark>().withDefault { Bookmark(0) }
-
-    override fun findOrCreate(bookmarkName: String) = map.getValue(bookmarkName)
-
-    override fun save(bookmarkName: String, bookmark: Bookmark) {
-        map[bookmarkName] = bookmark
-    }
-
-    override fun all(): Map<String, Bookmark> = map
+    @Deprecated("Method name was misleading", ReplaceWith("bookmarkFor"))
+    fun findOrCreate(bookmarkName: String) = bookmarkFor(bookmarkName)
+    fun bookmarkFor(bookmarkName: String): Bookmark
+    @Deprecated("Bookmark name now lives inside the Bookmark data class", ReplaceWith("save(bookmark: Bookmark)"))
+    fun save(bookmarkName: String, bookmark: Bookmark) = save(bookmark)
+    fun save(bookmark: Bookmark)
 }
 
 class RelationalDatabaseBookmarkStore(val db: Database, val table: Bookmarks = Bookmarks()) : BookmarkStore {
-    override fun findOrCreate(bookmarkName: String): Bookmark = transaction(db) {
+    override fun bookmarkFor(bookmarkName: String): Bookmark = transaction(db) {
         val matchingRows = rowsForBookmark(bookmarkName)
         val bookmarkVal = when (matchingRows.count()) {
             0 -> 0L
             else -> matchingRows.single()[table.sequence]
         }
-        Bookmark(bookmarkVal)
+        Bookmark(bookmarkName, bookmarkVal)
     }
 
-    override fun save(bookmarkName: String, bookmark: Bookmark): Unit = transaction(db) {
-        when (rowsForBookmark(bookmarkName).count()) {
+    override fun save(bookmark: Bookmark): Unit = transaction(db) {
+        when (rowsForBookmark(bookmark.name).count()) {
             0 -> table.insert {
-                it[name] = bookmarkName
+                it[name] = bookmark.name
                 it[sequence] = bookmark.sequence
                 it[createdAt] = DateTime.now()
                 it[updatedAt] = DateTime.now()
 
             }
-            else -> table.update({ table.name eq bookmarkName }) {
+            else -> table.update({ table.name eq bookmark.name }) {
                 it[sequence] = bookmark.sequence
                 it[updatedAt] = DateTime.now()
             }
         }
-    }
-
-    override fun all(): Map<String, Bookmark> = transaction(db) {
-        table.selectAll().map { row ->
-            row[table.name] to Bookmark(row[table.sequence])
-        }.toMap()
     }
 
     private fun rowsForBookmark(bookmarkName: String) = table.select { table.name eq bookmarkName }
@@ -65,5 +50,5 @@ class Bookmarks(name: String = "bookmarks") : Table(name) {
     val updatedAt = datetime("updated_at")
 }
 
-data class Bookmark(val sequence: Long)
+data class Bookmark(val name: String, val sequence: Long)
 

@@ -23,7 +23,7 @@ val defaultObjectMapper = ObjectMapper()
 class RelationalDatabaseEventStore @PublishedApi internal constructor(
     private val db: Database,
     private val events: Events,
-    synchronousProjectors: List<EventListener>,
+    private val synchronousProjectors: List<EventListener>,
     private val metadataClass: Class<out EventMetadata>,
     private val objectMapper: ObjectMapper
 ) : EventStore {
@@ -46,8 +46,6 @@ class RelationalDatabaseEventStore @PublishedApi internal constructor(
         ) =
             create<T>(emptyList(), db, objectMapper)
     }
-
-    override val listeners: MutableList<EventListener> = synchronousProjectors.toMutableList()
 
     fun createSchemaIfNotExists() {
         transaction(db) {
@@ -76,7 +74,7 @@ class RelationalDatabaseEventStore @PublishedApi internal constructor(
                     }
                 }
 
-                notifyListeners(newEvents, aggregateId)
+                updateSynchronousProjections(newEvents)
                 Right(Unit)
             }
         } catch (e: ExposedSQLException) {
@@ -162,6 +160,10 @@ class RelationalDatabaseEventStore @PublishedApi internal constructor(
             .selectAll()
             .map { it[maxSequence] }
             .first() ?: 0
+    }
+
+    private fun updateSynchronousProjections(newEvents: List<Event>) {
+        newEvents.forEach { event -> synchronousProjectors.forEach { it.handle(event) } }
     }
 }
 
