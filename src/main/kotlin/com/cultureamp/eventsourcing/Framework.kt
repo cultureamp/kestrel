@@ -7,20 +7,21 @@ import kotlin.reflect.KFunction2
 import kotlin.reflect.KFunction3
 import kotlin.reflect.KFunction4
 
-interface Aggregate<UC : UpdateCommand, UE : UpdateEvent> {
-    fun updated(event: UE): Aggregate<UC, UE>
-    fun update(command: UC): Either<CommandError, List<UE>>
+interface BaseAggregateWithType {
     fun aggregateType(): String = this::class.simpleName!!
 }
 
-interface AggregateWithProjection<UC : UpdateCommand, UE : UpdateEvent, P> {
+interface Aggregate<UC : UpdateCommand, UE : UpdateEvent>: BaseAggregateWithType {
+    fun updated(event: UE): Aggregate<UC, UE>
+    fun update(command: UC): Either<CommandError, List<UE>>
+}
+
+interface AggregateWithProjection<UC : UpdateCommand, UE : UpdateEvent, P>: BaseAggregateWithType {
     fun updated(event: UE): AggregateWithProjection<UC, UE, P>
     fun update(projection: P, command: UC): Either<CommandError, List<UE>>
-    fun aggregateType(): String = this::class.simpleName!!
 
     fun partial(projection: P): Aggregate<UC, UE> {
         return object : Aggregate<UC, UE> {
-
             override fun updated(event: UE): Aggregate<UC, UE> {
                 return this@AggregateWithProjection.updated(event).partial(projection)
             }
