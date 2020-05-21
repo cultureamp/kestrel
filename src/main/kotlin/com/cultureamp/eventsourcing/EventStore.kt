@@ -10,6 +10,10 @@ interface EventSource {
     fun getAfter(sequence: Long, batchSize: Int) : List<SequencedEvent>
 
     fun lastSequence(): Long
+}
+
+interface EventStore : EventSink, EventSource {
+    fun eventsFor(aggregateId: UUID): List<Event>
 
     /**
      * Replay all the events in the store on the project function, for an aggregateType
@@ -18,9 +22,5 @@ interface EventSource {
         "Doesn't batch, only used for big-bang synchronous projection rebuilds, which is an anti-pattern better done with AsyncEventProcessor",
         ReplaceWith("getAfter"))
     fun replay(aggregateType: String, project: (Event) -> Unit)
-}
-
-interface EventStore : EventSink, EventSource {
-    fun eventsFor(aggregateId: UUID): List<Event>
 }
 
