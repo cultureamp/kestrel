@@ -232,6 +232,8 @@ interface AuthorizationCommandError : CommandError
 
 interface RetriableError : CommandError
 
+interface DomainError: CommandError
+
 sealed class Either<out E, out V>
 data class Left<E>(val error: E) : Either<E, Nothing>()
 data class Right<V>(val value: V) : Either<Nothing, V>() {
