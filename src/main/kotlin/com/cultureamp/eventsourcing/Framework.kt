@@ -36,16 +36,16 @@ interface AggregateWithProjection<UC : UpdateCommand, UE : UpdateEvent, P> {
     }
 }
 
-interface AggregateConstructor<CC : CreationCommand, CE : CreationEvent, UC : UpdateCommand, UE : UpdateEvent, Self : TypedAggregate<UC, UE>> {
-    fun created(event: CE): Self
+interface AggregateConstructor<CC : CreationCommand, CE : CreationEvent, UC : UpdateCommand, UE : UpdateEvent> {
+    fun created(event: CE): TypedAggregate<UC, UE>
     fun create(command: CC): Either<CommandError, CE>
 }
 
 interface AggregateConstructorWithProjection<CC : CreationCommand, CE : CreationEvent, UC : UpdateCommand, UE : UpdateEvent, P, Self : AggregateWithProjection<UC, UE, P>> {
     fun created(event: CE): Self
     fun create(projection: P, command: CC): Either<CommandError, CE>
-    fun partial(projection: P): AggregateConstructor<CC, CE, UC, UE, TypedAggregate<UC, UE>> {
-        return object : AggregateConstructor<CC, CE, UC, UE, TypedAggregate<UC, UE>> {
+    fun partial(projection: P): AggregateConstructor<CC, CE, UC, UE> {
+        return object : AggregateConstructor<CC, CE, UC, UE> {
             override fun created(event: CE): TypedAggregate<UC, UE> {
                 return this@AggregateConstructorWithProjection.created(event).partial(projection)
             }
@@ -87,8 +87,8 @@ data class Configuration<CC : CreationCommand, CE : CreationEvent, UC : UpdateCo
             return from(create, { update(it) }, { instance }, { instance }, aggregateType)
         }
 
-        inline fun <reified CC : CreationCommand, CE : CreationEvent, reified UC : UpdateCommand, UE : UpdateEvent, reified Self : TypedAggregate<UC, UE>> from(
-            aggregateConstructor: AggregateConstructor<CC, CE, UC, UE, Self>
+        inline fun <reified CC : CreationCommand, CE : CreationEvent, reified UC : UpdateCommand, UE : UpdateEvent> from(
+            aggregateConstructor: AggregateConstructor<CC, CE, UC, UE>
         ): Configuration<CC, CE, UC, UE, TypedAggregate<UC, UE>> {
             val created = aggregateConstructor::created
             val create = aggregateConstructor::create

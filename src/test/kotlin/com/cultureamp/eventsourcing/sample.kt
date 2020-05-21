@@ -76,7 +76,7 @@ data class PizzaAggregate(
     }
 
     companion object :
-        AggregateConstructor<PizzaCreationCommand, PizzaCreationEvent, PizzaUpdateCommand, PizzaUpdateEvent, PizzaAggregate> {
+        AggregateConstructor<PizzaCreationCommand, PizzaCreationEvent, PizzaUpdateCommand, PizzaUpdateEvent> {
         override fun created(event: PizzaCreationEvent): PizzaAggregate = when (event) {
             is PizzaCreated -> PizzaAggregate(event)
         }
