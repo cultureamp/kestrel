@@ -65,7 +65,7 @@ class PizzaAlreadyEaten : PizzaError()
 
 data class PizzaAggregate(
     val baseStyle: PizzaStyle, val toppings: List<PizzaTopping>, val isEaten: Boolean = false
-) : TypedAggregate<PizzaUpdateCommand, PizzaUpdateEvent, PizzaError, PizzaAggregate> {
+) : TypedAggregate<PizzaUpdateCommand, PizzaUpdateEvent> {
     constructor(event: PizzaCreated) : this(baseStyle = event.baseStyle, toppings = event.initialToppings)
 
     override fun aggregateType() = "pizza"
@@ -76,7 +76,7 @@ data class PizzaAggregate(
     }
 
     companion object :
-        AggregateConstructor<PizzaCreationCommand, PizzaCreationEvent, PizzaError, PizzaUpdateCommand, PizzaUpdateEvent, PizzaAggregate> {
+        AggregateConstructor<PizzaCreationCommand, PizzaCreationEvent, PizzaUpdateCommand, PizzaUpdateEvent, PizzaAggregate> {
         override fun created(event: PizzaCreationEvent): PizzaAggregate = when (event) {
             is PizzaCreated -> PizzaAggregate(event)
         }
