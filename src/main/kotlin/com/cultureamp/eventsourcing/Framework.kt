@@ -9,25 +9,25 @@ import kotlin.reflect.KFunction4
 
 interface Aggregate
 
-interface TypedAggregate<UC: UpdateCommand, UE: UpdateEvent, Err: CommandError, out Self : TypedAggregate<UC, UE, Err, Self>> : Aggregate {
+interface TypedAggregate<UC: UpdateCommand, UE: UpdateEvent, out Self : TypedAggregate<UC, UE, Self>> : Aggregate {
     fun updated(event: UE): Self
-    fun update(command: UC): Either<Err, List<UE>>
+    fun update(command: UC): Either<CommandError, List<UE>>
     fun aggregateType(): String = this::class.simpleName!!
 }
 
-interface AggregateWithProjection<UC: UpdateCommand, UE: UpdateEvent, Err: CommandError, P, Self : AggregateWithProjection<UC, UE, Err, P, Self>> {
+interface AggregateWithProjection<UC: UpdateCommand, UE: UpdateEvent, P, Self : AggregateWithProjection<UC, UE, P, Self>> {
     fun updated(event: UE): Self
-    fun update(projection: P, command: UC): Either<Err, List<UE>>
+    fun update(projection: P, command: UC): Either<CommandError, List<UE>>
     fun aggregateType(): String = this::class.simpleName!!
 
-    fun partial(projection: P): TypedAggregate<UC, UE, Err, TypedAggregate<UC, UE, Err, *>> {
-        return object:TypedAggregate<UC, UE, Err, TypedAggregate<UC, UE, Err, *>> {
+    fun partial(projection: P): TypedAggregate<UC, UE, TypedAggregate<UC, UE, *>> {
+        return object:TypedAggregate<UC, UE, TypedAggregate<UC, UE, *>> {
 
-            override fun updated(event: UE): TypedAggregate<UC, UE, Err, *> {
+            override fun updated(event: UE): TypedAggregate<UC, UE, *> {
                 return this@AggregateWithProjection.updated(event).partial(projection)
             }
 
-            override fun update(command: UC): Either<Err, List<UE>> {
+            override fun update(command: UC): Either<CommandError, List<UE>> {
                 return update(projection, command)
             }
 
@@ -36,73 +36,73 @@ interface AggregateWithProjection<UC: UpdateCommand, UE: UpdateEvent, Err: Comma
     }
 }
 
-interface AggregateConstructor<CC: CreationCommand, CE: CreationEvent, Err: CommandError, UC: UpdateCommand, UE: UpdateEvent, Self: TypedAggregate<UC, UE, Err, Self>> {
+interface AggregateConstructor<CC: CreationCommand, CE: CreationEvent, UC: UpdateCommand, UE: UpdateEvent, Self: TypedAggregate<UC, UE, Self>> {
     fun created(event: CE): Self
-    fun create(command: CC): Either<Err, CE>
+    fun create(command: CC): Either<CommandError, CE>
 }
 
-interface AggregateConstructorWithProjection<CC: CreationCommand, CE: CreationEvent, Err: CommandError, UC: UpdateCommand, UE: UpdateEvent, P, Self : AggregateWithProjection<UC, UE, Err, P, Self>> {
+interface AggregateConstructorWithProjection<CC: CreationCommand, CE: CreationEvent, UC: UpdateCommand, UE: UpdateEvent, P, Self : AggregateWithProjection<UC, UE, P, Self>> {
     fun created(event: CE): Self
-    fun create(projection: P, command: CC): Either<Err, CE>
-    fun partial(projection: P): AggregateConstructor<CC, CE, Err, UC, UE, TypedAggregate<UC, UE, Err, *>> {
-        return object:AggregateConstructor<CC, CE, Err, UC, UE, TypedAggregate<UC, UE, Err, *>> {
-            override fun created(event: CE): TypedAggregate<UC, UE, Err, *> {
+    fun create(projection: P, command: CC): Either<CommandError, CE>
+    fun partial(projection: P): AggregateConstructor<CC, CE, UC, UE, TypedAggregate<UC, UE, *>> {
+        return object:AggregateConstructor<CC, CE, UC, UE, TypedAggregate<UC, UE, *>> {
+            override fun created(event: CE): TypedAggregate<UC, UE, *> {
                 return this@AggregateConstructorWithProjection.created(event).partial(projection)
             }
 
-            override fun create(command: CC): Either<Err, CE> {
+            override fun create(command: CC): Either<CommandError, CE> {
                 return create(projection, command)
             }
         }
     }
 }
 
-data class Configuration<CC : CreationCommand, CE : CreationEvent, Err : CommandError, UC : UpdateCommand, UE : UpdateEvent, A : Aggregate>(
+data class Configuration<CC : CreationCommand, CE : CreationEvent, UC : UpdateCommand, UE : UpdateEvent, A : Aggregate>(
     val creationCommandClass: KClass<CC>,
     val updateCommandClass: KClass<UC>,
-    val create: (CC) -> Either<Err, CE>,
-    val update: A.(UC) -> Either<Err, List<UE>>,
+    val create: (CC) -> Either<CommandError, CE>,
+    val update: A.(UC) -> Either<CommandError, List<UE>>,
     val created: (CE) -> A,
     val updated: A.(UE) -> A,
     val aggregateType: A.() -> String
 ) {
     companion object {
 
-        inline fun <reified CC : CreationCommand, CE : CreationEvent, Err : CommandError, reified UC : UpdateCommand, UE : UpdateEvent, reified A : Aggregate> from(
-            noinline create: (CC) -> Either<Err, CE>,
-            noinline update: A.(UC) -> Either<Err, List<UE>>,
+        inline fun <reified CC : CreationCommand, CE : CreationEvent, reified UC : UpdateCommand, UE : UpdateEvent, reified A : Aggregate> from(
+            noinline create: (CC) -> Either<CommandError, CE>,
+            noinline update: A.(UC) -> Either<CommandError, List<UE>>,
             noinline created: (CE) -> A,
             noinline updated: A.(UE) -> A = { _ -> this },
             noinline aggregateType: A.() -> String = { this::class.simpleName!! }
-        ): Configuration<CC, CE, Err, UC, UE, A> {
+        ): Configuration<CC, CE, UC, UE, A> {
             return Configuration(CC::class, UC::class, create, update, created, updated, aggregateType)
         }
 
-        inline fun <reified CC : CreationCommand, CE : CreationEvent, Err : CommandError, reified UC : UpdateCommand, UE : UpdateEvent, reified A : Aggregate> from(
-            noinline create: (CC) -> Either<Err, CE>,
-            noinline update: (UC) -> Either<Err, List<UE>>,
+        inline fun <reified CC : CreationCommand, CE : CreationEvent, reified UC : UpdateCommand, UE : UpdateEvent, reified A : Aggregate> from(
+            noinline create: (CC) -> Either<CommandError, CE>,
+            noinline update: (UC) -> Either<CommandError, List<UE>>,
             instance: A,
             noinline aggregateType: A.() -> String = { this::class.simpleName!! }
-        ): Configuration<CC, CE, Err, UC, UE, A> {
+        ): Configuration<CC, CE, UC, UE, A> {
             return from(create, { update(it) }, { instance }, { instance }, aggregateType)
         }
 
-        inline fun <reified CC : CreationCommand, CE : CreationEvent, Err : CommandError, reified UC : UpdateCommand, UE : UpdateEvent, reified Self : TypedAggregate<UC, UE, Err, Self>> from(
-            aggregateConstructor: AggregateConstructor<CC, CE, Err, UC, UE, Self>
-        ): Configuration<CC, CE, Err, UC, UE, Self> {
+        inline fun <reified CC : CreationCommand, CE : CreationEvent, reified UC : UpdateCommand, UE : UpdateEvent, reified Self : TypedAggregate<UC, UE, Self>> from(
+            aggregateConstructor: AggregateConstructor<CC, CE, UC, UE, Self>
+        ): Configuration<CC, CE, UC, UE, Self> {
             val created = aggregateConstructor::created
             val create = aggregateConstructor::create
-            val updated = TypedAggregate<UC, UE, Err, Self>::updated
-            val update = TypedAggregate<UC, UE, Err, Self>::update
-            val aggregateType = TypedAggregate<UC, UE, Err, Self>::aggregateType
+            val updated = TypedAggregate<UC, UE, Self>::updated
+            val update = TypedAggregate<UC, UE, Self>::update
+            val aggregateType = TypedAggregate<UC, UE, Self>::aggregateType
             return from(create, update, created, updated, aggregateType)
         }
 
-        inline fun <reified CC : CreationCommand, CE : CreationEvent, Err : CommandError, reified UC : UpdateCommand, UE : UpdateEvent, P, Self : AggregateWithProjection<UC, UE, Err, P, Self>> from(
-            aggregateConstructor: AggregateConstructorWithProjection<CC, CE, Err, UC, UE, P, Self>,
+        inline fun <reified CC : CreationCommand, CE : CreationEvent, reified UC : UpdateCommand, UE : UpdateEvent, P, Self : AggregateWithProjection<UC, UE, P, Self>> from(
+            aggregateConstructor: AggregateConstructorWithProjection<CC, CE, UC, UE, P, Self>,
             projection: P
-        ): Configuration<CC, CE, Err, UC, UE, TypedAggregate<UC, UE, Err, *>> {
-            return from<CC, CE, Err, UC, UE, TypedAggregate<UC, UE, Err, *>>(aggregateConstructor.partial(projection))
+        ): Configuration<CC, CE, UC, UE, TypedAggregate<UC, UE, *>> {
+            return from<CC, CE, UC, UE, TypedAggregate<UC, UE, *>>(aggregateConstructor.partial(projection))
         }
     }
 

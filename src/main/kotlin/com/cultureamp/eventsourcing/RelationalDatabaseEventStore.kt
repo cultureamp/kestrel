@@ -53,7 +53,6 @@ class RelationalDatabaseEventStore @PublishedApi internal constructor(
         }
     }
 
-
     override fun sink(newEvents: List<Event>, aggregateId: UUID, aggregateType: String): Either<CommandError, Unit> {
         return try {
             return transaction(db) {
