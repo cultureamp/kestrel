@@ -15,8 +15,8 @@ interface TypedAggregate<UC : UpdateCommand, UE : UpdateEvent> : Aggregate {
     fun aggregateType(): String = this::class.simpleName!!
 }
 
-interface AggregateWithProjection<UC : UpdateCommand, UE : UpdateEvent, P, Self : AggregateWithProjection<UC, UE, P, Self>> {
-    fun updated(event: UE): Self
+interface AggregateWithProjection<UC : UpdateCommand, UE : UpdateEvent, P> {
+    fun updated(event: UE): AggregateWithProjection<UC, UE, P>
     fun update(projection: P, command: UC): Either<CommandError, List<UE>>
     fun aggregateType(): String = this::class.simpleName!!
 
@@ -41,7 +41,7 @@ interface AggregateConstructor<CC : CreationCommand, CE : CreationEvent, UC : Up
     fun create(command: CC): Either<CommandError, CE>
 }
 
-interface AggregateConstructorWithProjection<CC : CreationCommand, CE : CreationEvent, UC : UpdateCommand, UE : UpdateEvent, P, Self : AggregateWithProjection<UC, UE, P, Self>> {
+interface AggregateConstructorWithProjection<CC : CreationCommand, CE : CreationEvent, UC : UpdateCommand, UE : UpdateEvent, P, Self : AggregateWithProjection<UC, UE, P>> {
     fun created(event: CE): Self
     fun create(projection: P, command: CC): Either<CommandError, CE>
     fun partial(projection: P): AggregateConstructor<CC, CE, UC, UE, TypedAggregate<UC, UE>> {
@@ -98,7 +98,7 @@ data class Configuration<CC : CreationCommand, CE : CreationEvent, UC : UpdateCo
             return from(create, update, created, updated, aggregateType)
         }
 
-        inline fun <reified CC : CreationCommand, CE : CreationEvent, reified UC : UpdateCommand, UE : UpdateEvent, P, Self : AggregateWithProjection<UC, UE, P, Self>> from(
+        inline fun <reified CC : CreationCommand, CE : CreationEvent, reified UC : UpdateCommand, UE : UpdateEvent, P, Self : AggregateWithProjection<UC, UE, P>> from(
             aggregateConstructor: AggregateConstructorWithProjection<CC, CE, UC, UE, P, Self>,
             projection: P
         ): Configuration<CC, CE, UC, UE, TypedAggregate<UC, UE>> {
