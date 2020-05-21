@@ -1,6 +1,6 @@
 package com.cultureamp.eventsourcing
 
-class CommandGateway(private val eventStore: EventStore, private val registry: List<Configuration<*, *, *, *, *, *>>) {
+class CommandGateway(private val eventStore: EventStore, private val registry: List<Configuration<*, *, *, *, *>>) {
 
     tailrec fun dispatch(command: Command, metadata: EventMetadata, retries: Int = 5): Either<CommandError, SuccessStatus> {
         val result = createOrUpdate(command, metadata)
@@ -26,7 +26,7 @@ class CommandGateway(private val eventStore: EventStore, private val registry: L
 
     @Suppress("UNCHECKED_CAST")
     private fun configurationFor(command: Command) =
-        registry.find { it.creationCommandClass.isInstance(command) || it.updateCommandClass.isInstance(command) } as Configuration<CreationCommand, *, *, UpdateCommand, *, *>?
+        registry.find { it.creationCommandClass.isInstance(command) || it.updateCommandClass.isInstance(command) } as Configuration<CreationCommand, *, UpdateCommand, *, *>?
 }
 
 sealed class SuccessStatus
