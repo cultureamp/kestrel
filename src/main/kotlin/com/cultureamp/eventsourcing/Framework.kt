@@ -7,16 +7,23 @@ import kotlin.reflect.KFunction2
 import kotlin.reflect.KFunction3
 import kotlin.reflect.KFunction4
 
-interface BaseAggregateWithType {
+interface BaseAggregate {
     fun aggregateType(): String = this::class.simpleName!!
 }
 
-interface Aggregate<UC : UpdateCommand, UE : UpdateEvent>: BaseAggregateWithType {
+interface Aggregate<UC : UpdateCommand, UE : UpdateEvent>: BaseAggregate {
     fun updated(event: UE): Aggregate<UC, UE>
     fun update(command: UC): Either<CommandError, List<UE>>
 }
 
-interface AggregateWithProjection<UC : UpdateCommand, UE : UpdateEvent, P>: BaseAggregateWithType {
+interface CreateOnlyAggregate: BaseAggregate
+
+interface CreateOnlyAggregateConstructor<CC : CreationCommand, CE: CreationEvent> {
+    fun created(event: CE): CreateOnlyAggregate
+    fun create(command: CC): Either<CommandError, CE>
+}
+
+interface AggregateWithProjection<UC : UpdateCommand, UE : UpdateEvent, P>: BaseAggregate {
     fun updated(event: UE): AggregateWithProjection<UC, UE, P>
     fun update(projection: P, command: UC): Either<CommandError, List<UE>>
 
@@ -52,6 +59,25 @@ interface AggregateConstructorWithProjection<CC : CreationCommand, CE : Creation
             override fun create(command: CC): Either<CommandError, CE> {
                 return create(projection, command)
             }
+        }
+    }
+}
+
+data class CreateOnlyConfiguration<CC: CreationCommand, CE: CreationEvent, A: CreateOnlyAggregate>(
+    val creationCommandClass: KClass<CC>,
+    val create: (CC) -> Either<CommandError, CE>,
+    val created: (CE) -> A,
+    val aggregateType: A.() -> String
+) {
+
+    companion object {
+        inline fun <reified CC : CreationCommand, CE : CreationEvent, reified UC : UpdateCommand, UE : UpdateEvent> from(
+            aggregateConstructor: CreateOnlyAggregateConstructor<CC, CE>
+        ): CreateOnlyConfiguration<CC, CE, CreateOnlyAggregate> {
+            val created = aggregateConstructor::created
+            val create = aggregateConstructor::create
+            val aggregateType = BaseAggregate::aggregateType
+            return CreateOnlyConfiguration(CC::class, create, created, aggregateType)
         }
     }
 }
@@ -93,7 +119,7 @@ data class Configuration<CC : CreationCommand, CE : CreationEvent, UC : UpdateCo
             val create = aggregateConstructor::create
             val updated = Aggregate<UC, UE>::updated
             val update = Aggregate<UC, UE>::update
-            val aggregateType = Aggregate<UC, UE>::aggregateType
+            val aggregateType = BaseAggregate::aggregateType
             return from(create, update, created, updated, aggregateType)
         }
 
