@@ -9,19 +9,19 @@ import kotlin.reflect.KFunction4
 
 interface Aggregate
 
-interface TypedAggregate<UC: UpdateCommand, UE: UpdateEvent, out Self : TypedAggregate<UC, UE, Self>> : Aggregate {
+interface TypedAggregate<UC : UpdateCommand, UE : UpdateEvent, out Self : TypedAggregate<UC, UE, Self>> : Aggregate {
     fun updated(event: UE): Self
     fun update(command: UC): Either<CommandError, List<UE>>
     fun aggregateType(): String = this::class.simpleName!!
 }
 
-interface AggregateWithProjection<UC: UpdateCommand, UE: UpdateEvent, P, Self : AggregateWithProjection<UC, UE, P, Self>> {
+interface AggregateWithProjection<UC : UpdateCommand, UE : UpdateEvent, P, Self : AggregateWithProjection<UC, UE, P, Self>> {
     fun updated(event: UE): Self
     fun update(projection: P, command: UC): Either<CommandError, List<UE>>
     fun aggregateType(): String = this::class.simpleName!!
 
     fun partial(projection: P): TypedAggregate<UC, UE, TypedAggregate<UC, UE, *>> {
-        return object:TypedAggregate<UC, UE, TypedAggregate<UC, UE, *>> {
+        return object : TypedAggregate<UC, UE, TypedAggregate<UC, UE, *>> {
 
             override fun updated(event: UE): TypedAggregate<UC, UE, *> {
                 return this@AggregateWithProjection.updated(event).partial(projection)
@@ -36,16 +36,16 @@ interface AggregateWithProjection<UC: UpdateCommand, UE: UpdateEvent, P, Self : 
     }
 }
 
-interface AggregateConstructor<CC: CreationCommand, CE: CreationEvent, UC: UpdateCommand, UE: UpdateEvent, Self: TypedAggregate<UC, UE, Self>> {
+interface AggregateConstructor<CC : CreationCommand, CE : CreationEvent, UC : UpdateCommand, UE : UpdateEvent, Self : TypedAggregate<UC, UE, Self>> {
     fun created(event: CE): Self
     fun create(command: CC): Either<CommandError, CE>
 }
 
-interface AggregateConstructorWithProjection<CC: CreationCommand, CE: CreationEvent, UC: UpdateCommand, UE: UpdateEvent, P, Self : AggregateWithProjection<UC, UE, P, Self>> {
+interface AggregateConstructorWithProjection<CC : CreationCommand, CE : CreationEvent, UC : UpdateCommand, UE : UpdateEvent, P, Self : AggregateWithProjection<UC, UE, P, Self>> {
     fun created(event: CE): Self
     fun create(projection: P, command: CC): Either<CommandError, CE>
     fun partial(projection: P): AggregateConstructor<CC, CE, UC, UE, TypedAggregate<UC, UE, *>> {
-        return object:AggregateConstructor<CC, CE, UC, UE, TypedAggregate<UC, UE, *>> {
+        return object : AggregateConstructor<CC, CE, UC, UE, TypedAggregate<UC, UE, *>> {
             override fun created(event: CE): TypedAggregate<UC, UE, *> {
                 return this@AggregateConstructorWithProjection.created(event).partial(projection)
             }
@@ -106,20 +106,27 @@ data class Configuration<CC : CreationCommand, CE : CreationEvent, UC : UpdateCo
         }
     }
 
-    fun create(creationCommand: CC, metadata: EventMetadata, eventStore: EventStore): Either<CommandError, Unit> = create(creationCommand).map { domainEvent ->
-        val aggregate = created(domainEvent)
-        val event = Event(
-            id = UUID.randomUUID(),
-            aggregateId = creationCommand.aggregateId,
-            aggregateSequence = 1,
-            createdAt = DateTime(),
-            metadata = metadata,
-            domainEvent = domainEvent)
-        eventStore.sink(listOf(event), creationCommand.aggregateId, aggregate.aggregateType())
-    }.flatten()
+    fun create(creationCommand: CC, metadata: EventMetadata, eventStore: EventStore): Either<CommandError, Unit> =
+        create(creationCommand).map { domainEvent ->
+            val aggregate = created(domainEvent)
+            val event = Event(
+                id = UUID.randomUUID(),
+                aggregateId = creationCommand.aggregateId,
+                aggregateSequence = 1,
+                createdAt = DateTime(),
+                metadata = metadata,
+                domainEvent = domainEvent
+            )
+            eventStore.sink(listOf(event), creationCommand.aggregateId, aggregate.aggregateType())
+        }.flatten()
 
     @Suppress("UNCHECKED_CAST")
-    fun update(updateCommand: UC, metadata: EventMetadata, events: List<Event>, eventStore: EventStore): Either<CommandError, Unit> {
+    fun update(
+        updateCommand: UC,
+        metadata: EventMetadata,
+        events: List<Event>,
+        eventStore: EventStore
+    ): Either<CommandError, Unit> {
         val creationEvent = events.first().domainEvent as CreationEvent
         val updateEvents = events.slice(1 until events.size).map { it.domainEvent as UpdateEvent }
         val aggregate = rehydrated(creationEvent as CE, updateEvents as List<UE>)
@@ -239,7 +246,7 @@ fun <E, V, R> Either<E, V>.map(transform: (V) -> R): Either<E, R> = when (this) 
     is Left -> this
 }
 
-fun <E, V> Either<E, Either<E,V>>.flatten(): Either<E, V> = when (this) {
+fun <E, V> Either<E, Either<E, V>>.flatten(): Either<E, V> = when (this) {
     is Left -> this
     is Right -> this.value
 }
