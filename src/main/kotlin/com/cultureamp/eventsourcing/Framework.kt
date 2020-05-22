@@ -13,12 +13,12 @@ interface BaseAggregate {
 
 interface Aggregate<UC : UpdateCommand, UE : UpdateEvent>: BaseAggregate {
     fun updated(event: UE): Aggregate<UC, UE>
-    fun update(command: UC): Either<CommandError, List<UE>>
+    fun update(command: UC): Either<DomainError, List<UE>>
 }
 
 interface AggregateWithProjection<UC : UpdateCommand, UE : UpdateEvent, P>: BaseAggregate {
     fun updated(event: UE): AggregateWithProjection<UC, UE, P>
-    fun update(projection: P, command: UC): Either<CommandError, List<UE>>
+    fun update(projection: P, command: UC): Either<DomainError, List<UE>>
 
     fun partial(projection: P): Aggregate<UC, UE> {
         return object : Aggregate<UC, UE> {
@@ -26,7 +26,7 @@ interface AggregateWithProjection<UC : UpdateCommand, UE : UpdateEvent, P>: Base
                 return this@AggregateWithProjection.updated(event).partial(projection)
             }
 
-            override fun update(command: UC): Either<CommandError, List<UE>> {
+            override fun update(command: UC): Either<DomainError, List<UE>> {
                 return update(projection, command)
             }
 
@@ -37,19 +37,19 @@ interface AggregateWithProjection<UC : UpdateCommand, UE : UpdateEvent, P>: Base
 
 interface AggregateConstructor<CC : CreationCommand, CE : CreationEvent, UC : UpdateCommand, UE : UpdateEvent> {
     fun created(event: CE): Aggregate<UC, UE>
-    fun create(command: CC): Either<CommandError, CE>
+    fun create(command: CC): Either<DomainError, CE>
 }
 
 interface AggregateConstructorWithProjection<CC : CreationCommand, CE : CreationEvent, UC : UpdateCommand, UE : UpdateEvent, P, Self : AggregateWithProjection<UC, UE, P>> {
     fun created(event: CE): Self
-    fun create(projection: P, command: CC): Either<CommandError, CE>
+    fun create(projection: P, command: CC): Either<DomainError, CE>
     fun partial(projection: P): AggregateConstructor<CC, CE, UC, UE> {
         return object : AggregateConstructor<CC, CE, UC, UE> {
             override fun created(event: CE): Aggregate<UC, UE> {
                 return this@AggregateConstructorWithProjection.created(event).partial(projection)
             }
 
-            override fun create(command: CC): Either<CommandError, CE> {
+            override fun create(command: CC): Either<DomainError, CE> {
                 return create(projection, command)
             }
         }
@@ -59,8 +59,8 @@ interface AggregateConstructorWithProjection<CC : CreationCommand, CE : Creation
 data class Configuration<CC : CreationCommand, CE : CreationEvent, UC : UpdateCommand, UE : UpdateEvent, A : Aggregate<UC, UE>>(
     val creationCommandClass: KClass<CC>,
     val updateCommandClass: KClass<UC>,
-    val create: (CC) -> Either<CommandError, CE>,
-    val update: A.(UC) -> Either<CommandError, List<UE>>,
+    val create: (CC) -> Either<DomainError, CE>,
+    val update: A.(UC) -> Either<DomainError, List<UE>>,
     val created: (CE) -> A,
     val updated: A.(UE) -> A,
     val aggregateType: A.() -> String
@@ -68,8 +68,8 @@ data class Configuration<CC : CreationCommand, CE : CreationEvent, UC : UpdateCo
     companion object {
 
         inline fun <reified CC : CreationCommand, CE : CreationEvent, reified UC : UpdateCommand, UE : UpdateEvent, reified A : Aggregate<UC, UE>> from(
-            noinline create: (CC) -> Either<CommandError, CE>,
-            noinline update: A.(UC) -> Either<CommandError, List<UE>>,
+            noinline create: (CC) -> Either<DomainError, CE>,
+            noinline update: A.(UC) -> Either<DomainError, List<UE>>,
             noinline created: (CE) -> A,
             noinline updated: A.(UE) -> A = { _ -> this },
             noinline aggregateType: A.() -> String = { this::class.simpleName!! }
@@ -78,8 +78,8 @@ data class Configuration<CC : CreationCommand, CE : CreationEvent, UC : UpdateCo
         }
 
         inline fun <reified CC : CreationCommand, CE : CreationEvent, reified UC : UpdateCommand, UE : UpdateEvent, reified A : Aggregate<UC, UE>> from(
-            noinline create: (CC) -> Either<CommandError, CE>,
-            noinline update: (UC) -> Either<CommandError, List<UE>>,
+            noinline create: (CC) -> Either<DomainError, CE>,
+            noinline update: (UC) -> Either<DomainError, List<UE>>,
             instance: A,
             noinline aggregateType: A.() -> String = { this::class.simpleName!! }
         ): Configuration<CC, CE, UC, UE, A> {
