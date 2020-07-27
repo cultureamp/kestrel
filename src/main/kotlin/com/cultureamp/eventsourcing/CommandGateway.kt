@@ -1,13 +1,11 @@
 package com.cultureamp.eventsourcing
 
-import kotlinx.coroutines.delay
-
 class CommandGateway(private val eventStore: EventStore, private val registry: List<Configuration<*, *, *, *, *, *>>) {
 
-    tailrec suspend fun dispatch(command: Command, metadata: EventMetadata, retries: Int = 5): Either<CommandError, SuccessStatus> {
+    tailrec fun dispatch(command: Command, metadata: EventMetadata, retries: Int = 5): Either<CommandError, SuccessStatus> {
         val result = createOrUpdate(command, metadata)
         return if (result is Left && result.error is RetriableError && retries > 0) {
-            delay(500L)
+            Thread.sleep(500L)
             dispatch(command, metadata, retries - 1)
         } else {
             result
