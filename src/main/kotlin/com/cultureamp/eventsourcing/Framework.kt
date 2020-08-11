@@ -147,22 +147,26 @@ data class Configuration<CC : CreationCommand, CE : CreationEvent, Err : Command
         updateEvents.fold(initial) { aggregate, updateEvent -> updated(aggregate, updateEvent) }
 }
 
-data class EventListener(val handlers: Map<KClass<DomainEvent>, (DomainEvent, UUID) -> Any?>) {
+data class EventListener(val handlers: Map<KClass<DomainEvent>, (DomainEvent, UUID, EventMetadata, UUID) -> Any?>) {
     fun handle(event: Event) {
-        handlers.filterKeys { it.isInstance(event.domainEvent) }.values.forEach { it(event.domainEvent, event.aggregateId) }
+        handlers.filterKeys { it.isInstance(event.domainEvent) }.values.forEach { it(event.domainEvent, event.aggregateId, event.metadata, event.id) }
     }
 
     @Suppress("UNCHECKED_CAST")
     companion object {
         inline fun <reified E : DomainEvent> from(noinline handle: (E, UUID) -> Any?): EventListener {
-            val handler = (E::class to handle) as Pair<KClass<DomainEvent>, (DomainEvent, UUID) -> Any?>
+            val ignoreMetadataHandle = { domainEvent: E, aggregateId: UUID, _: EventMetadata, _: UUID -> handle(domainEvent, aggregateId) }
+            val handler = (E::class to ignoreMetadataHandle) as Pair<KClass<DomainEvent>, (DomainEvent, UUID, EventMetadata, UUID) -> Any?>
             return EventListener(mapOf(handler))
         }
 
-        inline fun <reified A : DomainEvent, reified B : DomainEvent> from(noinline a: (A, UUID) -> Any?, noinline b: (B, UUID) -> Any?): EventListener {
-            val first = (A::class to a) as Pair<KClass<DomainEvent>, (DomainEvent, UUID) -> Any?>
-            val second = (B::class to b) as Pair<KClass<DomainEvent>, (DomainEvent, UUID) -> Any?>
-            return EventListener(mapOf(first, second))
+        inline fun <reified E : DomainEvent, reified M : EventMetadata> from(noinline handle: (E, UUID, M, UUID) -> Any?): EventListener {
+            val handler = (E::class to handle) as Pair<KClass<DomainEvent>, (DomainEvent, UUID, EventMetadata, UUID) -> Any?>
+            return EventListener(mapOf(handler))
+        }
+
+        fun compose(first: EventListener, second: EventListener): EventListener {
+            return EventListener(first.handlers + second.handlers)
         }
     }
 }
