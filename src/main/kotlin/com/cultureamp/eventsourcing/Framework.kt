@@ -160,12 +160,12 @@ data class EventListener(val handlers: Map<KClass<DomainEvent>, (DomainEvent, UU
             return EventListener(mapOf(handler))
         }
 
-        inline fun <reified E : DomainEvent> from(noinline handle: (DomainEvent, UUID, EventMetadata, UUID) -> Any?): EventListener {
+        inline fun <reified E : DomainEvent, reified M : EventMetadata> from(noinline handle: (E, UUID, M, UUID) -> Any?): EventListener {
             val handler = (E::class to handle) as Pair<KClass<DomainEvent>, (DomainEvent, UUID, EventMetadata, UUID) -> Any?>
             return EventListener(mapOf(handler))
         }
 
-        inline fun compose(first: EventListener, second: EventListener): EventListener {
+        fun compose(first: EventListener, second: EventListener): EventListener {
             return EventListener(first.handlers + second.handlers)
         }
     }
