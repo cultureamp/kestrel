@@ -196,16 +196,16 @@ open class EventMetadata
  * Standard Culture Amp metadata. You probably want to consider logging these fields (but note they are optional).
  * If you know these fields at all times, you can probably create a new `Metadata` subclass.
  *
- * @property account_id: The aggregate ID of the account that owns the event’s aggregate instance
- * @property executor_id: The aggregate ID of the user that executed the command that resulted in the event
- * @property causation_id: If the event is the result of an action performed by a reactor, the ID of the causal event
- * @property correlation_id: The identifier of a correlated action, request or event
+ * @property accountId: The aggregate ID of the account that owns the event’s aggregate instance
+ * @property executorId: The aggregate ID of the user that executed the command that resulted in the event
+ * @property causationId: If the event is the result of an action performed by a reactor, the ID of the causal event
+ * @property correlationId: The identifier of a correlated action, request or event
  */
 data class CAStandardMetadata(
-    val account_id: UUID? = null,
-    val user_id: UUID? = null,
-    val correlation_id: UUID? = null,
-    val causation_id: UUID? = null
+    val accountId: UUID? = null,
+    val executorId: UUID? = null,
+    val correlationId: UUID? = null,
+    val causationId: UUID? = null
 ): EventMetadata()
 
 interface DomainEvent
