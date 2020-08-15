@@ -59,7 +59,7 @@ object PizzaEaten : PizzaUpdateEvent() {
     operator fun invoke() = PizzaEaten
 }
 
-sealed class PizzaError : CommandError
+sealed class PizzaError : DomainError
 class ToppingAlreadyPresent : PizzaError()
 class PizzaAlreadyEaten : PizzaError()
 
