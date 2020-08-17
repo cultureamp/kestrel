@@ -1,6 +1,11 @@
 package com.cultureamp.eventsourcing
 
-class CommandGateway(private val eventStore: EventStore, private val registry: List<Configuration<*, *, *, *, *>>) {
+import kotlin.reflect.KClass
+
+class CommandGateway(
+    private val eventStore: EventStore,
+    private val registry: List<Pair<KClass<out Command>, AggregateConstructor<out CreationCommand, out CreationEvent, out UpdateCommand, out UpdateEvent>>>
+) {
 
     tailrec fun dispatch(command: Command, metadata: EventMetadata, retries: Int = 5): Either<CommandError, SuccessStatus> {
         val result = createOrUpdate(command, metadata)
@@ -13,20 +18,19 @@ class CommandGateway(private val eventStore: EventStore, private val registry: L
     }
 
     private fun createOrUpdate(command: Command, metadata: EventMetadata): Either<CommandError, SuccessStatus> {
-        val configuration = configurationFor(command) ?: return Left(NoConstructorForCommand)
+        val constructor = constructorFor(command) ?: return Left(NoConstructorForCommand)
         val events = eventStore.eventsFor(command.aggregateId)
         return if (events.isEmpty()) when (command) {
-            is CreationCommand -> configuration.create(command, metadata, eventStore).map { Created }
+            is CreationCommand -> constructor.create(command, metadata, eventStore).map { Created }
             else -> Left(AggregateNotFound)
         } else when (command) {
-            is UpdateCommand -> configuration.update(command, metadata, events, eventStore).map { Updated }
+            is UpdateCommand -> constructor.update(command, metadata, events, eventStore).map { Updated }
             else -> Left(AggregateAlreadyExists)
         }
     }
 
     @Suppress("UNCHECKED_CAST")
-    private fun configurationFor(command: Command) =
-        registry.find { it.creationCommandClass.isInstance(command) || it.updateCommandClass.isInstance(command) } as Configuration<CreationCommand, *, UpdateCommand, *, *>?
+    private fun constructorFor(command: Command) = registry.find { it.first.isInstance(command) }?.second as AggregateConstructor<CreationCommand, CreationEvent, UpdateCommand, UpdateEvent>?
 }
 
 sealed class SuccessStatus

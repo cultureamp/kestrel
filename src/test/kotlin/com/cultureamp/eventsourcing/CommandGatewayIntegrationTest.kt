@@ -19,7 +19,14 @@ class CommandGatewayIntegrationTest : DescribeSpec({
     val eventsTable = H2DatabaseEventStore.eventsTable()
     val eventStore = RelationalDatabaseEventStore.create<StandardEventMetadata>(db)
     val registry = listOf(
-        Configuration.from(PizzaAggregate)
+        PizzaCommand::class to AggregateConstructor.from(
+            PizzaAggregate.Companion::create,
+            PizzaAggregate::update,
+            PizzaAggregate.Companion::created,
+            PizzaAggregate::updated,
+            PizzaAggregate::aggregateType
+        ),
+        ThingCommand::class to ThingAggregate.partial(AlwaysBoppable)
     )
     val gateway = CommandGateway(eventStore, registry)
 

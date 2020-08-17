@@ -14,6 +14,30 @@ interface BaseAggregate {
 interface Aggregate<UC : UpdateCommand, UE : UpdateEvent>: BaseAggregate {
     fun updated(event: UE): Aggregate<UC, UE>
     fun update(command: UC): Either<DomainError, List<UE>>
+
+    companion object {
+        fun <UC : UpdateCommand, UE : UpdateEvent, A : Any> from(
+            aggregate: A,
+            update: A.(UC) -> Either<DomainError, List<UE>>,
+            updated: A.(UE) -> A = { _ -> this },
+            aggregateType: A.() -> String = { this::class.simpleName!! }
+        ): Aggregate<UC, UE> {
+            return object : Aggregate<UC, UE> {
+                override fun updated(event: UE): Aggregate<UC, UE> {
+                    val updatedAggregate = aggregate.updated(event)
+                    return from(updatedAggregate, update, updated)
+                }
+
+                override fun update(command: UC): Either<DomainError, List<UE>> {
+                    return aggregate.update(command)
+                }
+
+                override fun aggregateType(): String {
+                    return aggregate.aggregateType()
+                }
+            }
+        }
+    }
 }
 
 interface AggregateWithProjection<UC : UpdateCommand, UE : UpdateEvent, P>: BaseAggregate {
@@ -38,6 +62,26 @@ interface AggregateWithProjection<UC : UpdateCommand, UE : UpdateEvent, P>: Base
 interface AggregateConstructor<CC : CreationCommand, CE : CreationEvent, UC : UpdateCommand, UE : UpdateEvent> {
     fun created(event: CE): Aggregate<UC, UE>
     fun create(command: CC): Either<DomainError, CE>
+
+    companion object {
+        fun <CC : CreationCommand, CE : CreationEvent, UC : UpdateCommand, UE : UpdateEvent, A: Any> from(
+            create: (CC) -> Either<DomainError, CE>,
+            update: A.(UC) -> Either<DomainError, List<UE>>,
+            created: (CE) -> A,
+            updated: A.(UE) -> A = { _ -> this },
+            aggregateType: A.() -> String = { this::class.simpleName!! }
+        ): AggregateConstructor<CC, CE, UC, UE> {
+
+            return object : AggregateConstructor<CC, CE, UC, UE> {
+                override fun created(event: CE): Aggregate<UC, UE> {
+                    val createdAggregate = created(event)
+                    return Aggregate.from(createdAggregate, update, updated, aggregateType)
+                }
+
+                override fun create(command: CC): Either<DomainError, CE> = create(command)
+            }
+        }
+    }
 }
 
 interface AggregateConstructorWithProjection<CC : CreationCommand, CE : CreationEvent, UC : UpdateCommand, UE : UpdateEvent, P, Self : AggregateWithProjection<UC, UE, P>> {
@@ -56,101 +100,92 @@ interface AggregateConstructorWithProjection<CC : CreationCommand, CE : Creation
     }
 }
 
-data class Configuration<CC : CreationCommand, CE : CreationEvent, UC : UpdateCommand, UE : UpdateEvent, A : Aggregate<UC, UE>>(
-    val creationCommandClass: KClass<CC>,
-    val updateCommandClass: KClass<UC>,
-    val create: (CC) -> Either<DomainError, CE>,
-    val update: A.(UC) -> Either<DomainError, List<UE>>,
-    val created: (CE) -> A,
-    val updated: A.(UE) -> A,
-    val aggregateType: A.() -> String
-) {
-    companion object {
 
-        inline fun <reified CC : CreationCommand, CE : CreationEvent, reified UC : UpdateCommand, UE : UpdateEvent, reified A : Aggregate<UC, UE>> from(
-            noinline create: (CC) -> Either<DomainError, CE>,
-            noinline update: A.(UC) -> Either<DomainError, List<UE>>,
-            noinline created: (CE) -> A,
-            noinline updated: A.(UE) -> A = { _ -> this },
-            noinline aggregateType: A.() -> String = { this::class.simpleName!! }
-        ): Configuration<CC, CE, UC, UE, A> {
-            return Configuration(CC::class, UC::class, create, update, created, updated, aggregateType)
-        }
 
-        inline fun <reified CC : CreationCommand, CE : CreationEvent, reified UC : UpdateCommand, UE : UpdateEvent, reified A : Aggregate<UC, UE>> from(
-            noinline create: (CC) -> Either<DomainError, CE>,
-            noinline update: (UC) -> Either<DomainError, List<UE>>,
-            instance: A,
-            noinline aggregateType: A.() -> String = { this::class.simpleName!! }
-        ): Configuration<CC, CE, UC, UE, A> {
-            return from(create, { update(it) }, { instance }, { instance }, aggregateType)
-        }
+//        inline fun <reified CC : CreationCommand, CE : CreationEvent, reified UC : UpdateCommand, UE : UpdateEvent, reified A : Aggregate<UC, UE>> from(
+//            noinline create: (CC) -> Either<DomainError, CE>,
+//            noinline update: (UC) -> Either<DomainError, List<UE>>,
+//            instance: A,
+//            noinline aggregateType: A.() -> String = { this::class.simpleName!! }
+//        ): Configuration<CC, CE, UC, UE, A> {
+//            return from(create, { update(it) }, { instance }, { instance }, aggregateType)
+//        }
+//
+//        inline fun <reified CC : CreationCommand, CE : CreationEvent, reified UC : UpdateCommand, UE : UpdateEvent> from(
+//            aggregateConstructor: AggregateConstructor<CC, CE, UC, UE>
+//        ): Configuration<CC, CE, UC, UE, Aggregate<UC, UE>> {
+//            val created = aggregateConstructor::created
+//            val create = aggregateConstructor::create
+//            val updated = Aggregate<UC, UE>::updated
+//            val update = Aggregate<UC, UE>::update
+//            val aggregateType = BaseAggregate::aggregateType
+//            return from(create, update, created, updated, aggregateType)
+//        }
+//
+//        inline fun <reified CC : CreationCommand, CE : CreationEvent, reified UC : UpdateCommand, UE : UpdateEvent, P, Self : AggregateWithProjection<UC, UE, P>> from(
+//            aggregateConstructor: AggregateConstructorWithProjection<CC, CE, UC, UE, P, Self>,
+//            projection: P
+//        ): Configuration<CC, CE, UC, UE, Aggregate<UC, UE>> {
+//            return from(aggregateConstructor.partial(projection))
+//        }
+//    }
 
-        inline fun <reified CC : CreationCommand, CE : CreationEvent, reified UC : UpdateCommand, UE : UpdateEvent> from(
-            aggregateConstructor: AggregateConstructor<CC, CE, UC, UE>
-        ): Configuration<CC, CE, UC, UE, Aggregate<UC, UE>> {
-            val created = aggregateConstructor::created
-            val create = aggregateConstructor::create
-            val updated = Aggregate<UC, UE>::updated
-            val update = Aggregate<UC, UE>::update
-            val aggregateType = BaseAggregate::aggregateType
-            return from(create, update, created, updated, aggregateType)
-        }
+internal fun <CC : CreationCommand, CE : CreationEvent, UC : UpdateCommand, UE : UpdateEvent> AggregateConstructor<CC, CE, UC, UE>.create(
+    creationCommand: CC,
+    metadata: EventMetadata,
+    eventStore: EventStore
+): Either<CommandError, Unit> {
+    return create(creationCommand).map { domainEvent ->
+        val aggregate = created(domainEvent)
+        val event = Event(
+            id = UUID.randomUUID(),
+            aggregateId = creationCommand.aggregateId,
+            aggregateSequence = 1,
+            createdAt = DateTime(),
+            metadata = metadata,
+            domainEvent = domainEvent
+        )
+        eventStore.sink(listOf(event), creationCommand.aggregateId, aggregate.aggregateType())
+    }.flatten()
+}
 
-        inline fun <reified CC : CreationCommand, CE : CreationEvent, reified UC : UpdateCommand, UE : UpdateEvent, P, Self : AggregateWithProjection<UC, UE, P>> from(
-            aggregateConstructor: AggregateConstructorWithProjection<CC, CE, UC, UE, P, Self>,
-            projection: P
-        ): Configuration<CC, CE, UC, UE, Aggregate<UC, UE>> {
-            return from(aggregateConstructor.partial(projection))
-        }
-    }
-
-    fun create(creationCommand: CC, metadata: EventMetadata, eventStore: EventStore): Either<CommandError, Unit> =
-        create(creationCommand).map { domainEvent ->
-            val aggregate = created(domainEvent)
-            val event = Event(
+@Suppress("UNCHECKED_CAST")
+internal fun <CC : CreationCommand, CE : CreationEvent, UC : UpdateCommand, UE : UpdateEvent> AggregateConstructor<CC, CE, UC, UE>.update(
+    updateCommand: UC,
+    metadata: EventMetadata,
+    events: List<Event>,
+    eventStore: EventStore
+): Either<CommandError, Unit> {
+    val creationEvent = events.first().domainEvent as CreationEvent
+    val updateEvents = events.slice(1 until events.size).map { it.domainEvent as UpdateEvent }
+    val aggregate = rehydrated(creationEvent as CE, updateEvents as List<UE>)
+    return aggregate.update(updateCommand).map { domainEvents ->
+        val updated = aggregate.updated(domainEvents)
+        val offset = events.last().aggregateSequence + 1
+        val createdAt = DateTime()
+        val storableEvents = domainEvents.withIndex().map { (index, domainEvent) ->
+            Event(
                 id = UUID.randomUUID(),
-                aggregateId = creationCommand.aggregateId,
-                aggregateSequence = 1,
-                createdAt = DateTime(),
+                aggregateId = updateCommand.aggregateId,
+                aggregateSequence = offset + index,
+                createdAt = createdAt,
                 metadata = metadata,
                 domainEvent = domainEvent
             )
-            eventStore.sink(listOf(event), creationCommand.aggregateId, aggregate.aggregateType())
-        }.flatten()
+        }
+        eventStore.sink(storableEvents, updateCommand.aggregateId, updated.aggregateType())
+    }.flatten()
+}
 
-    @Suppress("UNCHECKED_CAST")
-    fun update(
-        updateCommand: UC,
-        metadata: EventMetadata,
-        events: List<Event>,
-        eventStore: EventStore
-    ): Either<CommandError, Unit> {
-        val creationEvent = events.first().domainEvent as CreationEvent
-        val updateEvents = events.slice(1 until events.size).map { it.domainEvent as UpdateEvent }
-        val aggregate = rehydrated(creationEvent as CE, updateEvents as List<UE>)
-        return update(aggregate, updateCommand).map { domainEvents ->
-            val updated = updated(aggregate, domainEvents)
-            val offset = events.last().aggregateSequence + 1
-            val createdAt = DateTime()
-            val storableEvents = domainEvents.withIndex().map { (index, domainEvent) ->
-                Event(
-                    id = UUID.randomUUID(),
-                    aggregateId = updateCommand.aggregateId,
-                    aggregateSequence = offset + index,
-                    createdAt = createdAt,
-                    metadata = metadata,
-                    domainEvent = domainEvent
-                )
-            }
-            eventStore.sink(storableEvents, updateCommand.aggregateId, updated.aggregateType())
-        }.flatten()
-    }
+private fun <CC : CreationCommand, CE : CreationEvent, UC : UpdateCommand, UE : UpdateEvent> AggregateConstructor<CC, CE, UC, UE>.rehydrated(
+    creationEvent: CE,
+    updateEvents: List<UE>
+): Aggregate<UC, UE> {
+    return created(creationEvent).updated(updateEvents)
+}
 
-    private fun rehydrated(creationEvent: CE, updateEvents: List<UE>): A = updated(created(creationEvent), updateEvents)
-
-    private fun updated(initial: A, updateEvents: List<UE>): A =
-        updateEvents.fold(initial) { aggregate, updateEvent -> updated(aggregate, updateEvent) }
+private fun <UC : UpdateCommand, UE : UpdateEvent> Aggregate<UC, UE>.updated(updateEvents: List<UE>): Aggregate<UC, UE> {
+    return updateEvents.fold(this) { aggregate, updateEvent -> updated(updateEvent) }
 }
 
 data class EventListener(val handlers: Map<KClass<DomainEvent>, (DomainEvent, UUID, EventMetadata, UUID) -> Any?>) {

@@ -65,19 +65,18 @@ class PizzaAlreadyEaten : PizzaError()
 
 data class PizzaAggregate(
     val baseStyle: PizzaStyle, val toppings: List<PizzaTopping>, val isEaten: Boolean = false
-) : Aggregate<PizzaUpdateCommand, PizzaUpdateEvent> {
+) {
     constructor(event: PizzaCreated) : this(baseStyle = event.baseStyle, toppings = event.initialToppings)
 
-    override fun aggregateType() = "pizza"
+    fun aggregateType() = "pizza"
 
-    override fun updated(event: PizzaUpdateEvent): PizzaAggregate = when (event) {
+    fun updated(event: PizzaUpdateEvent): PizzaAggregate = when (event) {
         is PizzaToppingAdded -> this.copy(toppings = this.toppings + event.newTopping)
         is PizzaEaten -> this.copy(isEaten = true)
     }
 
-    companion object :
-        AggregateConstructor<PizzaCreationCommand, PizzaCreationEvent, PizzaUpdateCommand, PizzaUpdateEvent> {
-        override fun created(event: PizzaCreationEvent): PizzaAggregate = when (event) {
+    companion object {
+        fun created(event: PizzaCreationEvent): PizzaAggregate = when (event) {
             is PizzaCreated -> PizzaAggregate(event)
         }
 
@@ -92,7 +91,7 @@ data class PizzaAggregate(
         }
 
 
-        override fun create(command: PizzaCreationCommand): Either<PizzaError, PizzaCreated> = when (command) {
+        fun create(command: PizzaCreationCommand): Either<PizzaError, PizzaCreated> = when (command) {
             is CreateClassicPizza -> {
                 val initialToppings = classicToppings(command.baseStyle)
                 Right(
@@ -105,7 +104,7 @@ data class PizzaAggregate(
         }
     }
 
-    override fun update(command: PizzaUpdateCommand): Either<PizzaError, List<PizzaUpdateEvent>> {
+    fun update(command: PizzaUpdateCommand): Either<PizzaError, List<PizzaUpdateEvent>> {
         return when (isEaten) {
             true -> Left(PizzaAlreadyEaten())
             false -> when (command) {
