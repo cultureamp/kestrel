@@ -16,7 +16,7 @@ interface Aggregate<UC: UpdateCommand, UE: UpdateEvent, Err: DomainError, out Se
             aggregate: A,
             update: A.(UC) -> Either<Err, List<UE>>,
             updated: A.(UE) -> A = { _ -> this },
-            aggregateType: A.() -> String = { this::class.simpleName!! }
+            aggregateType: (A.() -> String)? = null
         ): Aggregate<UC, UE, Err, Aggregate<UC, UE, Err, *>> {
             return object : Aggregate<UC, UE, Err, Aggregate<UC, UE, Err, *>> {
                 override fun updated(event: UE): Aggregate<UC, UE, Err, *> {
@@ -29,7 +29,7 @@ interface Aggregate<UC: UpdateCommand, UE: UpdateEvent, Err: DomainError, out Se
                 }
 
                 override fun aggregateType(): String {
-                    return aggregate.aggregateType()
+                    return aggregateType?.invoke(aggregate) ?: super.aggregateType()
                 }
             }
         }
@@ -66,7 +66,7 @@ interface AggregateConstructor<CC: CreationCommand, CE: CreationEvent, Err: Doma
             update: A.(UC) -> Either<Err, List<UE>>,
             created: (CE) -> A,
             updated: A.(UE) -> A = { _ -> this },
-            aggregateType: A.() -> String = { this::class.simpleName!! }
+            aggregateType: (A.() -> String)? = null
         ): AggregateConstructor<CC, CE, Err, UC, UE, Aggregate<UC, UE, Err, *>> {
 
             return object : AggregateConstructor<CC, CE, Err, UC, UE, Aggregate<UC, UE, Err, *>> {
