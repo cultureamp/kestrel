@@ -85,6 +85,15 @@ interface AggregateConstructor<CC: CreationCommand, CE: CreationEvent, Err: Doma
                 override fun create(command: CC): Either<Err, CE> = create(command)
             }
         }
+
+        fun <CC : CreationCommand, CE : CreationEvent, Err : DomainError, UC : UpdateCommand, UE : UpdateEvent, A : Any> fromStateless(
+            create: (CC) -> Either<Err, CE>,
+            update: (UC) -> Either<Err, List<UE>>,
+            instance: A,
+            aggregateType: (A.() -> String)? = null
+        ): AggregateConstructor<CC, CE, Err, UC, UE, Aggregate<UC, UE, Err, *>> {
+            return from(create, { update(it) }, { instance }, { instance }, aggregateType)
+        }
     }
 }
 

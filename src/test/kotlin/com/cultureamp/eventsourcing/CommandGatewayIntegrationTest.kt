@@ -29,7 +29,14 @@ class CommandGatewayIntegrationTest : DescribeSpec({
             )
         ),
         Route.from(ThingAggregate.partial(AlwaysBoppable)),
-        Route.from(SimpleThingAggregate)
+        Route.from(SimpleThingAggregate),
+        Route.from(
+            AggregateConstructor.fromStateless(
+                PaymentSagaAggregate::create,
+                PaymentSagaAggregate::update,
+                PaymentSagaAggregate
+            )
+        )
     )
     val gateway = CommandGateway(eventStore, routes)
 
