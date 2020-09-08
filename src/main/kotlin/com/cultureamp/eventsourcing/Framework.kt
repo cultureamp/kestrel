@@ -7,7 +7,7 @@ import kotlin.reflect.KFunction2
 import kotlin.reflect.KFunction3
 import kotlin.reflect.KFunction4
 
-data class Configuration<CC : CreationCommand, CE : CreationEvent, Err : CommandError, UC : UpdateCommand, UE : UpdateEvent, A : BaseAggregate>(
+data class Configuration<CC : CreationCommand, CE : CreationEvent, Err : DomainError, UC : UpdateCommand, UE : UpdateEvent, A : BaseAggregate>(
     val creationCommandClass: KClass<CC>,
     val updateCommandClass: KClass<UC>,
     val create: (CC) -> Either<Err, CE>,
@@ -18,7 +18,7 @@ data class Configuration<CC : CreationCommand, CE : CreationEvent, Err : Command
 ) {
     companion object {
 
-        inline fun <reified CC : CreationCommand, CE : CreationEvent, Err : CommandError, reified UC : UpdateCommand, UE : UpdateEvent, reified A : BaseAggregate> from(
+        inline fun <reified CC : CreationCommand, CE : CreationEvent, Err : DomainError, reified UC : UpdateCommand, UE : UpdateEvent, reified A : BaseAggregate> from(
             noinline create: (CC) -> Either<Err, CE>,
             noinline update: A.(UC) -> Either<Err, List<UE>>,
             noinline created: (CE) -> A,
@@ -28,7 +28,7 @@ data class Configuration<CC : CreationCommand, CE : CreationEvent, Err : Command
             return Configuration(CC::class, UC::class, create, update, created, updated, aggregateType)
         }
 
-        inline fun <reified CC : CreationCommand, CE : CreationEvent, Err : CommandError, reified UC : UpdateCommand, UE : UpdateEvent, reified A : BaseAggregate> from(
+        inline fun <reified CC : CreationCommand, CE : CreationEvent, Err : DomainError, reified UC : UpdateCommand, UE : UpdateEvent, reified A : BaseAggregate> from(
             noinline create: (CC) -> Either<Err, CE>,
             noinline update: (UC) -> Either<Err, List<UE>>,
             instance: A,
@@ -37,7 +37,7 @@ data class Configuration<CC : CreationCommand, CE : CreationEvent, Err : Command
             return from(create, { update(it) }, { instance }, { instance }, aggregateType)
         }
 
-        inline fun <reified CC : CreationCommand, CE : CreationEvent, Err : CommandError, reified UC : UpdateCommand, UE : UpdateEvent, reified Self : Aggregate<UC, UE, Err, Self>> from(
+        inline fun <reified CC : CreationCommand, CE : CreationEvent, Err : DomainError, reified UC : UpdateCommand, UE : UpdateEvent, reified Self : Aggregate<UC, UE, Err, Self>> from(
             aggregateConstructor: AggregateConstructor<CC, CE, Err, UC, UE, Self>
         ): Configuration<CC, CE, Err, UC, UE, Self> {
             val created = aggregateConstructor::created
@@ -48,7 +48,7 @@ data class Configuration<CC : CreationCommand, CE : CreationEvent, Err : Command
             return from(create, update, created, updated, aggregateType)
         }
 
-        inline fun <reified CC : CreationCommand, CE : CreationEvent, Err : CommandError, reified UC : UpdateCommand, UE : UpdateEvent, P, Self : AggregateWithProjection<UC, UE, Err, P, Self>> from(
+        inline fun <reified CC : CreationCommand, CE : CreationEvent, Err : DomainError, reified UC : UpdateCommand, UE : UpdateEvent, P, Self : AggregateWithProjection<UC, UE, Err, P, Self>> from(
             aggregateConstructor: AggregateConstructorWithProjection<CC, CE, Err, UC, UE, P, Self>,
             projection: P
         ): Configuration<CC, CE, Err, UC, UE, Aggregate<UC, UE, Err, *>> {
@@ -170,7 +170,9 @@ interface UpdateEvent : DomainEvent
 
 interface CommandError
 
-interface AlreadyActionedCommandError : CommandError
+interface DomainError: CommandError
+
+interface AlreadyActionedCommandError : DomainError
 
 interface AuthorizationCommandError : CommandError
 
