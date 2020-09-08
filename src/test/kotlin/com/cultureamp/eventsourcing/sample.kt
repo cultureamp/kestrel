@@ -65,7 +65,7 @@ class PizzaAlreadyEaten : PizzaError()
 
 data class PizzaAggregate(
     val baseStyle: PizzaStyle, val toppings: List<PizzaTopping>, val isEaten: Boolean = false
-) : TypedAggregate<PizzaUpdateCommand, PizzaUpdateEvent, PizzaError, PizzaAggregate> {
+) : Aggregate<PizzaUpdateCommand, PizzaUpdateEvent, PizzaError, PizzaAggregate> {
     constructor(event: PizzaCreated) : this(baseStyle = event.baseStyle, toppings = event.initialToppings)
 
     override fun aggregateType() = "pizza"
