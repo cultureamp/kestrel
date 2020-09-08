@@ -1,6 +1,6 @@
 package com.cultureamp.eventsourcing
 
-class CommandGateway(private val eventStore: EventStore, private val registry: List<Configuration<*, *, *, *, *, *>>) {
+class CommandGateway(private val eventStore: EventStore, private val routes: List<Route<*, *>>) {
 
     tailrec fun dispatch(command: Command, metadata: EventMetadata, retries: Int = 5): Either<CommandError, SuccessStatus> {
         val result = createOrUpdate(command, metadata)
@@ -13,20 +13,22 @@ class CommandGateway(private val eventStore: EventStore, private val registry: L
     }
 
     private fun createOrUpdate(command: Command, metadata: EventMetadata): Either<CommandError, SuccessStatus> {
-        val configuration = configurationFor(command) ?: return Left(NoConstructorForCommand)
+        val constructor = constructorFor(command) ?: return Left(NoConstructorForCommand)
         val events = eventStore.eventsFor(command.aggregateId)
         return if (events.isEmpty()) when (command) {
-            is CreationCommand -> configuration.create(command, metadata, eventStore).map { Created }
+            is CreationCommand -> constructor.create(command, metadata, eventStore).map { Created }
             else -> Left(AggregateNotFound)
         } else when (command) {
-            is UpdateCommand -> configuration.update(command, metadata, events, eventStore).map { Updated }
+            is UpdateCommand -> constructor.update(command, metadata, events, eventStore).map { Updated }
             else -> Left(AggregateAlreadyExists)
         }
     }
 
     @Suppress("UNCHECKED_CAST")
-    private fun configurationFor(command: Command) =
-        registry.find { it.creationCommandClass.isInstance(command) || it.updateCommandClass.isInstance(command) } as Configuration<CreationCommand, *, *, UpdateCommand, *, *>?
+    private fun constructorFor(command: Command): AggregateConstructor<CreationCommand, CreationEvent, DomainError, UpdateCommand, UpdateEvent, Aggregate<UpdateCommand, UpdateEvent, DomainError, *>>? {
+        val route = routes.find { it.creationCommandClass.isInstance(command) || it.updateCommandClass.isInstance(command) }
+        return route?.aggregateConstructor as AggregateConstructor<CreationCommand, CreationEvent, DomainError, UpdateCommand, UpdateEvent, Aggregate<UpdateCommand, UpdateEvent, DomainError, *>>?
+    }
 }
 
 sealed class SuccessStatus

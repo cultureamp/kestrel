@@ -18,10 +18,19 @@ class CommandGatewayIntegrationTest : DescribeSpec({
     val db = Database.connect(url = h2DbUrl, driver = h2Driver)
     val eventsTable = H2DatabaseEventStore.eventsTable()
     val eventStore = RelationalDatabaseEventStore.create<StandardEventMetadata>(db)
-    val registry = listOf(
-        Configuration.from(PizzaAggregate)
+    val routes = listOf(
+        Route.from(
+            AggregateConstructor.from(
+                PizzaAggregate.Companion::create,
+                PizzaAggregate::update,
+                PizzaAggregate.Companion::created,
+                PizzaAggregate::updated,
+                PizzaAggregate::aggregateType
+            )
+        ),
+        Route.from(ThingAggregate.partial(AlwaysBoppable))
     )
-    val gateway = CommandGateway(eventStore, registry)
+    val gateway = CommandGateway(eventStore, routes)
 
     afterTest {
         transaction(db) {
