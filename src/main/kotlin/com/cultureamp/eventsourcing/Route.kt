@@ -11,5 +11,20 @@ data class Route<CC : CreationCommand, UC : UpdateCommand>(
         inline fun <reified CC : CreationCommand, reified UC : UpdateCommand> from(
             aggregateConstructor: AggregateConstructor<CC, *, *, UC, *, *>
         ): Route<CC, UC> = Route(CC::class, UC::class, aggregateConstructor)
+
+        inline fun <reified CC: CreationCommand, CE: CreationEvent, Err: DomainError, reified UC: UpdateCommand, UE: UpdateEvent, A: Any> from(
+            noinline create: (CC) -> Either<Err, CE>,
+            noinline update: A.(UC) -> Either<Err, List<UE>>,
+            noinline created: (CE) -> A,
+            noinline updated: A.(UE) -> A = { _ -> this },
+            noinline aggregateType: (A.() -> String)? = null
+        ): Route<CC, UC> = from(AggregateConstructor.from(create, update, created, updated, aggregateType))
+
+        inline fun <reified CC : CreationCommand, CE : CreationEvent, Err : DomainError, reified UC : UpdateCommand, UE : UpdateEvent, A : Any> fromStateless(
+            noinline create: (CC) -> Either<Err, CE>,
+            noinline update: (UC) -> Either<Err, List<UE>>,
+            instance: A,
+            noinline aggregateType: (A.() -> String)? = null
+        ): Route<CC, UC> = from(AggregateConstructor.fromStateless(create, update, instance, aggregateType))
     }
 }
