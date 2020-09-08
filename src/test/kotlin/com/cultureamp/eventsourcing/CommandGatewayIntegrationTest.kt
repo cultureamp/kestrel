@@ -28,7 +28,8 @@ class CommandGatewayIntegrationTest : DescribeSpec({
                 PizzaAggregate::aggregateType
             )
         ),
-        Route.from(ThingAggregate.partial(AlwaysBoppable))
+        Route.from(ThingAggregate.partial(AlwaysBoppable)),
+        Route.from(SimpleThingAggregate)
     )
     val gateway = CommandGateway(eventStore, routes)
 
