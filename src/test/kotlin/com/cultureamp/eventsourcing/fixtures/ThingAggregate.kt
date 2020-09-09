@@ -1,5 +1,17 @@
-package com.cultureamp.eventsourcing
+package com.cultureamp.eventsourcing.fixtures
 
+import com.cultureamp.eventsourcing.AggregateConstructorWithProjection
+import com.cultureamp.eventsourcing.AggregateWithProjection
+import com.cultureamp.eventsourcing.Command
+import com.cultureamp.eventsourcing.CreationCommand
+import com.cultureamp.eventsourcing.CreationEvent
+import com.cultureamp.eventsourcing.DomainError
+import com.cultureamp.eventsourcing.DomainEvent
+import com.cultureamp.eventsourcing.Either
+import com.cultureamp.eventsourcing.Left
+import com.cultureamp.eventsourcing.Right
+import com.cultureamp.eventsourcing.UpdateCommand
+import com.cultureamp.eventsourcing.UpdateEvent
 import java.util.*
 
 sealed class ThingCommand : Command
@@ -7,7 +19,7 @@ sealed class ThingCommand : Command
 sealed class ThingCreationCommand : ThingCommand(), CreationCommand
 data class CreateThing(override val aggregateId: UUID) : ThingCreationCommand()
 
-sealed class ThingUpdateCommand :ThingCommand(), UpdateCommand
+sealed class ThingUpdateCommand : ThingCommand(), UpdateCommand
 data class Tweak(override val aggregateId: UUID, val tweak: String) : ThingUpdateCommand()
 data class Bop(override val aggregateId: UUID) : ThingUpdateCommand()
 data class Explode(override val aggregateId: UUID) : ThingUpdateCommand()

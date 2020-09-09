@@ -1,5 +1,8 @@
 package com.cultureamp.eventsourcing
 
+import com.cultureamp.eventsourcing.fixtures.AlwaysBoppable
+import com.cultureamp.eventsourcing.fixtures.SimpleThingAggregate
+import com.cultureamp.eventsourcing.fixtures.ThingAggregate
 import com.cultureamp.eventsourcing.sample.*
 import io.kotest.core.spec.style.DescribeSpec
 import io.kotest.matchers.shouldBe
