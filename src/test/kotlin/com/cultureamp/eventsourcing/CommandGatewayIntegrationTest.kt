@@ -1,8 +1,29 @@
 package com.cultureamp.eventsourcing
 
 import com.cultureamp.eventsourcing.fixtures.AlwaysBoppable
+import com.cultureamp.eventsourcing.fixtures.Boop
+import com.cultureamp.eventsourcing.fixtures.Bop
+import com.cultureamp.eventsourcing.fixtures.Create
+import com.cultureamp.eventsourcing.fixtures.CreateSimpleThing
+import com.cultureamp.eventsourcing.fixtures.CreateSurvey
+import com.cultureamp.eventsourcing.fixtures.CreateThing
+import com.cultureamp.eventsourcing.fixtures.Delete
+import com.cultureamp.eventsourcing.fixtures.Generate
+import com.cultureamp.eventsourcing.fixtures.Invite
+import com.cultureamp.eventsourcing.fixtures.Locale
+import com.cultureamp.eventsourcing.fixtures.ParticipantAggregate
+import com.cultureamp.eventsourcing.fixtures.RemoveSection
+import com.cultureamp.eventsourcing.fixtures.SectionNotFound
 import com.cultureamp.eventsourcing.fixtures.SimpleThingAggregate
+import com.cultureamp.eventsourcing.fixtures.StartCreatingSurvey
+import com.cultureamp.eventsourcing.fixtures.SurveyAggregate
+import com.cultureamp.eventsourcing.fixtures.SurveyCaptureLayoutAggregate
+import com.cultureamp.eventsourcing.fixtures.SurveyNameAlwaysAvailable
+import com.cultureamp.eventsourcing.fixtures.SurveySagaAggregate
 import com.cultureamp.eventsourcing.fixtures.ThingAggregate
+import com.cultureamp.eventsourcing.fixtures.Tweak
+import com.cultureamp.eventsourcing.fixtures.Twerk
+import com.cultureamp.eventsourcing.fixtures.Uninvite
 import com.cultureamp.eventsourcing.sample.*
 import io.kotest.core.spec.style.DescribeSpec
 import io.kotest.matchers.shouldBe
@@ -11,6 +32,7 @@ import org.jetbrains.exposed.sql.Database
 import org.jetbrains.exposed.sql.SchemaUtils
 import org.jetbrains.exposed.sql.selectAll
 import org.jetbrains.exposed.sql.transactions.transaction
+import org.joda.time.DateTime
 import java.util.*
 
 class EmptyMetadata() : EventMetadata()
@@ -23,22 +45,42 @@ class CommandGatewayIntegrationTest : DescribeSpec({
     val eventStore = RelationalDatabaseEventStore.create<StandardEventMetadata>(db)
     val routes = listOf(
         Route.from(
-            AggregateConstructor.from(
-                PizzaAggregate.Companion::create,
-                PizzaAggregate::update,
-                PizzaAggregate.Companion::created,
-                PizzaAggregate::updated,
-                PizzaAggregate::aggregateType
-            )
+            PizzaAggregate.Companion::create,
+            PizzaAggregate::update,
+            PizzaAggregate.Companion::created,
+            PizzaAggregate::updated,
+            PizzaAggregate::aggregateType
+
         ),
         Route.from(ThingAggregate.partial(AlwaysBoppable)),
         Route.from(SimpleThingAggregate),
+        Route.fromStateless(
+            PaymentSagaAggregate::create,
+            PaymentSagaAggregate::update,
+            PaymentSagaAggregate
+        ),
         Route.from(
-            AggregateConstructor.fromStateless(
-                PaymentSagaAggregate::create,
-                PaymentSagaAggregate::update,
-                PaymentSagaAggregate
-            )
+            SurveyCaptureLayoutAggregate.Companion::create,
+            SurveyCaptureLayoutAggregate::update,
+            SurveyCaptureLayoutAggregate.Companion::created,
+            SurveyCaptureLayoutAggregate::updated
+        ),
+        Route.from(
+            SurveyAggregate.Companion::create.partial(SurveyNameAlwaysAvailable),
+            SurveyAggregate::update.partial2(SurveyNameAlwaysAvailable),
+            ::SurveyAggregate,
+            SurveyAggregate::updated
+        ),
+        Route.from(
+            SurveySagaAggregate.Companion::create,
+            SurveySagaAggregate::update,
+            ::SurveySagaAggregate
+        ),
+        Route.from(
+            ParticipantAggregate.Companion::create,
+            ParticipantAggregate::update,
+            ParticipantAggregate.Companion::created,
+            ParticipantAggregate::updated
         )
     )
     val gateway = CommandGateway(eventStore, routes)
@@ -54,11 +96,11 @@ class CommandGatewayIntegrationTest : DescribeSpec({
     }
 
 
-    val creationEventMetadata = StandardEventMetadata("alice", "123")
+    val metadata = StandardEventMetadata("alice", "123")
 
     describe("CommandGateway") {
         it("accepts a creation event") {
-            val result = gateway.dispatch(CreateClassicPizza(UUID.randomUUID(), PizzaStyle.MARGHERITA), creationEventMetadata)
+            val result = gateway.dispatch(CreateClassicPizza(UUID.randomUUID(), PizzaStyle.MARGHERITA), metadata)
             result shouldBe Right(Created)
             transaction(db) {
                 eventsTable.selectAll().count() shouldBe 1
@@ -67,9 +109,9 @@ class CommandGatewayIntegrationTest : DescribeSpec({
 
         it("fails on creation with duplicate UUIDs") {
             val aggregateId = UUID.randomUUID()
-            val result = gateway.dispatch(CreateClassicPizza(aggregateId, PizzaStyle.MARGHERITA), creationEventMetadata)
+            val result = gateway.dispatch(CreateClassicPizza(aggregateId, PizzaStyle.MARGHERITA), metadata)
             result shouldBe Right(Created)
-            val result2 = gateway.dispatch(CreateClassicPizza(aggregateId, PizzaStyle.HAWAIIAN), creationEventMetadata)
+            val result2 = gateway.dispatch(CreateClassicPizza(aggregateId, PizzaStyle.HAWAIIAN), metadata)
             result2 shouldBe Left(AggregateAlreadyExists)
             transaction(db) {
                 eventsTable.selectAll().count() shouldBe 1
@@ -78,7 +120,7 @@ class CommandGatewayIntegrationTest : DescribeSpec({
 
         it("accepts a creation then update event") {
             val aggregateId = UUID.randomUUID()
-            val result = gateway.dispatch(CreateClassicPizza(aggregateId, PizzaStyle.MARGHERITA), creationEventMetadata)
+            val result = gateway.dispatch(CreateClassicPizza(aggregateId, PizzaStyle.MARGHERITA), metadata)
             result shouldBe Right(Created)
             val result2 = gateway.dispatch(AddTopping(aggregateId, PizzaTopping.PINEAPPLE), StandardEventMetadata("alice"))
             result2 shouldBe Right(Updated)
@@ -89,11 +131,11 @@ class CommandGatewayIntegrationTest : DescribeSpec({
 
         it("rejects command when invalid event sequence is provided") {
             val aggregateId = UUID.randomUUID()
-            val result = gateway.dispatch(CreateClassicPizza(aggregateId, PizzaStyle.MARGHERITA), creationEventMetadata)
+            val result = gateway.dispatch(CreateClassicPizza(aggregateId, PizzaStyle.MARGHERITA), metadata)
             result shouldBe Right(Created)
             val result2 = gateway.dispatch(EatPizza(aggregateId), StandardEventMetadata("alice"))
             result2 shouldBe Right(Updated)
-            val result3 = gateway.dispatch(AddTopping(aggregateId, PizzaTopping.PINEAPPLE), creationEventMetadata)
+            val result3 = gateway.dispatch(AddTopping(aggregateId, PizzaTopping.PINEAPPLE), metadata)
             result3.shouldBeInstanceOf<Left<PizzaAlreadyEaten>>()
             transaction(db) {
                 eventsTable.selectAll().count() shouldBe 2
@@ -102,10 +144,51 @@ class CommandGatewayIntegrationTest : DescribeSpec({
 
         it("fails on updating with unknown UUID") {
             val aggregateId = UUID.randomUUID()
-            val result1 = gateway.dispatch(AddTopping(aggregateId, PizzaTopping.PINEAPPLE), creationEventMetadata)
+            val result1 = gateway.dispatch(AddTopping(aggregateId, PizzaTopping.PINEAPPLE), metadata)
             result1 shouldBe Left(AggregateNotFound)
             transaction(db) {
                 eventsTable.selectAll().count() shouldBe 0
+            }
+        }
+
+        it("can route to various aggregates") {
+            val pizzaId = UUID.randomUUID()
+            gateway.dispatch(CreateClassicPizza(pizzaId, PizzaStyle.MARGHERITA), metadata) shouldBe Right(Created)
+            gateway.dispatch(AddTopping(pizzaId, PizzaTopping.PINEAPPLE), metadata) shouldBe Right(Updated)
+
+            val thingId = UUID.randomUUID()
+            gateway.dispatch(CreateThing(thingId), metadata) shouldBe Right(Created)
+            gateway.dispatch(Bop(thingId), metadata) shouldBe Right(Updated)
+            gateway.dispatch(Tweak(thingId, "donk"), metadata) shouldBe Right(Updated)
+
+            val simpleThingId = UUID.randomUUID()
+            gateway.dispatch(CreateSimpleThing(simpleThingId), metadata) shouldBe Right(Created)
+            gateway.dispatch(Boop(simpleThingId), metadata) shouldBe Right(Updated)
+            gateway.dispatch(Twerk(simpleThingId, "dink"), metadata) shouldBe Right(Updated)
+
+            val paymentSagaId = UUID.randomUUID()
+            gateway.dispatch(StartPaymentSaga(paymentSagaId, UUID.randomUUID(), "bank details", 42), metadata) shouldBe Right(Created)
+            gateway.dispatch(StartThirdPartyPayment(paymentSagaId, DateTime.now()), metadata) shouldBe Right(Updated)
+
+            val surveyCaptureLayoutId = UUID.randomUUID()
+            gateway.dispatch(Generate(surveyCaptureLayoutId, UUID.randomUUID(), DateTime.now()), metadata) shouldBe Right(Created)
+            gateway.dispatch(RemoveSection(surveyCaptureLayoutId, UUID.randomUUID(), DateTime.now()), metadata) shouldBe Left(SectionNotFound)
+
+            val surveyId = UUID.randomUUID()
+            gateway.dispatch(CreateSurvey(surveyId, UUID.randomUUID(), mapOf(Locale.en to "name"), UUID.randomUUID(), DateTime.now()), metadata) shouldBe Right(Created)
+            gateway.dispatch(Delete(surveyId, DateTime.now()), metadata) shouldBe Right(Updated)
+
+            val surveySagaId = UUID.randomUUID()
+            gateway.dispatch(Create(surveySagaId, UUID.randomUUID(), UUID.randomUUID(), mapOf(Locale.en to "name"), UUID.randomUUID(), DateTime.now()), metadata) shouldBe Right(Created)
+            gateway.dispatch(StartCreatingSurvey(surveySagaId, DateTime.now()), metadata) shouldBe Right(Updated)
+
+            val participantId = UUID.randomUUID()
+            gateway.dispatch(Invite(participantId, UUID.randomUUID(), UUID.randomUUID(), DateTime.now()), metadata) shouldBe Right(Created)
+            gateway.dispatch(Uninvite(participantId, DateTime.now()), metadata) shouldBe Right(Updated)
+            gateway.dispatch(Invite(participantId, UUID.randomUUID(), UUID.randomUUID(), DateTime.now()), metadata) shouldBe Right(Updated)
+
+            transaction(db) {
+                eventsTable.selectAll().count() shouldBe 18
             }
         }
     }
