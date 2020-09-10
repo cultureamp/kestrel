@@ -3,6 +3,7 @@ package com.cultureamp.eventsourcing
 import arrow.core.Tuple3
 import io.kotest.core.spec.style.DescribeSpec
 import io.kotest.matchers.maps.shouldContain
+import io.kotest.matchers.shouldBe
 import org.joda.time.DateTime
 import java.util.*
 
@@ -69,7 +70,7 @@ class EventListenerTest : DescribeSpec({
                 }
             }
             class ProjectorWithMetadata {
-                fun project(event: BazEvent, aggregateId: UUID, metadata: SpecificMetadata, eventId: UUID) {
+                fun project(event: BarEvent, aggregateId: UUID, metadata: SpecificMetadata, eventId: UUID) {
                     events[aggregateId] = event
                 }
             }
@@ -87,10 +88,31 @@ class EventListenerTest : DescribeSpec({
         }
     }
 
+    describe("EventListener#eventClasses") {
+        it("can derive event classes for handlers") {
+            class FirstProjector {
+                fun project(event: TestEvent, aggregateId: UUID) = Unit
+            }
+            class SecondProjector {
+                fun project(event: AnotherTestEvent, aggregateId: UUID) = Unit
+            }
+
+            val eventListener = EventListener.compose(
+                EventListener.from(FirstProjector()::project),
+                EventListener.from(SecondProjector()::project)
+            )
+
+            eventListener.eventClasses shouldBe listOf(FooEvent::class, BarEvent::class, BazEvent::class, QuuxEvent::class)
+        }
+    }
 })
 
 data class SpecificMetadata(val specialField: String) : EventMetadata()
 
 sealed class TestEvent : DomainEvent
-data class FooEvent(val bar: String) : TestEvent()
-data class BazEvent(val quux: String) : TestEvent()
+data class FooEvent(val foo: String) : TestEvent()
+data class BarEvent(val bar: String) : TestEvent()
+
+sealed class AnotherTestEvent : DomainEvent
+data class BazEvent(val baz: String) : AnotherTestEvent()
+data class QuuxEvent(val quux: String) : AnotherTestEvent()

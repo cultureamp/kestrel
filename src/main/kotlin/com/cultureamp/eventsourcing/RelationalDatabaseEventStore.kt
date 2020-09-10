@@ -1,5 +1,6 @@
 package com.cultureamp.eventsourcing
 
+import arrow.data.extensions.list.foldable.nonEmpty
 import com.fasterxml.jackson.core.JsonProcessingException
 import com.fasterxml.jackson.databind.ObjectMapper
 import com.fasterxml.jackson.databind.PropertyNamingStrategy
@@ -13,6 +14,7 @@ import org.jetbrains.exposed.sql.vendors.H2Dialect
 import org.jetbrains.exposed.sql.vendors.PostgreSQLDialect
 import java.lang.UnsupportedOperationException
 import java.util.*
+import kotlin.reflect.KClass
 
 val defaultObjectMapper = ObjectMapper()
     .registerKotlinModule()
@@ -118,24 +120,16 @@ class RelationalDatabaseEventStore @PublishedApi internal constructor(
         )
     }
 
-    override fun replay(aggregateType: String, project: (Event) -> Unit) {
+    override fun getAfter(sequence: Long, eventClasses: List<KClass<out DomainEvent>>, batchSize: Int): List<SequencedEvent> {
         return transaction(db) {
             events
                 .select {
-                    events.aggregateType eq aggregateType
-                }
-                .orderBy(events.sequence)
-                .mapLazy(::rowToSequencedEvent)
-                .mapLazy { it.event }
-                .forEach(project)
-        }
-    }
-
-    override fun getAfter(sequence: Long, batchSize: Int): List<SequencedEvent> {
-        return transaction(db) {
-            events
-                .select {
-                    events.sequence greater sequence
+                    val eventTypeMatches = if (eventClasses.nonEmpty()) {
+                        events.eventType.inList(eventClasses.map { it.java.canonicalName })
+                    } else {
+                        Op.TRUE
+                    }
+                    events.sequence greater sequence and eventTypeMatches
                 }
                 .orderBy(events.sequence)
                 .limit(batchSize)

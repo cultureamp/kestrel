@@ -30,7 +30,7 @@ class AsyncEventProcessor(
 
         startLog(startBookmark)
 
-        val (count, finalBookmark) = eventSource.getAfter(startBookmark.sequence, batchSize).foldIndexed(
+        val (count, finalBookmark) = eventSource.getAfter(startBookmark.sequence, eventListener.eventClasses, batchSize).foldIndexed(
             0 to startBookmark
         ) { index, _, sequencedEvent ->
             eventListener.handle(sequencedEvent.event)

@@ -1,5 +1,6 @@
 package com.cultureamp.eventsourcing
 
+import com.cultureamp.common.asNestedSealedConcreteClasses
 import org.joda.time.DateTime
 import java.util.*
 import kotlin.reflect.KClass
@@ -8,6 +9,8 @@ import kotlin.reflect.KFunction3
 import kotlin.reflect.KFunction4
 
 data class EventListener(val handlers: Map<KClass<DomainEvent>, (DomainEvent, UUID, EventMetadata, UUID) -> Any?>) {
+    val eventClasses = handlers.keys.flatMap { it.asNestedSealedConcreteClasses() }
+
     fun handle(event: Event) {
         handlers.filterKeys { it.isInstance(event.domainEvent) }.values.forEach { it(event.domainEvent, event.aggregateId, event.metadata, event.id) }
     }
