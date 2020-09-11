@@ -7,13 +7,14 @@ interface EventProcessor {
     val eventSource: EventSource
     val bookmarkStore: BookmarkStore
     val bookmarkName: String
+    val eventListener: EventListener
 }
 
 class AsyncEventProcessor(
     override val eventSource: EventSource,
     override val bookmarkStore: BookmarkStore,
     override val bookmarkName: String,
-    private val eventListener: EventListener,
+    override val eventListener: EventListener,
     private val batchSize: Int = 1000,
     private val startLog: (Bookmark) -> Unit = { bookmark ->
         System.out.println("Polling for events for ${bookmark.name} from sequence ${bookmark.sequence}")
@@ -35,7 +36,7 @@ class AsyncEventProcessor(
         ) { index, _, sequencedEvent ->
             eventListener.handle(sequencedEvent.event)
             val updatedBookmark = startBookmark.copy(sequence = sequencedEvent.sequence)
-            bookmarkStore.save(bookmarkName, updatedBookmark)
+            bookmarkStore.save(updatedBookmark)
             index + 1 to updatedBookmark
         }
 

@@ -5,11 +5,7 @@ import org.jetbrains.exposed.sql.transactions.transaction
 import org.joda.time.DateTime
 
 interface BookmarkStore {
-    @Deprecated("Method name was misleading", ReplaceWith("bookmarkFor"))
-    fun findOrCreate(bookmarkName: String) = bookmarkFor(bookmarkName)
     fun bookmarkFor(bookmarkName: String): Bookmark
-    @Deprecated("Bookmark name now lives inside the Bookmark data class", ReplaceWith("save(bookmark: Bookmark)"))
-    fun save(bookmarkName: String, bookmark: Bookmark) = save(bookmark)
     fun save(bookmark: Bookmark)
 }
 

@@ -10,7 +10,7 @@ interface EventSink {
 interface EventSource {
     fun getAfter(sequence: Long, eventClasses: List<KClass<out DomainEvent>> = emptyList(), batchSize: Int = 100) : List<SequencedEvent>
 
-    fun lastSequence(): Long
+    fun lastSequence(eventClasses: List<KClass<out DomainEvent>> = emptyList()): Long
 }
 
 interface EventStore : EventSink, EventSource {

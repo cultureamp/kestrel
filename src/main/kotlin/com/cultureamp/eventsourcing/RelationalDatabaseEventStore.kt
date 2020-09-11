@@ -147,11 +147,17 @@ class RelationalDatabaseEventStore @PublishedApi internal constructor(
         }
     }
 
-    override fun lastSequence(): Long = transaction(db) {
+    override fun lastSequence(eventClasses: List<KClass<out DomainEvent>>): Long = transaction(db) {
         val maxSequence = events.sequence.max()
         events
             .slice(maxSequence)
-            .selectAll()
+            .select {
+                if (eventClasses.nonEmpty()) {
+                    events.eventType.inList(eventClasses.map { it.java.canonicalName })
+                } else {
+                    Op.TRUE
+                }
+            }
             .map { it[maxSequence] }
             .first() ?: 0
     }
@@ -207,7 +213,7 @@ class Events(jsonb: Table.(String) -> Column<String>) : Table() {
     init {
         uniqueIndex(eventId)
         uniqueIndex(aggregateId, aggregateSequence)
-        nonUniqueIndex(aggregateType, eventType)
+        nonUniqueIndex(eventType, aggregateType)
     }
 }
 
