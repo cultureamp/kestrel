@@ -1,12 +1,7 @@
 package com.cultureamp.eventsourcing
 
 import org.joda.time.DateTime
-import java.lang.ClassCastException
-import java.lang.IllegalArgumentException
 import java.util.*
-import kotlin.reflect.KClass
-import kotlin.jvm.internal.FunctionReference
-import kotlin.reflect.jvm.jvmName
 
 interface BaseAggregate {
     fun aggregateType(): String = this::class.simpleName!!
@@ -73,40 +68,30 @@ interface AggregateConstructor<CC: CreationCommand, CE: CreationEvent, Err: Doma
     fun create(command: CC): Either<Err, CE>
 
     companion object {
-        fun <CC: CreationCommand, CE: CreationEvent, Err: DomainError, UC: UpdateCommand, UE: UpdateEvent, A: Any> from(
-            create: (CC) -> Either<Err, CE>,
-            update: A.(UC) -> Either<Err, List<UE>>,
-            created: (CE) -> A,
-            updated: A.(UE) -> A = { _ -> this },
-            aggregateType: (A.() -> String)? = null
+        inline fun <CC: CreationCommand, CE: CreationEvent, Err: DomainError, UC: UpdateCommand, UE: UpdateEvent, reified A: Any> from(
+            noinline create: (CC) -> Either<Err, CE>,
+            noinline update: A.(UC) -> Either<Err, List<UE>>,
+            noinline created: (CE) -> A,
+            noinline updated: A.(UE) -> A = { _ -> this },
+            noinline aggregateType: (A.() -> String) = { A::class.simpleName!! }
         ): AggregateConstructor<CC, CE, Err, UC, UE, Aggregate<UC, UE, Err, *>> {
             return object : AggregateConstructor<CC, CE, Err, UC, UE, Aggregate<UC, UE, Err, *>> {
-                val aggregateTypeFn = aggregateType ?: toOwnerAggregateType(created)
                 override fun created(event: CE): Aggregate<UC, UE, Err, *> {
                     val createdAggregate = created(event)
-                    return Aggregate.from(createdAggregate, update, updated, aggregateTypeFn)
+                    return Aggregate.from(createdAggregate, update, updated, aggregateType)
                 }
 
                 override fun create(command: CC): Either<Err, CE> = create(command)
             }
         }
 
-        fun <CC : CreationCommand, CE : CreationEvent, Err : DomainError, UC : UpdateCommand, UE : UpdateEvent, A : Any> fromStateless(
-            create: (CC) -> Either<Err, CE>,
-            update: (UC) -> Either<Err, List<UE>>,
+        inline fun <CC : CreationCommand, CE : CreationEvent, Err : DomainError, UC : UpdateCommand, UE : UpdateEvent, reified A : Any> fromStateless(
+            noinline create: (CC) -> Either<Err, CE>,
+            noinline update: (UC) -> Either<Err, List<UE>>,
             instance: A,
-            aggregateType: (A.() -> String)? = null
+            noinline aggregateType: (A.() -> String) = { A::class.simpleName!! }
         ): AggregateConstructor<CC, CE, Err, UC, UE, Aggregate<UC, UE, Err, *>> {
-            return from(create, { update(it) }, { instance }, { instance }, aggregateType ?: aggregateType ?: toOwnerAggregateType(create))
-        }
-
-        private fun <A> toOwnerAggregateType(function: Function<*>) = try {
-            val fullyQualifiedOwnerName = ((function as FunctionReference).owner as KClass<*>).jvmName
-            val simpleName = fullyQualifiedOwnerName.removeSuffix("\$Companion").substringAfterLast(".")
-            val fn: (A.() -> String) = { simpleName }
-            fn
-        } catch (e: ClassCastException) {
-            throw IllegalArgumentException("Couldn't infer aggregateType from function handle, please manually provide an aggregateType", e)
+            return from(create, { update(it) }, { instance }, { instance }, aggregateType)
         }
     }
 }

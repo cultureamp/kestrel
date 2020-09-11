@@ -68,4 +68,6 @@ data class ThingAggregate(val tweaks: List<String> = emptyList(), val bops: List
         }
         is Explode -> Left(Expoded)
     }
+
+    override fun aggregateType() = "thing"
 }
