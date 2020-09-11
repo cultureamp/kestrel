@@ -1,7 +1,12 @@
 package com.cultureamp.eventsourcing
 
 import org.joda.time.DateTime
+import java.lang.ClassCastException
+import java.lang.IllegalArgumentException
 import java.util.*
+import kotlin.reflect.KClass
+import kotlin.jvm.internal.FunctionReference
+import kotlin.reflect.jvm.jvmName
 
 interface BaseAggregate {
     fun aggregateType(): String = this::class.simpleName!!
@@ -23,12 +28,12 @@ interface Aggregate<UC: UpdateCommand, UE: UpdateEvent, Err: DomainError, out Se
             aggregate: A,
             update: A.(UC) -> Either<Err, List<UE>>,
             updated: A.(UE) -> A = { _ -> this },
-            aggregateType: (A.() -> String)? = null
+            aggregateType: (A.() -> String)
         ): Aggregate<UC, UE, Err, Aggregate<UC, UE, Err, *>> {
             return object : Aggregate<UC, UE, Err, Aggregate<UC, UE, Err, *>> {
                 override fun updated(event: UE): Aggregate<UC, UE, Err, *> {
                     val updatedAggregate = aggregate.updated(event)
-                    return from(updatedAggregate, update, updated)
+                    return from(updatedAggregate, update, updated, aggregateType)
                 }
 
                 override fun update(command: UC): Either<Err, List<UE>> {
@@ -36,7 +41,7 @@ interface Aggregate<UC: UpdateCommand, UE: UpdateEvent, Err: DomainError, out Se
                 }
 
                 override fun aggregateType(): String {
-                    return aggregateType?.invoke(aggregate) ?: super.aggregateType()
+                    return aggregateType.invoke(aggregate)
                 }
             }
         }
@@ -75,11 +80,11 @@ interface AggregateConstructor<CC: CreationCommand, CE: CreationEvent, Err: Doma
             updated: A.(UE) -> A = { _ -> this },
             aggregateType: (A.() -> String)? = null
         ): AggregateConstructor<CC, CE, Err, UC, UE, Aggregate<UC, UE, Err, *>> {
-
             return object : AggregateConstructor<CC, CE, Err, UC, UE, Aggregate<UC, UE, Err, *>> {
+                val aggregateTypeFn = aggregateType ?: toOwnerAggregateType(created)
                 override fun created(event: CE): Aggregate<UC, UE, Err, *> {
                     val createdAggregate = created(event)
-                    return Aggregate.from(createdAggregate, update, updated, aggregateType)
+                    return Aggregate.from(createdAggregate, update, updated, aggregateTypeFn)
                 }
 
                 override fun create(command: CC): Either<Err, CE> = create(command)
@@ -92,7 +97,16 @@ interface AggregateConstructor<CC: CreationCommand, CE: CreationEvent, Err: Doma
             instance: A,
             aggregateType: (A.() -> String)? = null
         ): AggregateConstructor<CC, CE, Err, UC, UE, Aggregate<UC, UE, Err, *>> {
-            return from(create, { update(it) }, { instance }, { instance }, aggregateType)
+            return from(create, { update(it) }, { instance }, { instance }, aggregateType ?: aggregateType ?: toOwnerAggregateType(create))
+        }
+
+        private fun <A> toOwnerAggregateType(function: Function<*>) = try {
+            val fullyQualifiedOwnerName = ((function as FunctionReference).owner as KClass<*>).jvmName
+            val simpleName = fullyQualifiedOwnerName.removeSuffix("\$Companion").substringAfterLast(".")
+            val fn: (A.() -> String) = { simpleName }
+            fn
+        } catch (e: ClassCastException) {
+            throw IllegalArgumentException("Couldn't infer aggregateType from function handle, please manually provide an aggregateType", e)
         }
     }
 }
