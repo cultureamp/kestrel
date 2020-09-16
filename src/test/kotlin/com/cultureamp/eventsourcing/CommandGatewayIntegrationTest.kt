@@ -47,7 +47,7 @@ class CommandGatewayIntegrationTest : DescribeSpec({
         Route.from(
             PizzaAggregate.Companion::create,
             PizzaAggregate::update,
-            PizzaAggregate.Companion::created,
+            ::PizzaAggregate,
             PizzaAggregate::updated,
             PizzaAggregate::aggregateType
 

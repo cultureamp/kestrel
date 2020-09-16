@@ -83,10 +83,6 @@ data class PizzaAggregate(val baseStyle: PizzaStyle, val toppings: List<PizzaTop
     }
 
     companion object {
-        fun created(event: PizzaCreationEvent): PizzaAggregate = when (event) {
-            is PizzaCreated -> PizzaAggregate(event)
-        }
-
         private fun classicToppings(style: PizzaStyle): List<PizzaTopping> = when (style) {
             PizzaStyle.MARGHERITA -> listOf(PizzaTopping.CHEESE, PizzaTopping.TOMATO_PASTE, PizzaTopping.BASIL)
             PizzaStyle.HAWAIIAN -> listOf(
