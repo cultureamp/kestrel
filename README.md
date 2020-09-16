@@ -63,7 +63,7 @@ data class SimpleThingAggregate(val tweaks: List<String> = emptyList(), val boop
 }
 ```
 
-this can then by wired into your [`CommandGateway`](/src/main/kotlin/com/cultureamp/eventsourcing/CommandGateway.kt) 
+This can then by wired into your [`CommandGateway`](/src/main/kotlin/com/cultureamp/eventsourcing/CommandGateway.kt) 
 like so:
 
 ```kotlin
@@ -130,7 +130,7 @@ data class SurveyAggregate(val name: Map<Locale, String>, val accountId: UUID, v
 }
 ```
 
-this can then by wired into your [`CommandGateway`](/src/main/kotlin/com/cultureamp/eventsourcing/CommandGateway.kt) 
+This can then by wired into your [`CommandGateway`](/src/main/kotlin/com/cultureamp/eventsourcing/CommandGateway.kt) 
 like so:
 
 ```kotlin
@@ -145,7 +145,7 @@ val routes = listOf(
 val commandGateway = CommandGateway(eventStore, routes)
 ```
 
-if you happen to have a "stateless" aggregate that doesn't need to update it's internal state to handle commands, you
+If you happen to have a "stateless" aggregate that doesn't need to update it's internal state to handle commands, you
 can model that too:
 
 ```kotlin
@@ -162,19 +162,6 @@ object PaymentSagaAggregate {
     }
 }
 ```
-
-```kotlin
-val routes = listOf(
-    Route.fromStateless(
-        PaymentSagaAggregate::create,
-        PaymentSagaAggregate::update,
-        PaymentSagaAggregate
-    )
-)
-val gateway = CommandGateway(eventStore, routes)
-```
-
-or you could even just inline the functions
 
 ```kotlin
 val routes = listOf(
