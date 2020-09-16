@@ -31,7 +31,8 @@ KES offers multiple ways of defining your aggregates depending on your needs.
 ### Using interfaces
 
 The simplest way to get started is to use the [`SimpleAggregate[Constructor]`](/src/main/kotlin/com/cultureamp/eventsourcing/Aggregate.kt) 
-interface, for example:
+interface. If you are not sure which aggregate creation method to use, we recommend this option.
+For example:
 
 ```kotlin
 data class SimpleThingAggregate(val tweaks: List<String> = emptyList(), val boops: List<Booped> = emptyList()) : 
