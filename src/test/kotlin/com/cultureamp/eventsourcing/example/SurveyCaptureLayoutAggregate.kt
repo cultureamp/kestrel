@@ -1,9 +1,9 @@
-package com.cultureamp.eventsourcing.fixtures
+package com.cultureamp.eventsourcing.example
 
 import com.cultureamp.eventsourcing.*
 import org.joda.time.DateTime
-import com.cultureamp.eventsourcing.fixtures.DemographicSectionPosition.bottom
-import com.cultureamp.eventsourcing.fixtures.DemographicSectionPosition.top
+import com.cultureamp.eventsourcing.example.DemographicSectionPosition.bottom
+import com.cultureamp.eventsourcing.example.DemographicSectionPosition.top
 import java.util.UUID
 
 

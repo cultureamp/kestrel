@@ -1,4 +1,4 @@
-package com.cultureamp.eventsourcing.fixtures
+package com.cultureamp.eventsourcing.example
 
 import com.cultureamp.eventsourcing.*
 import org.joda.time.DateTime

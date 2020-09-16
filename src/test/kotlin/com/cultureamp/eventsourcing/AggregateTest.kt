@@ -1,9 +1,9 @@
 package com.cultureamp.eventsourcing
 
-import com.cultureamp.eventsourcing.fixtures.Invited
-import com.cultureamp.eventsourcing.fixtures.ParticipantAggregate
-import com.cultureamp.eventsourcing.fixtures.SimpleThingAggregate
-import com.cultureamp.eventsourcing.fixtures.ThingAggregate
+import com.cultureamp.eventsourcing.example.Invited
+import com.cultureamp.eventsourcing.example.ParticipantAggregate
+import com.cultureamp.eventsourcing.example.SimpleThingAggregate
+import com.cultureamp.eventsourcing.example.ThingAggregate
 import io.kotest.core.spec.style.DescribeSpec
 import io.kotest.matchers.shouldBe
 import org.joda.time.DateTime

@@ -1,4 +1,4 @@
-package com.cultureamp.eventsourcing.fixtures
+package com.cultureamp.eventsourcing.example
 
 import java.util.*
 
