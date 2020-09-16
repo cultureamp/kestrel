@@ -24,12 +24,12 @@ data class EventListener(val handlers: Map<KClass<DomainEvent>, (DomainEvent, UU
             return EventListener(mapOf(handler))
         }
 
-        inline fun <reified E : DomainEvent> from(eventProcessor: EventProcessor<E>): EventListener {
-            return from(eventProcessor::process)
+        inline fun <reified E : DomainEvent> from(domainEventProcessor: DomainEventProcessor<E>): EventListener {
+            return from(domainEventProcessor::process)
         }
 
-        inline fun <reified E : DomainEvent, reified M : EventMetadata> from(eventProcessor: EventProcessorWithMetadata<E, M>): EventListener {
-            return from(eventProcessor::process)
+        inline fun <reified E : DomainEvent, reified M : EventMetadata> from(domainEventProcessor: DomainEventProcessorWithMetadata<E, M>): EventListener {
+            return from(domainEventProcessor::process)
         }
 
         fun compose(first: EventListener, second: EventListener): EventListener {

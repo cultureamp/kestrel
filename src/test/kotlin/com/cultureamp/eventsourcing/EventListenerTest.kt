@@ -64,7 +64,7 @@ class EventListenerTest : DescribeSpec({
     describe("EventListener#from(EventProcessor)") {
         it("can handle events with their aggregateIds") {
             val events = mutableMapOf<UUID, TestEvent>()
-            val projector = object : EventProcessor<FooEvent> {
+            val projector = object : DomainEventProcessor<FooEvent> {
                 override fun process(event: FooEvent, aggregateId: UUID) {
                     events[aggregateId] = event
                 }
@@ -81,7 +81,7 @@ class EventListenerTest : DescribeSpec({
     describe("EventListener#from(EventProcessorWithMetadata)") {
         it("can handle events with their aggregateIds, metadata and eventIds") {
             val events = mutableMapOf<UUID, Tuple3<TestEvent, EventMetadata, UUID>>()
-            val projector = object : EventProcessorWithMetadata<FooEvent, SpecificMetadata> {
+            val projector = object : DomainEventProcessorWithMetadata<FooEvent, SpecificMetadata> {
                 override fun process(event: FooEvent, aggregateId: UUID, metadata: SpecificMetadata, eventId: UUID) {
                     events[aggregateId] = Tuple3(event, metadata, eventId)
                 }
