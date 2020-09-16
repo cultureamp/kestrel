@@ -17,7 +17,7 @@ import org.jetbrains.exposed.sql.transactions.transaction
 import org.joda.time.DateTime
 import java.util.*
 
-class EventProcessorMonitorIntegrationTest : DescribeSpec({
+class AsyncEventProcessorMonitorIntegrationTest : DescribeSpec({
     val h2DbUrl = "jdbc:h2:mem:test;MODE=MySQL;DB_CLOSE_DELAY=-1;"
     val h2Driver = "org.h2.Driver"
     val db = Database.connect(url = h2DbUrl, driver = h2Driver)
@@ -59,14 +59,14 @@ class EventProcessorMonitorIntegrationTest : DescribeSpec({
         it("calculates lag taking into account eventType") {
             val projector = SurveyNamesCommandProjector(db)
             val bookmarkName = "bookmarkName"
-            val eventListener = EventListener.from(projector::project)
-            val asyncEventProcessor = AsyncEventProcessor(eventStore, bookmarkStore, bookmarkName, eventListener)
+            val eventProcessor = EventProcessor.from(projector::project)
+            val asyncEventProcessor = AsyncEventProcessor(eventStore, bookmarkStore, bookmarkName, eventProcessor)
 
             var capturedLag: Lag? = null
             val metrics: (Lag) -> Unit = {
                 capturedLag = it
             }
-            val eventProcessorMonitor = EventProcessorMonitor(
+            val asyncEventProcessorMonitor = AsyncEventProcessorMonitor(
                 listOf(asyncEventProcessor),
                 metrics
             )
@@ -79,12 +79,12 @@ class EventProcessorMonitorIntegrationTest : DescribeSpec({
             eventStore.lastSequence(listOf(Created::class)) shouldBe 1
             bookmarkStore.bookmarkFor(bookmarkName) shouldBe Bookmark(bookmarkName, 0)
 
-            eventProcessorMonitor.run()
+            asyncEventProcessorMonitor.run()
             capturedLag?.lag shouldBe 1
 
             asyncEventProcessor.processOneBatch()
             bookmarkStore.bookmarkFor(bookmarkName) shouldBe Bookmark(bookmarkName, 1)
-            eventProcessorMonitor.run()
+            asyncEventProcessorMonitor.run()
             capturedLag?.lag shouldBe 0
         }
     }

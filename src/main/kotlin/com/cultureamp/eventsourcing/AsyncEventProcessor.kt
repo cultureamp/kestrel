@@ -7,7 +7,7 @@ class AsyncEventProcessor(
     val eventSource: EventSource,
     val bookmarkStore: BookmarkStore,
     val bookmarkName: String,
-    val eventListener: EventListener,
+    val eventProcessor: EventProcessor,
     private val batchSize: Int = 1000,
     private val startLog: (Bookmark) -> Unit = { bookmark ->
         System.out.println("Polling for events for ${bookmark.name} from sequence ${bookmark.sequence}")
@@ -24,10 +24,10 @@ class AsyncEventProcessor(
 
         startLog(startBookmark)
 
-        val (count, finalBookmark) = eventSource.getAfter(startBookmark.sequence, eventListener.eventClasses, batchSize).foldIndexed(
+        val (count, finalBookmark) = eventSource.getAfter(startBookmark.sequence, eventProcessor.eventClasses, batchSize).foldIndexed(
             0 to startBookmark
         ) { index, _, sequencedEvent ->
-            eventListener.handle(sequencedEvent.event)
+            eventProcessor.handle(sequencedEvent.event)
             val updatedBookmark = startBookmark.copy(sequence = sequencedEvent.sequence)
             bookmarkStore.save(updatedBookmark)
             index + 1 to updatedBookmark

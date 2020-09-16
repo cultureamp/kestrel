@@ -7,7 +7,7 @@ import io.kotest.matchers.shouldBe
 import org.joda.time.DateTime
 import java.util.*
 
-class EventListenerTest : DescribeSpec({
+class EventProcessorTest : DescribeSpec({
     val fooDomainEvent = FooEvent("bar")
     val fooEvent = Event(
         id = UUID.randomUUID(),
@@ -27,7 +27,7 @@ class EventListenerTest : DescribeSpec({
         domainEvent = bazDomainEvent
     )
 
-    describe("EventListener#from((E, UUID) -> Any?)") {
+    describe("from((E, UUID) -> Any?)") {
         it("can handle events with their aggregateIds") {
             val events = mutableMapOf<UUID, TestEvent>()
 
@@ -36,15 +36,15 @@ class EventListenerTest : DescribeSpec({
                     events[aggregateId] = event
                 }
             }
-            val eventListener = EventListener.from(Projector()::project)
+            val eventProcessor = EventProcessor.from(Projector()::project)
 
-            eventListener.handle(fooEvent)
+            eventProcessor.handle(fooEvent)
 
             events shouldContain (fooEvent.aggregateId to fooDomainEvent)
         }
     }
 
-    describe("EventListener#from((DomainEvent, UUID, EventMetadata, UUID) -> Any?)") {
+    describe("from((DomainEvent, UUID, EventMetadata, UUID) -> Any?)") {
         it("can handle events with their aggregateIds, metadata and eventIds") {
             val events = mutableMapOf<UUID, Tuple3<TestEvent, EventMetadata, UUID>>()
             class ProjectorWithMetadata {
@@ -53,15 +53,15 @@ class EventListenerTest : DescribeSpec({
                 }
             }
 
-            val eventListener = EventListener.from(ProjectorWithMetadata()::project)
+            val eventProcessor = EventProcessor.from(ProjectorWithMetadata()::project)
 
-            eventListener.handle(fooEvent)
+            eventProcessor.handle(fooEvent)
 
             events shouldContain (fooEvent.aggregateId to Tuple3(fooDomainEvent, fooEvent.metadata, fooEvent.id))
         }
     }
 
-    describe("EventListener#from(EventProcessor)") {
+    describe("from(DomainEventProcessor)") {
         it("can handle events with their aggregateIds") {
             val events = mutableMapOf<UUID, TestEvent>()
             val projector = object : DomainEventProcessor<FooEvent> {
@@ -70,15 +70,15 @@ class EventListenerTest : DescribeSpec({
                 }
             }
 
-            val eventListener = EventListener.from(projector)
+            val eventProcessor = EventProcessor.from(projector)
 
-            eventListener.handle(fooEvent)
+            eventProcessor.handle(fooEvent)
 
             events shouldContain (fooEvent.aggregateId to fooDomainEvent)
         }
     }
 
-    describe("EventListener#from(EventProcessorWithMetadata)") {
+    describe("from(DomainEventProcessorWithMetadata)") {
         it("can handle events with their aggregateIds, metadata and eventIds") {
             val events = mutableMapOf<UUID, Tuple3<TestEvent, EventMetadata, UUID>>()
             val projector = object : DomainEventProcessorWithMetadata<FooEvent, SpecificMetadata> {
@@ -87,9 +87,9 @@ class EventListenerTest : DescribeSpec({
                 }
             }
 
-            val eventListener = EventListener.from(projector)
+            val eventProcessor = EventProcessor.from(projector)
 
-            eventListener.handle(fooEvent)
+            eventProcessor.handle(fooEvent)
 
             events shouldContain (fooEvent.aggregateId to Tuple3(fooDomainEvent, fooEvent.metadata, fooEvent.id))
         }
@@ -109,13 +109,13 @@ class EventListenerTest : DescribeSpec({
                 }
             }
 
-            val eventListener = EventListener.compose(
-                EventListener.from(Projector()::project),
-                EventListener.from(ProjectorWithMetadata()::project)
+            val eventProcessor = EventProcessor.compose(
+                EventProcessor.from(Projector()::project),
+                EventProcessor.from(ProjectorWithMetadata()::project)
             )
 
-            eventListener.handle(fooEvent)
-            eventListener.handle(bazEvent)
+            eventProcessor.handle(fooEvent)
+            eventProcessor.handle(bazEvent)
 
             events shouldContain (fooEvent.aggregateId to fooDomainEvent)
             events shouldContain (bazEvent.aggregateId to bazDomainEvent)
@@ -131,12 +131,12 @@ class EventListenerTest : DescribeSpec({
                 fun project(event: AnotherTestEvent, aggregateId: UUID) = Unit
             }
 
-            val eventListener = EventListener.compose(
-                EventListener.from(FirstProjector()::project),
-                EventListener.from(SecondProjector()::project)
+            val eventProcessor = EventProcessor.compose(
+                EventProcessor.from(FirstProjector()::project),
+                EventProcessor.from(SecondProjector()::project)
             )
 
-            eventListener.eventClasses shouldBe listOf(FooEvent::class, BarEvent::class, BazEvent::class, QuuxEvent::class)
+            eventProcessor.eventClasses shouldBe listOf(FooEvent::class, BarEvent::class, BazEvent::class, QuuxEvent::class)
         }
     }
 })

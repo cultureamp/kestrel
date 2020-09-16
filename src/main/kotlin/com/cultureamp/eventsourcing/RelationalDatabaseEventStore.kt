@@ -25,20 +25,20 @@ val defaultObjectMapper = ObjectMapper()
 class RelationalDatabaseEventStore @PublishedApi internal constructor(
     private val db: Database,
     private val events: Events,
-    private val synchronousProjectors: List<EventListener>,
+    private val synchronousEventProcessors: List<EventProcessor>,
     private val metadataClass: Class<out EventMetadata>,
     private val objectMapper: ObjectMapper
 ) : EventStore {
 
     companion object {
         inline fun <reified T: EventMetadata> create(
-            synchronousProjectors: List<EventListener>,
+            synchronousEventProcessors: List<EventProcessor>,
             db: Database,
             objectMapper: ObjectMapper = defaultObjectMapper
         ): RelationalDatabaseEventStore =
             when (db.dialect) {
-                is H2Dialect -> H2DatabaseEventStore.create<T>(synchronousProjectors, db, objectMapper)
-                is PostgreSQLDialect -> PostgresDatabaseEventStore.create<T>(synchronousProjectors, db, objectMapper)
+                is H2Dialect -> H2DatabaseEventStore.create<T>(synchronousEventProcessors, db, objectMapper)
+                is PostgreSQLDialect -> PostgresDatabaseEventStore.create<T>(synchronousEventProcessors, db, objectMapper)
                 else -> throw UnsupportedOperationException("${db.dialect} not currently supported")
             }
 
@@ -163,7 +163,7 @@ class RelationalDatabaseEventStore @PublishedApi internal constructor(
     }
 
     private fun updateSynchronousProjections(newEvents: List<Event>) {
-        newEvents.forEach { event -> synchronousProjectors.forEach { it.handle(event) } }
+        newEvents.forEach { event -> synchronousEventProcessors.forEach { it.handle(event) } }
     }
 }
 
@@ -173,22 +173,22 @@ class EventMetadataSerializationException(e: Exception) : EventDataException(e)
 
 object PostgresDatabaseEventStore {
     @PublishedApi internal inline fun <reified T: EventMetadata> create(
-        synchronousProjectors: List<EventListener>,
+        synchronousEventProcessors: List<EventProcessor>,
         db: Database,
         objectMapper: ObjectMapper
     ): RelationalDatabaseEventStore {
-        return RelationalDatabaseEventStore(db, Events(Table::jsonb), synchronousProjectors, T::class.java, objectMapper)
+        return RelationalDatabaseEventStore(db, Events(Table::jsonb), synchronousEventProcessors, T::class.java, objectMapper)
     }
 }
 
 object H2DatabaseEventStore {
     // need a `@PublishedApi` here to make it callable from `RelationalDatabaseEventStore.create()`
     @PublishedApi internal inline fun <reified T: EventMetadata> create(
-        synchronousProjectors: List<EventListener>,
+        synchronousEventProcessors: List<EventProcessor>,
         db: Database,
         objectMapper: ObjectMapper
     ): RelationalDatabaseEventStore {
-        return RelationalDatabaseEventStore(db, eventsTable(), synchronousProjectors, T::class.java, objectMapper)
+        return RelationalDatabaseEventStore(db, eventsTable(), synchronousEventProcessors, T::class.java, objectMapper)
     }
 
     @PublishedApi internal fun eventsTable() = Events { name -> this.text(name) }
