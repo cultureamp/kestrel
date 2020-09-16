@@ -3,11 +3,18 @@ package com.cultureamp.eventsourcing
 import com.cultureamp.common.Action
 import kotlin.random.Random
 
-class AsyncEventProcessor(
-    val eventSource: EventSource,
-    val bookmarkStore: BookmarkStore,
-    val bookmarkName: String,
-    val eventProcessor: EventProcessor,
+interface AsyncEventProcessor {
+    val eventSource: EventSource
+    val bookmarkStore: BookmarkStore
+    val bookmarkName: String
+    val eventProcessor: EventProcessor
+}
+
+class BatchedAsyncEventProcessor(
+    override val eventSource: EventSource,
+    override val bookmarkStore: BookmarkStore,
+    override val bookmarkName: String,
+    override val eventProcessor: EventProcessor,
     private val batchSize: Int = 1000,
     private val startLog: (Bookmark) -> Unit = { bookmark ->
         System.out.println("Polling for events for ${bookmark.name} from sequence ${bookmark.sequence}")
@@ -17,7 +24,7 @@ class AsyncEventProcessor(
             System.out.println("Finished processing batch for ${bookmark.name}, ${count} events up to sequence ${bookmark.sequence}")
         }
     }
-) {
+) : AsyncEventProcessor {
 
     fun processOneBatch(): Action {
         val startBookmark = bookmarkStore.bookmarkFor(bookmarkName)

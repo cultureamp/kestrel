@@ -233,7 +233,7 @@ val eventProcessor = EventProcessor.from(projector)
 If you want to process aynchronously you can do something like:
 
 ```kotlin
-val asyncEventProcessor = AsyncEventProcessor(eventStore, bookmarkStore, bookmarkName, eventProcessor)
+val asyncEventProcessor = BatchedAsyncEventProcessor(eventStore, bookmarkStore, bookmarkName, eventProcessor)
 thread(start = true, isDaemon = false, name = asyncEventProcessor.bookmarkName) {
     ExponentialBackoff(
         onFailure = { e, _ -> println(e) }
@@ -297,7 +297,7 @@ val eventProcessor = EventProcessor.compose(
    EventProcessor.from(animalProjector::second)
 )
 val bookmarkName = "AnimalNames"
-val asyncEventProcessor = AsyncEventProcessor(eventStore, bookmarkStore, bookmarkName, eventProcessor)
+val asyncEventProcessor = BatchedAsyncEventProcessor(eventStore, bookmarkStore, bookmarkName, eventProcessor)
 ```
 
 Using `EventProcessor#compose` allows one to wrap up the two event-handling methods as one `EventProcessor` which then
