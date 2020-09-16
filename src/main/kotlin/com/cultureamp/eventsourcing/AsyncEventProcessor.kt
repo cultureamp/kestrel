@@ -27,7 +27,7 @@ class AsyncEventProcessor(
         val (count, finalBookmark) = eventSource.getAfter(startBookmark.sequence, eventProcessor.eventClasses, batchSize).foldIndexed(
             0 to startBookmark
         ) { index, _, sequencedEvent ->
-            eventProcessor.handle(sequencedEvent.event)
+            eventProcessor.process(sequencedEvent.event)
             val updatedBookmark = startBookmark.copy(sequence = sequencedEvent.sequence)
             bookmarkStore.save(updatedBookmark)
             index + 1 to updatedBookmark

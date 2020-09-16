@@ -163,7 +163,7 @@ class RelationalDatabaseEventStore @PublishedApi internal constructor(
     }
 
     private fun updateSynchronousProjections(newEvents: List<Event>) {
-        newEvents.forEach { event -> synchronousEventProcessors.forEach { it.handle(event) } }
+        newEvents.forEach { event -> synchronousEventProcessors.forEach { it.process(event) } }
     }
 }
 

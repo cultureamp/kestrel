@@ -7,7 +7,7 @@ import kotlin.reflect.KClass
 class EventProcessor(private val domainEventProcessors: Map<KClass<DomainEvent>, (DomainEvent, UUID, EventMetadata, UUID) -> Any?>) {
     val eventClasses = domainEventProcessors.keys.flatMap { it.asNestedSealedConcreteClasses() }
 
-    fun handle(event: Event) {
+    fun process(event: Event) {
         domainEventProcessors.filterKeys { it.isInstance(event.domainEvent) }.values.forEach { it(event.domainEvent, event.aggregateId, event.metadata, event.id) }
     }
 

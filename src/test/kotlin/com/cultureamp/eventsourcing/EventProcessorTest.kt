@@ -28,7 +28,7 @@ class EventProcessorTest : DescribeSpec({
     )
 
     describe("from((E, UUID) -> Any?)") {
-        it("can handle events with their aggregateIds") {
+        it("can process events with their aggregateIds") {
             val events = mutableMapOf<UUID, TestEvent>()
 
             class Projector {
@@ -38,14 +38,14 @@ class EventProcessorTest : DescribeSpec({
             }
             val eventProcessor = EventProcessor.from(Projector()::project)
 
-            eventProcessor.handle(fooEvent)
+            eventProcessor.process(fooEvent)
 
             events shouldContain (fooEvent.aggregateId to fooDomainEvent)
         }
     }
 
     describe("from((DomainEvent, UUID, EventMetadata, UUID) -> Any?)") {
-        it("can handle events with their aggregateIds, metadata and eventIds") {
+        it("can process events with their aggregateIds, metadata and eventIds") {
             val events = mutableMapOf<UUID, Tuple3<TestEvent, EventMetadata, UUID>>()
             class ProjectorWithMetadata {
                 fun project(event: FooEvent, aggregateId: UUID, metadata: SpecificMetadata, eventId: UUID) {
@@ -55,14 +55,14 @@ class EventProcessorTest : DescribeSpec({
 
             val eventProcessor = EventProcessor.from(ProjectorWithMetadata()::project)
 
-            eventProcessor.handle(fooEvent)
+            eventProcessor.process(fooEvent)
 
             events shouldContain (fooEvent.aggregateId to Tuple3(fooDomainEvent, fooEvent.metadata, fooEvent.id))
         }
     }
 
     describe("from(DomainEventProcessor)") {
-        it("can handle events with their aggregateIds") {
+        it("can process events with their aggregateIds") {
             val events = mutableMapOf<UUID, TestEvent>()
             val projector = object : DomainEventProcessor<FooEvent> {
                 override fun process(event: FooEvent, aggregateId: UUID) {
@@ -72,14 +72,14 @@ class EventProcessorTest : DescribeSpec({
 
             val eventProcessor = EventProcessor.from(projector)
 
-            eventProcessor.handle(fooEvent)
+            eventProcessor.process(fooEvent)
 
             events shouldContain (fooEvent.aggregateId to fooDomainEvent)
         }
     }
 
     describe("from(DomainEventProcessorWithMetadata)") {
-        it("can handle events with their aggregateIds, metadata and eventIds") {
+        it("can process events with their aggregateIds, metadata and eventIds") {
             val events = mutableMapOf<UUID, Tuple3<TestEvent, EventMetadata, UUID>>()
             val projector = object : DomainEventProcessorWithMetadata<FooEvent, SpecificMetadata> {
                 override fun process(event: FooEvent, aggregateId: UUID, metadata: SpecificMetadata, eventId: UUID) {
@@ -89,7 +89,7 @@ class EventProcessorTest : DescribeSpec({
 
             val eventProcessor = EventProcessor.from(projector)
 
-            eventProcessor.handle(fooEvent)
+            eventProcessor.process(fooEvent)
 
             events shouldContain (fooEvent.aggregateId to Tuple3(fooDomainEvent, fooEvent.metadata, fooEvent.id))
         }
@@ -114,8 +114,8 @@ class EventProcessorTest : DescribeSpec({
                 EventProcessor.from(ProjectorWithMetadata()::project)
             )
 
-            eventProcessor.handle(fooEvent)
-            eventProcessor.handle(bazEvent)
+            eventProcessor.process(fooEvent)
+            eventProcessor.process(bazEvent)
 
             events shouldContain (fooEvent.aggregateId to fooDomainEvent)
             events shouldContain (bazEvent.aggregateId to bazDomainEvent)
