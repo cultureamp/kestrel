@@ -1,5 +1,6 @@
 package com.cultureamp.eventsourcing
 
+import com.cultureamp.eventsourcing.fixtures.AddSection
 import com.cultureamp.eventsourcing.fixtures.AlwaysBoppable
 import com.cultureamp.eventsourcing.fixtures.Boop
 import com.cultureamp.eventsourcing.fixtures.Bop
@@ -9,9 +10,12 @@ import com.cultureamp.eventsourcing.fixtures.CreateSurvey
 import com.cultureamp.eventsourcing.fixtures.CreateThing
 import com.cultureamp.eventsourcing.fixtures.Delete
 import com.cultureamp.eventsourcing.fixtures.Generate
+import com.cultureamp.eventsourcing.fixtures.IntendedPurpose
 import com.cultureamp.eventsourcing.fixtures.Invite
 import com.cultureamp.eventsourcing.fixtures.Locale
+import com.cultureamp.eventsourcing.fixtures.LocalizedText
 import com.cultureamp.eventsourcing.fixtures.ParticipantAggregate
+import com.cultureamp.eventsourcing.fixtures.PositionQuestion
 import com.cultureamp.eventsourcing.fixtures.RemoveSection
 import com.cultureamp.eventsourcing.fixtures.SectionNotFound
 import com.cultureamp.eventsourcing.fixtures.SimpleThingAggregate
@@ -24,7 +28,14 @@ import com.cultureamp.eventsourcing.fixtures.ThingAggregate
 import com.cultureamp.eventsourcing.fixtures.Tweak
 import com.cultureamp.eventsourcing.fixtures.Twerk
 import com.cultureamp.eventsourcing.fixtures.Uninvite
-import com.cultureamp.eventsourcing.sample.*
+import com.cultureamp.eventsourcing.sample.AddTopping
+import com.cultureamp.eventsourcing.sample.CreateClassicPizza
+import com.cultureamp.eventsourcing.sample.EatPizza
+import com.cultureamp.eventsourcing.sample.PizzaAggregate
+import com.cultureamp.eventsourcing.sample.PizzaAlreadyEaten
+import com.cultureamp.eventsourcing.sample.PizzaStyle
+import com.cultureamp.eventsourcing.sample.PizzaTopping
+import com.cultureamp.eventsourcing.sample.StandardEventMetadata
 import io.kotest.core.spec.style.DescribeSpec
 import io.kotest.matchers.shouldBe
 import io.kotest.matchers.types.shouldBeInstanceOf
@@ -151,44 +162,90 @@ class CommandGatewayIntegrationTest : DescribeSpec({
             }
         }
 
-        it("can route to various aggregates") {
+        it("can route to an aggregate created with function handles") {
             val pizzaId = UUID.randomUUID()
             gateway.dispatch(CreateClassicPizza(pizzaId, PizzaStyle.MARGHERITA), metadata) shouldBe Right(Created)
             gateway.dispatch(AddTopping(pizzaId, PizzaTopping.PINEAPPLE), metadata) shouldBe Right(Updated)
 
-            val thingId = UUID.randomUUID()
-            gateway.dispatch(CreateThing(thingId), metadata) shouldBe Right(Created)
-            gateway.dispatch(Bop(thingId), metadata) shouldBe Right(Updated)
-            gateway.dispatch(Tweak(thingId, "donk"), metadata) shouldBe Right(Updated)
+            transaction(db) {
+                eventsTable.selectAll().count() shouldBe 2
+            }
+        }
 
+        it("can route to a simple aggregate") {
             val simpleThingId = UUID.randomUUID()
             gateway.dispatch(CreateSimpleThing(simpleThingId), metadata) shouldBe Right(Created)
             gateway.dispatch(Boop(simpleThingId), metadata) shouldBe Right(Updated)
             gateway.dispatch(Twerk(simpleThingId, "dink"), metadata) shouldBe Right(Updated)
 
+            transaction(db) {
+                eventsTable.selectAll().count() shouldBe 3
+            }
+        }
+
+        it("can route to an aggregate with a projection wired into it") {
+            val thingId = UUID.randomUUID()
+            gateway.dispatch(CreateThing(thingId), metadata) shouldBe Right(Created)
+            gateway.dispatch(Bop(thingId), metadata) shouldBe Right(Updated)
+            gateway.dispatch(Tweak(thingId, "donk"), metadata) shouldBe Right(Updated)
+
+            transaction(db) {
+                eventsTable.selectAll().count() shouldBe 3
+            }
+        }
+
+        it("can route to a stateless aggregate") {
             val paymentSagaId = UUID.randomUUID()
             gateway.dispatch(StartPaymentSaga(paymentSagaId, UUID.randomUUID(), "bank details", 42), metadata) shouldBe Right(Created)
             gateway.dispatch(StartThirdPartyPayment(paymentSagaId, DateTime.now()), metadata) shouldBe Right(Updated)
 
-            val surveyCaptureLayoutId = UUID.randomUUID()
-            gateway.dispatch(Generate(surveyCaptureLayoutId, UUID.randomUUID(), DateTime.now()), metadata) shouldBe Right(Created)
-            gateway.dispatch(RemoveSection(surveyCaptureLayoutId, UUID.randomUUID(), DateTime.now()), metadata) shouldBe Left(SectionNotFound)
+            transaction(db) {
+                eventsTable.selectAll().count() shouldBe 2
+            }
+        }
 
-            val surveyId = UUID.randomUUID()
-            gateway.dispatch(CreateSurvey(surveyId, UUID.randomUUID(), mapOf(Locale.en to "name"), UUID.randomUUID(), DateTime.now()), metadata) shouldBe Right(Created)
-            gateway.dispatch(Delete(surveyId, DateTime.now()), metadata) shouldBe Right(Updated)
-
-            val surveySagaId = UUID.randomUUID()
-            gateway.dispatch(Create(surveySagaId, UUID.randomUUID(), UUID.randomUUID(), mapOf(Locale.en to "name"), UUID.randomUUID(), DateTime.now()), metadata) shouldBe Right(Created)
-            gateway.dispatch(StartCreatingSurvey(surveySagaId, DateTime.now()), metadata) shouldBe Right(Updated)
-
+        it("can route to an aggregate with a command that is both create and update") {
             val participantId = UUID.randomUUID()
             gateway.dispatch(Invite(participantId, UUID.randomUUID(), UUID.randomUUID(), DateTime.now()), metadata) shouldBe Right(Created)
             gateway.dispatch(Uninvite(participantId, DateTime.now()), metadata) shouldBe Right(Updated)
             gateway.dispatch(Invite(participantId, UUID.randomUUID(), UUID.randomUUID(), DateTime.now()), metadata) shouldBe Right(Updated)
 
             transaction(db) {
-                eventsTable.selectAll().count() shouldBe 18
+                eventsTable.selectAll().count() shouldBe 3
+            }
+        }
+
+        it("can route to an aggregate created with function handles and a projection wired into it") {
+            val surveyId = UUID.randomUUID()
+            gateway.dispatch(CreateSurvey(surveyId, UUID.randomUUID(), mapOf(Locale.en to "name"), UUID.randomUUID(), DateTime.now()), metadata) shouldBe Right(Created)
+            gateway.dispatch(Delete(surveyId, DateTime.now()), metadata) shouldBe Right(Updated)
+
+            transaction(db) {
+                eventsTable.selectAll().count() shouldBe 2
+            }
+        }
+
+        it("can route to an aggregate created with function handles which is stateless for updates") {
+            val surveySagaId = UUID.randomUUID()
+            gateway.dispatch(Create(surveySagaId, UUID.randomUUID(), UUID.randomUUID(), mapOf(Locale.en to "name"), UUID.randomUUID(), DateTime.now()), metadata) shouldBe Right(Created)
+            gateway.dispatch(StartCreatingSurvey(surveySagaId, DateTime.now()), metadata) shouldBe Right(Updated)
+
+            transaction(db) {
+                eventsTable.selectAll().count() shouldBe 2
+            }
+        }
+
+        it("can route to an aggregate with which can fail commands based on reasonably complicated internal logic") {
+            val surveyCaptureLayoutId = UUID.randomUUID()
+            gateway.dispatch(Generate(surveyCaptureLayoutId, UUID.randomUUID(), DateTime.now()), metadata) shouldBe Right(Created)
+            val sectionId = UUID.randomUUID()
+            gateway.dispatch(RemoveSection(surveyCaptureLayoutId, sectionId, DateTime.now()), metadata) shouldBe Left(SectionNotFound)
+            gateway.dispatch(AddSection(surveyCaptureLayoutId, sectionId, listOf(LocalizedText("text", Locale.en)), emptyList(), emptyList(), IntendedPurpose.standard, "code", null, DateTime.now()), metadata) shouldBe Right(Updated)
+            gateway.dispatch(PositionQuestion(surveyCaptureLayoutId, UUID.randomUUID(), null, sectionId, DateTime.now()), metadata) shouldBe Right(Updated)
+            gateway.dispatch(RemoveSection(surveyCaptureLayoutId, sectionId, DateTime.now()), metadata) shouldBe Right(Updated)
+
+            transaction(db) {
+                eventsTable.selectAll().count() shouldBe 4
             }
         }
     }

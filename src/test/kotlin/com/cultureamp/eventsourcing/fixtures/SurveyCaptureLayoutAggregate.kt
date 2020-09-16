@@ -136,7 +136,7 @@ data class SurveyCaptureLayoutAggregate(
             else -> with(command) { Right.list(QuestionPositioned(questionId, positionedAfterQuestionId, sectionId, positionedAt)) }
         } else when {
             !hasSection(command.sectionId) -> Left(SectionNotFound)
-            sectionFor(command.sectionId).questions.first() != command.questionId -> Left(QuestionAlreadyInPosition)
+            sectionFor(command.sectionId).questions.firstOrNull() == command.questionId -> Left(QuestionAlreadyInPosition)
             else -> with(command) { Right.list(QuestionPositioned(questionId, positionedAfterQuestionId, sectionId, positionedAt)) }
         }
         is PositionDemographicSections -> when(command.placement) {
@@ -231,7 +231,7 @@ data class AddSection(
     val addedAt: DateTime
 ) : SurveyCaptureLayoutUpdateCommand() {
     init {
-        require(name.isNotEmpty())
+        require(name.isNotEmpty()) { "must contain a name in at least one locale"}
     }
 }
 
