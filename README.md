@@ -84,7 +84,7 @@ access to a dependency during command-handling.
 If you prefer, you can also model your aggregates in a more functional-programming style using a group of related 
 functions. This is useful for when you want more control over how you write your aggregates, for example to utilize the 
 constructor of your class (not possible via interfaces), to only inject a dependency into one of the two 
-command-handling methods, when you don't want to pollute or domain code with loads of generics but still want rich 
+command-handling methods, when you don't want to clutter your domain code with loads of generics but still want rich 
 types, or if you simply just prefer thinking in functions.
 
 Here's an example:
