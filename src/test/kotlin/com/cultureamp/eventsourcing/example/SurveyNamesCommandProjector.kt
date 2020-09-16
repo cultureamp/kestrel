@@ -1,5 +1,7 @@
 package com.cultureamp.eventsourcing.example
 
+import com.cultureamp.eventsourcing.DomainEventProcessor
+import com.cultureamp.eventsourcing.EventProcessor
 import org.jetbrains.exposed.sql.Database
 import org.jetbrains.exposed.sql.SchemaUtils
 import org.jetbrains.exposed.sql.Table
@@ -9,14 +11,8 @@ import org.jetbrains.exposed.sql.transactions.transaction
 import org.jetbrains.exposed.sql.update
 import java.util.*
 
-class SurveyNamesCommandProjector(private val database: Database) {
-    init {
-        transaction(database) {
-            SchemaUtils.create(SurveyNames)
-        }
-    }
-
-    fun project(event: SurveyEvent, aggregateId: UUID): Any = transaction(database) {
+class SurveyNamesCommandProjector(private val database: Database): DomainEventProcessor<SurveyEvent> {
+    override fun process(event: SurveyEvent, aggregateId: UUID): Unit = transaction(database) {
         when (event) {
             is Created -> event.name.forEach { locale, name ->
                 SurveyNames.insert {
@@ -34,6 +30,12 @@ class SurveyNamesCommandProjector(private val database: Database) {
             is Deleted ->
                 SurveyNames.deleteWhere { SurveyNames.surveyId eq aggregateId }
             is Restored -> Unit
+        }
+    }
+
+    init {
+        transaction(database) {
+            SchemaUtils.create(SurveyNames)
         }
     }
 }

@@ -58,8 +58,8 @@ class AsyncEventProcessorMonitorIntegrationTest : DescribeSpec({
     describe("run") {
         it("calculates lag taking into account eventType") {
             val projector = SurveyNamesCommandProjector(db)
-            val bookmarkName = "bookmarkName"
-            val eventProcessor = EventProcessor.from(projector::project)
+            val bookmarkName = "SurveyNames"
+            val eventProcessor = EventProcessor.from(projector)
             val asyncEventProcessor = AsyncEventProcessor(eventStore, bookmarkStore, bookmarkName, eventProcessor)
 
             var capturedLag: Lag? = null
