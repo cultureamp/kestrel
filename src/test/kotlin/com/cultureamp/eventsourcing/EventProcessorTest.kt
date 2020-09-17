@@ -13,15 +13,17 @@ class EventProcessorTest : DescribeSpec({
         id = UUID.randomUUID(),
         aggregateId = UUID.randomUUID(),
         aggregateSequence = 1,
+        aggregateType = "foo",
         createdAt = DateTime.now(),
         metadata = SpecificMetadata("specialField"),
         domainEvent = fooDomainEvent
     )
-    val bazDomainEvent = FooEvent("quux")
+    val bazDomainEvent = BazEvent("quux")
     val bazEvent = Event(
         id = UUID.randomUUID(),
         aggregateId = UUID.randomUUID(),
         aggregateSequence = 1,
+        aggregateType = "baz",
         createdAt = DateTime.now(),
         metadata = SpecificMetadata("specialField"),
         domainEvent = bazDomainEvent
@@ -97,7 +99,7 @@ class EventProcessorTest : DescribeSpec({
 
     describe("EventListener#compose") {
         it("can combine two EventListeners into one") {
-            val events = mutableMapOf<UUID, TestEvent>()
+            val events = mutableMapOf<UUID, DomainEvent>()
             class Projector {
                 fun project(event: FooEvent, aggregateId: UUID) {
                     events[aggregateId] = event
@@ -105,7 +107,7 @@ class EventProcessorTest : DescribeSpec({
             }
             class ProjectorWithMetadata {
                 @Suppress("UNUSED_PARAMETER")
-                fun project(event: BarEvent, aggregateId: UUID, metadata: SpecificMetadata, eventId: UUID) {
+                fun project(event: BazEvent, aggregateId: UUID, metadata: SpecificMetadata, eventId: UUID) {
                     events[aggregateId] = event
                 }
             }

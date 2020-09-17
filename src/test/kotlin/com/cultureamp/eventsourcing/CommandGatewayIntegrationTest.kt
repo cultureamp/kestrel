@@ -45,6 +45,7 @@ import org.jetbrains.exposed.sql.selectAll
 import org.jetbrains.exposed.sql.transactions.transaction
 import org.joda.time.DateTime
 import java.util.*
+import com.cultureamp.eventsourcing.example.Created as SurveyCreated
 
 class CommandGatewayIntegrationTest : DescribeSpec({
     val h2DbUrl = "jdbc:h2:mem:test;MODE=MySQL;DB_CLOSE_DELAY=-1;"
@@ -246,7 +247,12 @@ class CommandGatewayIntegrationTest : DescribeSpec({
                 eventsTable.selectAll().count() shouldBe 4
             }
         }
+
+        it("fails with a useful message when a command of a different type is used on an existing aggregate") {
+            val surveyId = UUID.randomUUID()
+            gateway.dispatch(CreateSurvey(surveyId, UUID.randomUUID(), mapOf(Locale.en to "name"), UUID.randomUUID(), DateTime.now()), metadata) shouldBe Right(Created)
+            gateway.dispatch(Invite(surveyId, UUID.randomUUID(), UUID.randomUUID(), DateTime.now()), metadata) shouldBe
+                Left(WrongAggregateConstructorForEvent("ParticipantAggregate", SurveyCreated::class))
+        }
     }
 })
-
-

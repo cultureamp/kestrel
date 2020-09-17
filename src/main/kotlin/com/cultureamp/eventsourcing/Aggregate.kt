@@ -121,47 +121,54 @@ internal fun <CC: CreationCommand, CE: CreationEvent, Err: DomainError, UC: Upda
             id = UUID.randomUUID(),
             aggregateId = creationCommand.aggregateId,
             aggregateSequence = 1,
+            aggregateType = aggregateType(),
             createdAt = DateTime.now(),
             metadata = metadata,
             domainEvent = domainEvent
         )
-        eventStore.sink(listOf(event), creationCommand.aggregateId, aggregateType())
+        eventStore.sink(listOf(event), creationCommand.aggregateId)
     }.flatten()
 }
 
-@Suppress("UNCHECKED_CAST")
 internal fun <CC: CreationCommand, CE: CreationEvent, Err: DomainError, UC: UpdateCommand, UE: UpdateEvent, M : EventMetadata> AggregateConstructor<CC, CE, Err, UC, UE, Aggregate<UC, UE, Err, *>>.update(
     updateCommand: UC,
     metadata: M,
     events: List<Event<M>>,
     eventStore: EventStore<M>
 ): Either<CommandError, Unit> {
-    val creationEvent = events.first().domainEvent as CreationEvent
-    val updateEvents = events.slice(1 until events.size).map { it.domainEvent as UpdateEvent }
-    val aggregate = rehydrated(creationEvent as CE, updateEvents as List<UE>)
-    return aggregate.update(updateCommand).map { domainEvents ->
-        aggregate.updated(domainEvents) // called to ensure the update event handler doesn't throw any exceptions
-        val offset = events.last().aggregateSequence + 1
-        val createdAt = DateTime()
-        val storableEvents = domainEvents.withIndex().map { (index, domainEvent) ->
-            Event(
-                id = UUID.randomUUID(),
-                aggregateId = updateCommand.aggregateId,
-                aggregateSequence = offset + index,
-                createdAt = createdAt,
-                metadata = metadata,
-                domainEvent = domainEvent
-            )
+    val aggregate = rehydrate(events)
+    return aggregate.flatMap {
+        it.update(updateCommand).flatMap { domainEvents ->
+            it.updated(domainEvents) // called to ensure the update event handler doesn't throw any exceptions
+            val offset = events.last().aggregateSequence + 1
+            val createdAt = DateTime()
+            val storableEvents = domainEvents.withIndex().map { (index, domainEvent) ->
+                Event(
+                    id = UUID.randomUUID(),
+                    aggregateId = updateCommand.aggregateId,
+                    aggregateSequence = offset + index,
+                    aggregateType = aggregateType(),
+                    createdAt = createdAt,
+                    metadata = metadata,
+                    domainEvent = domainEvent
+                )
+            }
+            eventStore.sink(storableEvents, updateCommand.aggregateId)
         }
-        eventStore.sink(storableEvents, updateCommand.aggregateId, aggregateType())
-    }.flatten()
+    }
 }
 
-internal fun <CC: CreationCommand, CE: CreationEvent, Err: DomainError, UC: UpdateCommand, UE: UpdateEvent> AggregateConstructor<CC, CE, Err, UC, UE, Aggregate<UC, UE, Err, *>>.rehydrated(
-    creationEvent: CE,
-    updateEvents: List<UE>
-): Aggregate<UC, UE, Err, *> {
-    return created(creationEvent).updated(updateEvents)
+@Suppress("UNCHECKED_CAST")
+private fun <CC: CreationCommand, CE: CreationEvent, Err: DomainError, M: EventMetadata, UC: UpdateCommand, UE: UpdateEvent> AggregateConstructor<CC, CE, Err, UC, UE, Aggregate<UC, UE, Err, *>>.rehydrate(events: List<Event<M>>): Either<WrongAggregateConstructorForEvent, Aggregate<UC, UE, Err, *>> {
+    val creationEvent = events.first()
+    val creationDomainEvent = creationEvent.domainEvent as CE
+    val aggregate = if (creationEvent.aggregateType == aggregateType()) {
+        Right(created(creationDomainEvent))
+    } else {
+        Left(WrongAggregateConstructorForEvent(aggregateType(), creationDomainEvent::class))
+    }
+    val updateEvents = events.slice(1 until events.size).map { it.domainEvent as UE }
+    return aggregate.map { it.updated(updateEvents) }
 }
 
 @Suppress("UNCHECKED_CAST")
@@ -170,3 +177,5 @@ private fun <UC: UpdateCommand, UE: UpdateEvent, Err: DomainError> Aggregate<UC,
 }
 
 val <T : Any> KClass<T>.companionClass get() = if (isCompanion) this.java.declaringClass.simpleName!! else this::class.simpleName!!
+
+data class WrongAggregateConstructorForEvent(val aggregateType: String, val eventType: KClass<out CreationEvent>) : CommandError

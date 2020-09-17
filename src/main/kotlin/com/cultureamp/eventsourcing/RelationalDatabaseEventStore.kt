@@ -56,7 +56,7 @@ class RelationalDatabaseEventStore<M: EventMetadata> @PublishedApi internal cons
     }
 
 
-    override fun sink(newEvents: List<Event<M>>, aggregateId: UUID, aggregateType: String): Either<CommandError, Unit> {
+    override fun sink(newEvents: List<Event<M>>, aggregateId: UUID): Either<CommandError, Unit> {
         return try {
             return transaction(db) {
                 newEvents.forEach { event ->
@@ -68,7 +68,7 @@ class RelationalDatabaseEventStore<M: EventMetadata> @PublishedApi internal cons
                         row[events.aggregateSequence] = event.aggregateSequence
                         row[events.eventId] = event.id
                         row[events.aggregateId] = aggregateId
-                        row[events.aggregateType] = aggregateType
+                        row[events.aggregateType] = event.aggregateType
                         row[events.eventType] = eventType.canonicalName
                         row[events.createdAt] = event.createdAt
                         row[events.body] = body
@@ -113,6 +113,7 @@ class RelationalDatabaseEventStore<M: EventMetadata> @PublishedApi internal cons
                 id = row[events.eventId],
                 aggregateId = row[events.aggregateId],
                 aggregateSequence = row[events.aggregateSequence],
+                aggregateType = row[events.aggregateType],
                 createdAt = row[events.createdAt],
                 metadata = metadata,
                 domainEvent = domainEvent
