@@ -1,6 +1,16 @@
 package com.cultureamp.eventsourcing.sample
 
-import com.cultureamp.eventsourcing.*
+import com.cultureamp.eventsourcing.Command
+import com.cultureamp.eventsourcing.CreationCommand
+import com.cultureamp.eventsourcing.CreationEvent
+import com.cultureamp.eventsourcing.DomainError
+import com.cultureamp.eventsourcing.DomainEvent
+import com.cultureamp.eventsourcing.Either
+import com.cultureamp.eventsourcing.EventMetadata
+import com.cultureamp.eventsourcing.Left
+import com.cultureamp.eventsourcing.Right
+import com.cultureamp.eventsourcing.UpdateCommand
+import com.cultureamp.eventsourcing.UpdateEvent
 import com.fasterxml.jackson.annotation.JsonInclude
 import com.fasterxml.jackson.annotation.JsonInclude.Include
 import java.util.*
@@ -33,8 +43,7 @@ enum class PizzaStyle {
 
 sealed class PizzaCommand : Command
 
-sealed class PizzaCreationCommand : PizzaCommand(),
-    CreationCommand
+sealed class PizzaCreationCommand : PizzaCommand(), CreationCommand
 
 sealed class PizzaUpdateCommand : PizzaCommand(), UpdateCommand
 
@@ -59,28 +68,21 @@ object PizzaEaten : PizzaUpdateEvent() {
     operator fun invoke() = PizzaEaten
 }
 
-sealed class PizzaError : CommandError
+sealed class PizzaError : DomainError
 class ToppingAlreadyPresent : PizzaError()
 class PizzaAlreadyEaten : PizzaError()
 
-data class PizzaAggregate(
-    val baseStyle: PizzaStyle, val toppings: List<PizzaTopping>, val isEaten: Boolean = false
-) : TypedAggregate<PizzaUpdateCommand, PizzaUpdateEvent, PizzaError, PizzaAggregate> {
+data class PizzaAggregate(val baseStyle: PizzaStyle, val toppings: List<PizzaTopping>, val isEaten: Boolean = false) {
     constructor(event: PizzaCreated) : this(baseStyle = event.baseStyle, toppings = event.initialToppings)
 
-    override fun aggregateType() = "pizza"
+    fun aggregateType() = "pizza"
 
-    override fun updated(event: PizzaUpdateEvent): PizzaAggregate = when (event) {
+    fun updated(event: PizzaUpdateEvent): PizzaAggregate = when (event) {
         is PizzaToppingAdded -> this.copy(toppings = this.toppings + event.newTopping)
         is PizzaEaten -> this.copy(isEaten = true)
     }
 
-    companion object :
-        AggregateConstructor<PizzaCreationCommand, PizzaCreationEvent, PizzaError, PizzaUpdateCommand, PizzaUpdateEvent, PizzaAggregate> {
-        override fun created(event: PizzaCreationEvent): PizzaAggregate = when (event) {
-            is PizzaCreated -> PizzaAggregate(event)
-        }
-
+    companion object {
         private fun classicToppings(style: PizzaStyle): List<PizzaTopping> = when (style) {
             PizzaStyle.MARGHERITA -> listOf(PizzaTopping.CHEESE, PizzaTopping.TOMATO_PASTE, PizzaTopping.BASIL)
             PizzaStyle.HAWAIIAN -> listOf(
@@ -92,7 +94,7 @@ data class PizzaAggregate(
         }
 
 
-        override fun create(command: PizzaCreationCommand): Either<PizzaError, PizzaCreated> = when (command) {
+        fun create(command: PizzaCreationCommand): Either<PizzaError, PizzaCreated> = when (command) {
             is CreateClassicPizza -> {
                 val initialToppings = classicToppings(command.baseStyle)
                 Right(
@@ -105,7 +107,7 @@ data class PizzaAggregate(
         }
     }
 
-    override fun update(command: PizzaUpdateCommand): Either<PizzaError, List<PizzaUpdateEvent>> {
+    fun update(command: PizzaUpdateCommand): Either<PizzaError, List<PizzaUpdateEvent>> {
         return when (isEaten) {
             true -> Left(PizzaAlreadyEaten())
             false -> when (command) {
