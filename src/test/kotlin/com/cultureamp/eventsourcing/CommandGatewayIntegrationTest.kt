@@ -58,7 +58,7 @@ class CommandGatewayIntegrationTest : DescribeSpec({
             PizzaAggregate::update,
             ::PizzaAggregate,
             PizzaAggregate::updated,
-            PizzaAggregate::aggregateType
+            PizzaAggregate.Companion::aggregateType
 
         ),
         Route.from(ThingAggregate.partial(AlwaysBoppable)),

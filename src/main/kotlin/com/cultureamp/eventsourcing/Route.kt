@@ -17,14 +17,14 @@ data class Route<CC : CreationCommand, UC : UpdateCommand>(
             noinline update: A.(UC) -> Either<Err, List<UE>>,
             noinline created: (CE) -> A,
             noinline updated: A.(UE) -> A = { _ -> this },
-            noinline aggregateType: (A.() -> String) = { A::class.simpleName!! }
+            noinline aggregateType: () -> String = { A::class.simpleName!! }
         ): Route<CC, UC> = from(AggregateConstructor.from(create, update, created, updated, aggregateType))
 
         inline fun <reified CC : CreationCommand, CE : CreationEvent, Err : DomainError, reified UC : UpdateCommand, UE : UpdateEvent, reified A : Any> fromStateless(
             noinline create: (CC) -> Either<Err, CE>,
             noinline update: (UC) -> Either<Err, List<UE>>,
             instance: A,
-            noinline aggregateType: (A.() -> String) = { A::class.simpleName!! }
+            noinline aggregateType: () -> String = { A::class.simpleName!! }
         ): Route<CC, UC> = from(AggregateConstructor.fromStateless(create, update, instance, aggregateType))
     }
 }
