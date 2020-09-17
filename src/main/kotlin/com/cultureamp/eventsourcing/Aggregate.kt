@@ -4,8 +4,6 @@ import org.joda.time.DateTime
 import java.util.*
 import kotlin.reflect.KClass
 
-interface BaseAggregate
-
 interface SimpleAggregate<UC: UpdateCommand, UE: UpdateEvent> : Aggregate<UC, UE, DomainError, SimpleAggregate<UC, UE>>
 interface SimpleAggregateConstructor<CC: CreationCommand, CE: CreationEvent, UC: UpdateCommand, UE: UpdateEvent> : AggregateConstructor<CC, CE, DomainError, UC, UE, SimpleAggregate<UC, UE>>
 
@@ -13,7 +11,7 @@ interface SimpleAggregateWithProjection<UC: UpdateCommand, UE: UpdateEvent, P> :
 interface SimpleAggregateConstructorWithProjection<CC: CreationCommand, CE: CreationEvent, UC: UpdateCommand, UE: UpdateEvent, P> : AggregateConstructorWithProjection<CC, CE, DomainError, UC, UE, P, SimpleAggregateWithProjection<UC, UE, P>>
 
 
-interface Aggregate<UC: UpdateCommand, UE: UpdateEvent, Err: DomainError, out Self : Aggregate<UC, UE, Err, Self>> : BaseAggregate {
+interface Aggregate<UC: UpdateCommand, UE: UpdateEvent, Err: DomainError, out Self : Aggregate<UC, UE, Err, Self>> {
     fun updated(event: UE): Self
     fun update(command: UC): Either<Err, List<UE>>
 
@@ -37,7 +35,7 @@ interface Aggregate<UC: UpdateCommand, UE: UpdateEvent, Err: DomainError, out Se
     }
 }
 
-interface AggregateWithProjection<UC: UpdateCommand, UE: UpdateEvent, Err: DomainError, P, Self : AggregateWithProjection<UC, UE, Err, P, Self>>: BaseAggregate {
+interface AggregateWithProjection<UC: UpdateCommand, UE: UpdateEvent, Err: DomainError, P, Self : AggregateWithProjection<UC, UE, Err, P, Self>> {
     fun updated(event: UE): Self
     fun update(projection: P, command: UC): Either<Err, List<UE>>
 
