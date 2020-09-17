@@ -26,9 +26,11 @@ dependencies {
 
 ## Usage
 
+### Aggregates
+
 KES offers multiple ways of defining your aggregates depending on your needs.
 
-### Using interfaces
+#### Using interfaces
 
 The simplest way to get started is to use the [`SimpleAggregate[Constructor]`](/src/main/kotlin/com/cultureamp/eventsourcing/Aggregate.kt) 
 interface. If you are not sure which aggregate creation method to use, we recommend this option.
@@ -61,7 +63,7 @@ data class SimpleThingAggregate(val tweaks: List<String> = emptyList(), val boop
 }
 ```
 
-this can then by wired into your [`CommandGateway`](/src/main/kotlin/com/cultureamp/eventsourcing/CommandGateway.kt) 
+This can then by wired into your [`CommandGateway`](/src/main/kotlin/com/cultureamp/eventsourcing/CommandGateway.kt) 
 like so:
 
 ```kotlin
@@ -79,7 +81,7 @@ but with access to a dependency during command-handling.
 * [`Aggregate[Constructor]WithProjection`](/src/main/kotlin/com/cultureamp/eventsourcing/Aggregate.kt) as above but with 
 access to a dependency during command-handling.
 
-### Using functions
+#### Using functions
 
 If you prefer, you can also model your aggregates in a more functional-programming style using a group of related 
 functions. This is useful for when you want more control over how you write your aggregates, for example to utilize the 
@@ -128,7 +130,7 @@ data class SurveyAggregate(val name: Map<Locale, String>, val accountId: UUID, v
 }
 ```
 
-this can then by wired into your [`CommandGateway`](/src/main/kotlin/com/cultureamp/eventsourcing/CommandGateway.kt) 
+This can then by wired into your [`CommandGateway`](/src/main/kotlin/com/cultureamp/eventsourcing/CommandGateway.kt) 
 like so:
 
 ```kotlin
@@ -143,7 +145,7 @@ val routes = listOf(
 val commandGateway = CommandGateway(eventStore, routes)
 ```
 
-if you happen to have a "stateless" aggregate that doesn't need to update it's internal state to handle commands, you
+If you happen to have a "stateless" aggregate that doesn't need to update it's internal state to handle commands, you
 can model that too:
 
 ```kotlin
@@ -172,19 +174,134 @@ val routes = listOf(
 val gateway = CommandGateway(eventStore, routes)
 ```
 
-or you could even just inline the functions
+### Event-processors (Projectors and Reactors)
+
+KES offers multiple ways of defining your event-processors depending on your needs.
+
+#### Using interfaces
+
+The simplest way to get started is to use the [`DomainEventProcessor`](/src/main/kotlin/com/cultureamp/eventsourcing/DomainEventProcessor.kt) 
+interface. If you don't think you'll need access to the event metadata, we recommend this option.
+For example:
 
 ```kotlin
-val routes = listOf(
-    Route.fromStateless(
-        PaymentSagaAggregate::create,
-        PaymentSagaAggregate::update,
-        PaymentSagaAggregate
-    )
-)
-val gateway = CommandGateway(eventStore, routes)
+class SurveyNamesCommandProjector(private val database: Database): DomainEventProcessor<SurveyEvent> {
+    override fun process(event: SurveyEvent, aggregateId: UUID): Unit = transaction(database) {
+        when (event) {
+            is Created -> event.name.forEach { locale, name ->
+                SurveyNames.insert {
+                    it[surveyId] = aggregateId
+                    it[accountId] = event.accountId
+                    it[SurveyNames.locale] = locale
+                    it[SurveyNames.name] = name
+                }
+            }
+            is Renamed ->
+                SurveyNames.update({ SurveyNames.surveyId eq aggregateId }) {
+                    it[locale] = event.locale
+                    it[name] = event.name
+                }
+            is Deleted ->
+                SurveyNames.deleteWhere { SurveyNames.surveyId eq aggregateId }
+            is Restored -> Unit
+        }
+    }
+
+    init {
+        transaction(database) {
+            SchemaUtils.create(SurveyNames)
+        }
+    }
+}
+
+object SurveyNames : Table() {
+    val surveyId = uuid("survey_id")
+    val accountId = uuid("account_id")
+    val locale = enumerationByName("locale",  10, Locale::class)
+    val name = text("name").index()
+}
 ```
 
+This can then by wired into your application like so:
+
+```kotlin
+val projector = SurveyNamesCommandProjector(database)
+val bookmarkName = "SurveyNames"
+val eventProcessor = EventProcessor.from(projector)
+```
+
+If you want to process aynchronously you can do something like:
+
+```kotlin
+val asyncEventProcessor = BatchedAsyncEventProcessor(eventStore, bookmarkStore, bookmarkName, eventProcessor)
+thread(start = true, isDaemon = false, name = asyncEventProcessor.bookmarkName) {
+    ExponentialBackoff(
+        onFailure = { e, _ -> println(e) }
+    ).run {
+        asyncEventProcessor.processOneBatch()
+    }
+}
+```
+
+Or, if you must, you can run it synchronously like:
+
+```kotlin
+val eventStore = RelationalDatabaseEventStore.create(listOf(eventProcessor), database)
+```
+
+If you need access to the event metadata during handling, you can use the slightly more verbose interface
+[`DomainEventProcessor`](/src/main/kotlin/com/cultureamp/eventsourcing/DomainEventProcessor.kt)
+
+#### Using functions
+
+If you prefer, you can also write your event-processor in an interface agnostic way. This is useful for when you want 
+more control over how you write your event-processors, for example writing a single class that handles two or more
+unrelated domain event types (not possible via interfaces), or if you just don't like interfaces.
+For example:
+
+```kotlin
+class AnimalProjector(val database: Database) {
+
+    fun first(event: CatAggregateEvent) = transaction(database) {
+        when (event) {
+            is CatNamed -> {
+                AnimalNames.insert {
+                    it[name] = event.name
+                    it[type] = "cat"
+                }
+            }
+            is CatFed -> Unit
+        }
+    }
+    
+    fun second(event: DogAggregateEvent) = transaction(database) {
+        when (event) {
+            is DogNamed -> {
+                AnimalNames.insert {
+                    it[name] = event.name
+                    it[type] = "dog"
+                }
+            }
+            is DogBarked -> Unit
+        }
+    }
+}
+```
+
+This can then by wired into your application like so:
+
+```kotlin
+val animalProjector = AnimalProjector(database)
+val eventProcessor = EventProcessor.compose(
+   EventProcessor.from(animalProjector::first),
+   EventProcessor.from(animalProjector::second)
+)
+val bookmarkName = "AnimalNames"
+val asyncEventProcessor = BatchedAsyncEventProcessor(eventStore, bookmarkStore, bookmarkName, eventProcessor)
+```
+
+Using `EventProcessor#compose` allows one to wrap up the two event-handling methods as one `EventProcessor` which then
+allows the sharing of a single bookmark.
 
 ## Trello
 

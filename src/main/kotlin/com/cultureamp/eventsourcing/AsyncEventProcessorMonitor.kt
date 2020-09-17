@@ -1,13 +1,13 @@
 package com.cultureamp.eventsourcing
 
-class EventProcessorMonitor(
-    private val eventProcessors: List<EventProcessor>,
+class AsyncEventProcessorMonitor(
+    private val asyncEventProcessors: List<AsyncEventProcessor>,
     private val metrics: (Lag) -> Unit
 ) {
     fun run() {
-        val eventProcessorLags = eventProcessors.map {
+        val lags = asyncEventProcessors.map {
             val bookmarkSequence = it.bookmarkStore.bookmarkFor(it.bookmarkName).sequence
-            val lastSequence = it.eventSource.lastSequence()
+            val lastSequence = it.eventSource.lastSequence(it.eventProcessor.eventClasses)
             Lag(
                 name = it.bookmarkName,
                 bookmarkSequence = bookmarkSequence,
@@ -16,7 +16,7 @@ class EventProcessorMonitor(
 
         }
 
-        eventProcessorLags.forEach {
+        lags.forEach {
             metrics(it)
         }
     }

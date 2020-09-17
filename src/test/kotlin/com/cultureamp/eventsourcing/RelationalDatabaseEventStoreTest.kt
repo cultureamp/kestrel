@@ -36,28 +36,27 @@ class RelationalDatabaseEventStoreTest : DescribeSpec({
             val aggregateId = UUID.randomUUID()
             val otherAggregateId = UUID.randomUUID()
             val basicPizzaCreated = PizzaCreated(MARGHERITA, listOf(TOMATO_PASTE, BASIL, CHEESE))
-            val events = listOf(
-                event(
-                    basicPizzaCreated,
-                    aggregateId,
-                    1,
-                    StandardEventMetadata("alice", "123")
-                ),
-                event(
-                    PizzaEaten(),
-                    aggregateId,
-                    2,
-                    StandardEventMetadata("alice")
-                )
+            val firstPizzaCreated = event(
+                basicPizzaCreated,
+                aggregateId,
+                1,
+                StandardEventMetadata("alice", "123")
             )
-            val otherEvents = listOf(
-                event(
-                    basicPizzaCreated,
-                    otherAggregateId,
-                    1,
-                    StandardEventMetadata("bob", "321")
-                )
+            val firstPizzaEaten = event(
+                PizzaEaten(),
+                aggregateId,
+                2,
+                StandardEventMetadata("alice")
             )
+            val secondPizzaCreated = event(
+                basicPizzaCreated,
+                otherAggregateId,
+                1,
+                StandardEventMetadata("bob", "321")
+            )
+
+            val events = listOf(firstPizzaCreated, firstPizzaEaten)
+            val otherEvents = listOf(secondPizzaCreated)
 
             store.sink(events, aggregateId, "pizza") shouldBe Right(Unit)
             store.sink(otherEvents, otherAggregateId, "pizza") shouldBe Right(Unit)
@@ -66,7 +65,8 @@ class RelationalDatabaseEventStoreTest : DescribeSpec({
             store.eventsFor(otherAggregateId) shouldBe otherEvents
 
             val expectedSequenceEvents = (events + otherEvents).mapIndexed { seq, ev -> SequencedEvent(ev, (seq + 1).toLong()) }
-            store.getAfter(0L, 100) shouldBe expectedSequenceEvents
+            store.getAfter(0L) shouldBe expectedSequenceEvents
+            store.getAfter(0L, listOf(PizzaEaten::class)).map { it.event } shouldBe listOf(firstPizzaEaten)
         }
 
         it ("fails when the metadata passed in does not match the type specified for the store") {

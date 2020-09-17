@@ -1,26 +1,19 @@
 package com.cultureamp.eventsourcing
 
 import java.util.UUID
+import kotlin.reflect.KClass
 
 interface EventSink {
     fun sink(newEvents: List<Event>, aggregateId: UUID, aggregateType: String): Either<CommandError, Unit>
 }
 
 interface EventSource {
-    fun getAfter(sequence: Long, batchSize: Int) : List<SequencedEvent>
+    fun getAfter(sequence: Long, eventClasses: List<KClass<out DomainEvent>> = emptyList(), batchSize: Int = 100) : List<SequencedEvent>
 
-    fun lastSequence(): Long
+    fun lastSequence(eventClasses: List<KClass<out DomainEvent>> = emptyList()): Long
 }
 
 interface EventStore : EventSink, EventSource {
     fun eventsFor(aggregateId: UUID): List<Event>
-
-    /**
-     * Replay all the events in the store on the project function, for an aggregateType
-     */
-    @Deprecated(
-        "Doesn't batch, only used for big-bang synchronous projection rebuilds, which is an anti-pattern better done with AsyncEventProcessor",
-        ReplaceWith("getAfter"))
-    fun replay(aggregateType: String, project: (Event) -> Unit)
 }
 

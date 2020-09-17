@@ -1,5 +1,6 @@
 package com.cultureamp.eventsourcing
 
+import arrow.data.extensions.list.foldable.nonEmpty
 import com.fasterxml.jackson.core.JsonProcessingException
 import com.fasterxml.jackson.databind.ObjectMapper
 import com.fasterxml.jackson.databind.PropertyNamingStrategy
@@ -13,6 +14,7 @@ import org.jetbrains.exposed.sql.vendors.H2Dialect
 import org.jetbrains.exposed.sql.vendors.PostgreSQLDialect
 import java.lang.UnsupportedOperationException
 import java.util.*
+import kotlin.reflect.KClass
 
 val defaultObjectMapper = ObjectMapper()
     .registerKotlinModule()
@@ -23,20 +25,20 @@ val defaultObjectMapper = ObjectMapper()
 class RelationalDatabaseEventStore @PublishedApi internal constructor(
     private val db: Database,
     private val events: Events,
-    private val synchronousProjectors: List<EventListener>,
+    private val synchronousEventProcessors: List<EventProcessor>,
     private val metadataClass: Class<out EventMetadata>,
     private val objectMapper: ObjectMapper
 ) : EventStore {
 
     companion object {
         inline fun <reified T: EventMetadata> create(
-            synchronousProjectors: List<EventListener>,
+            synchronousEventProcessors: List<EventProcessor>,
             db: Database,
             objectMapper: ObjectMapper = defaultObjectMapper
         ): RelationalDatabaseEventStore =
             when (db.dialect) {
-                is H2Dialect -> H2DatabaseEventStore.create<T>(synchronousProjectors, db, objectMapper)
-                is PostgreSQLDialect -> PostgresDatabaseEventStore.create<T>(synchronousProjectors, db, objectMapper)
+                is H2Dialect -> H2DatabaseEventStore.create<T>(synchronousEventProcessors, db, objectMapper)
+                is PostgreSQLDialect -> PostgresDatabaseEventStore.create<T>(synchronousEventProcessors, db, objectMapper)
                 else -> throw UnsupportedOperationException("${db.dialect} not currently supported")
             }
 
@@ -118,24 +120,16 @@ class RelationalDatabaseEventStore @PublishedApi internal constructor(
         )
     }
 
-    override fun replay(aggregateType: String, project: (Event) -> Unit) {
+    override fun getAfter(sequence: Long, eventClasses: List<KClass<out DomainEvent>>, batchSize: Int): List<SequencedEvent> {
         return transaction(db) {
             events
                 .select {
-                    events.aggregateType eq aggregateType
-                }
-                .orderBy(events.sequence)
-                .mapLazy(::rowToSequencedEvent)
-                .mapLazy { it.event }
-                .forEach(project)
-        }
-    }
-
-    override fun getAfter(sequence: Long, batchSize: Int): List<SequencedEvent> {
-        return transaction(db) {
-            events
-                .select {
-                    events.sequence greater sequence
+                    val eventTypeMatches = if (eventClasses.nonEmpty()) {
+                        events.eventType.inList(eventClasses.map { it.java.canonicalName })
+                    } else {
+                        Op.TRUE
+                    }
+                    events.sequence greater sequence and eventTypeMatches
                 }
                 .orderBy(events.sequence)
                 .limit(batchSize)
@@ -153,17 +147,23 @@ class RelationalDatabaseEventStore @PublishedApi internal constructor(
         }
     }
 
-    override fun lastSequence(): Long = transaction(db) {
+    override fun lastSequence(eventClasses: List<KClass<out DomainEvent>>): Long = transaction(db) {
         val maxSequence = events.sequence.max()
         events
             .slice(maxSequence)
-            .selectAll()
+            .select {
+                if (eventClasses.nonEmpty()) {
+                    events.eventType.inList(eventClasses.map { it.java.canonicalName })
+                } else {
+                    Op.TRUE
+                }
+            }
             .map { it[maxSequence] }
             .first() ?: 0
     }
 
     private fun updateSynchronousProjections(newEvents: List<Event>) {
-        newEvents.forEach { event -> synchronousProjectors.forEach { it.handle(event) } }
+        newEvents.forEach { event -> synchronousEventProcessors.forEach { it.process(event) } }
     }
 }
 
@@ -173,22 +173,22 @@ class EventMetadataSerializationException(e: Exception) : EventDataException(e)
 
 object PostgresDatabaseEventStore {
     @PublishedApi internal inline fun <reified T: EventMetadata> create(
-        synchronousProjectors: List<EventListener>,
+        synchronousEventProcessors: List<EventProcessor>,
         db: Database,
         objectMapper: ObjectMapper
     ): RelationalDatabaseEventStore {
-        return RelationalDatabaseEventStore(db, Events(Table::jsonb), synchronousProjectors, T::class.java, objectMapper)
+        return RelationalDatabaseEventStore(db, Events(Table::jsonb), synchronousEventProcessors, T::class.java, objectMapper)
     }
 }
 
 object H2DatabaseEventStore {
     // need a `@PublishedApi` here to make it callable from `RelationalDatabaseEventStore.create()`
     @PublishedApi internal inline fun <reified T: EventMetadata> create(
-        synchronousProjectors: List<EventListener>,
+        synchronousEventProcessors: List<EventProcessor>,
         db: Database,
         objectMapper: ObjectMapper
     ): RelationalDatabaseEventStore {
-        return RelationalDatabaseEventStore(db, eventsTable(), synchronousProjectors, T::class.java, objectMapper)
+        return RelationalDatabaseEventStore(db, eventsTable(), synchronousEventProcessors, T::class.java, objectMapper)
     }
 
     @PublishedApi internal fun eventsTable() = Events { name -> this.text(name) }
@@ -213,7 +213,7 @@ class Events(jsonb: Table.(String) -> Column<String>) : Table() {
     init {
         uniqueIndex(eventId)
         uniqueIndex(aggregateId, aggregateSequence)
-        nonUniqueIndex(aggregateType, eventType)
+        nonUniqueIndex(eventType, aggregateType)
     }
 }
 
