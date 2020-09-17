@@ -2,7 +2,7 @@ package com.cultureamp.eventsourcing
 
 import java.util.*
 
-interface DomainEventProcessor<E : DomainEvent> {
+interface DomainEventProcessor<in E : DomainEvent> {
     fun process(event: E, aggregateId: UUID)
 
     companion object {
@@ -16,7 +16,7 @@ interface DomainEventProcessor<E : DomainEvent> {
     }
 }
 
-interface DomainEventProcessorWithMetadata<E : DomainEvent, M : EventMetadata> {
+interface DomainEventProcessorWithMetadata<in E : DomainEvent, in M : EventMetadata> {
     fun process(event: E, aggregateId: UUID, metadata: M, eventId: UUID)
 
     companion object {

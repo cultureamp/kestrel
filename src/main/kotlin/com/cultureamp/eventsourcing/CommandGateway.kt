@@ -1,8 +1,8 @@
 package com.cultureamp.eventsourcing
 
-class CommandGateway(private val eventStore: EventStore, private val routes: List<Route<*, *>>) {
+class CommandGateway<in M: EventMetadata>(private val eventStore: EventStore<M>, private val routes: List<Route<*, *>>) {
 
-    tailrec fun dispatch(command: Command, metadata: EventMetadata, retries: Int = 5): Either<CommandError, SuccessStatus> {
+    tailrec fun dispatch(command: Command, metadata: M, retries: Int = 5): Either<CommandError, SuccessStatus> {
         val result = createOrUpdate(command, metadata)
         return if (result is Left && result.error is RetriableError && retries > 0) {
             Thread.sleep(500L)
@@ -12,7 +12,7 @@ class CommandGateway(private val eventStore: EventStore, private val routes: Lis
         }
     }
 
-    private fun createOrUpdate(command: Command, metadata: EventMetadata): Either<CommandError, SuccessStatus> {
+    private fun createOrUpdate(command: Command, metadata: M): Either<CommandError, SuccessStatus> {
         val constructor = constructorFor(command) ?: return Left(NoConstructorForCommand)
         val events = eventStore.eventsFor(command.aggregateId)
         return if (events.isEmpty()) when (command) {

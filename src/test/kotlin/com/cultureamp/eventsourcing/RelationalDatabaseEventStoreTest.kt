@@ -9,7 +9,6 @@ import org.jetbrains.exposed.sql.Database
 import org.jetbrains.exposed.sql.SchemaUtils
 import org.jetbrains.exposed.sql.transactions.transaction
 import org.joda.time.DateTime
-import org.junit.jupiter.api.assertThrows
 import java.util.*
 
 class RelationalDatabaseEventStoreTest : DescribeSpec({
@@ -17,7 +16,7 @@ class RelationalDatabaseEventStoreTest : DescribeSpec({
     val h2Driver = "org.h2.Driver"
     val db = Database.connect(url = h2DbUrl, driver = h2Driver)
     val table = H2DatabaseEventStore.eventsTable()
-    val store =  RelationalDatabaseEventStore.create<StandardEventMetadata>(db)
+    val store = RelationalDatabaseEventStore.create<StandardEventMetadata>(db)
 
     beforeTest {
         transaction(db) {
@@ -69,22 +68,6 @@ class RelationalDatabaseEventStoreTest : DescribeSpec({
             store.getAfter(0L, listOf(PizzaEaten::class)).map { it.event } shouldBe listOf(firstPizzaEaten)
         }
 
-        it ("fails when the metadata passed in does not match the type specified for the store") {
-            val aggregateId = UUID.randomUUID()
-            val events = listOf(
-                event(
-                    PizzaToppingAdded(HAM),
-                    aggregateId,
-                    1,
-                    EmptyMetadata()
-                )
-            )
-
-            assertThrows<EventMetadataSerializationException> {
-                store.sink(events, aggregateId, "pizza")
-            }
-        }
-
         it("exposes the latest sequence value") {
             val aggregateId = UUID.randomUUID()
             val events = listOf(
@@ -97,10 +80,52 @@ class RelationalDatabaseEventStoreTest : DescribeSpec({
             store.sink(events, aggregateId, "pizza") shouldBe Right(Unit)
             store.lastSequence() shouldBe 3
         }
+
+        it("sends each sunk event to passed synchronous event-processors") {
+            var count = 0
+            val firstProjector: DomainEventProcessor<TestEvent> = object : DomainEventProcessor<TestEvent> {
+                override fun process(event: TestEvent, aggregateId: UUID) {
+                    count++
+                }
+            }
+            val secondProjector: DomainEventProcessorWithMetadata<TestEvent, SpecificMetadata> = object : DomainEventProcessorWithMetadata<TestEvent, SpecificMetadata> {
+                override fun process(event: TestEvent, aggregateId: UUID, metadata: SpecificMetadata, eventId: UUID) {
+                    count++
+                }
+            }
+            val firstEventProcessor = EventProcessor.from(firstProjector)
+            val secondEventProcessor = EventProcessor.from(secondProjector)
+            val synchronousEventProcessors = listOf(firstEventProcessor, secondEventProcessor)
+            val fooDomainEvent = FooEvent("bar")
+            val fooEvent = Event(
+                id = UUID.randomUUID(),
+                aggregateId = UUID.randomUUID(),
+                aggregateSequence = 1,
+                createdAt = DateTime.now(),
+                metadata = SpecificMetadata("specialField"),
+                domainEvent = fooDomainEvent
+            )
+            val bazDomainEvent = FooEvent("quux")
+            val bazEvent = Event(
+                id = UUID.randomUUID(),
+                aggregateId = UUID.randomUUID(),
+                aggregateSequence = 2,
+                createdAt = DateTime.now(),
+                metadata = SpecificMetadata("specialField"),
+                domainEvent = bazDomainEvent
+            )
+
+
+            val storeWithProjectors = RelationalDatabaseEventStore.create(synchronousEventProcessors, db)
+
+            storeWithProjectors.sink(listOf(fooEvent, bazEvent), UUID.randomUUID(), "aggregateType")
+
+            count shouldBe 4
+        }
     }
 })
 
-fun event(domainEvent: DomainEvent, aggregateId: UUID, index: Int, metadata: EventMetadata): Event {
+fun <M : EventMetadata>event(domainEvent: DomainEvent, aggregateId: UUID, index: Int, metadata: M): Event<M> {
     return Event(UUID.randomUUID(), aggregateId, index.toLong(), DateTime.now(), metadata, domainEvent)
 }
 

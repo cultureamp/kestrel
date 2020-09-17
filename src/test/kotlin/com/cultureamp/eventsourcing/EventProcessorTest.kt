@@ -104,6 +104,7 @@ class EventProcessorTest : DescribeSpec({
                 }
             }
             class ProjectorWithMetadata {
+                @Suppress("UNUSED_PARAMETER")
                 fun project(event: BarEvent, aggregateId: UUID, metadata: SpecificMetadata, eventId: UUID) {
                     events[aggregateId] = event
                 }
@@ -125,9 +126,11 @@ class EventProcessorTest : DescribeSpec({
     describe("EventListener#eventClasses") {
         it("can derive event classes for handlers") {
             class FirstProjector {
+                @Suppress("UNUSED_PARAMETER")
                 fun project(event: TestEvent, aggregateId: UUID) = Unit
             }
             class SecondProjector {
+                @Suppress("UNUSED_PARAMETER")
                 fun project(event: AnotherTestEvent, aggregateId: UUID) = Unit
             }
 
