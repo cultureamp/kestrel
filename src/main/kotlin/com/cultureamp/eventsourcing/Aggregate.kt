@@ -165,7 +165,7 @@ private fun <CC: CreationCommand, CE: CreationEvent, Err: DomainError, M: EventM
     } else {
         Left(WrongAggregateConstructorForEvent(aggregateType(), creationDomainEvent::class))
     }
-    val updateEvents = events.slice(1 until events.size).map { it.domainEvent as UE }
+    val updateEvents = events.drop(1).map { it.domainEvent as UE }
     return aggregate.map { it.updated(updateEvents) }
 }
 
