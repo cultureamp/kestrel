@@ -46,8 +46,6 @@ import org.jetbrains.exposed.sql.transactions.transaction
 import org.joda.time.DateTime
 import java.util.*
 
-class EmptyMetadata() : EventMetadata()
-
 class CommandGatewayIntegrationTest : DescribeSpec({
     val h2DbUrl = "jdbc:h2:mem:test;MODE=MySQL;DB_CLOSE_DELAY=-1;"
     val h2Driver = "org.h2.Driver"

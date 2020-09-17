@@ -112,10 +112,10 @@ interface AggregateConstructorWithProjection<CC: CreationCommand, CE: CreationEv
     }
 }
 
-internal fun <CC: CreationCommand, CE: CreationEvent, Err: DomainError, UC: UpdateCommand, UE: UpdateEvent> AggregateConstructor<CC, CE, Err, UC, UE, Aggregate<UC, UE, Err, *>>.create(
+internal fun <CC: CreationCommand, CE: CreationEvent, Err: DomainError, UC: UpdateCommand, UE: UpdateEvent, M : EventMetadata> AggregateConstructor<CC, CE, Err, UC, UE, Aggregate<UC, UE, Err, *>>.create(
     creationCommand: CC,
-    metadata: EventMetadata,
-    eventStore: EventStore
+    metadata: M,
+    eventStore: EventStore<M>
 ): Either<CommandError, Unit> {
     return create(creationCommand).map { domainEvent ->
         val aggregate = created(domainEvent)
@@ -132,11 +132,11 @@ internal fun <CC: CreationCommand, CE: CreationEvent, Err: DomainError, UC: Upda
 }
 
 @Suppress("UNCHECKED_CAST")
-internal fun <CC: CreationCommand, CE: CreationEvent, Err: DomainError, UC: UpdateCommand, UE: UpdateEvent> AggregateConstructor<CC, CE, Err, UC, UE, Aggregate<UC, UE, Err, *>>.update(
+internal fun <CC: CreationCommand, CE: CreationEvent, Err: DomainError, UC: UpdateCommand, UE: UpdateEvent, M : EventMetadata> AggregateConstructor<CC, CE, Err, UC, UE, Aggregate<UC, UE, Err, *>>.update(
     updateCommand: UC,
-    metadata: EventMetadata,
-    events: List<Event>,
-    eventStore: EventStore
+    metadata: M,
+    events: List<Event<M>>,
+    eventStore: EventStore<M>
 ): Either<CommandError, Unit> {
     val creationEvent = events.first().domainEvent as CreationEvent
     val updateEvents = events.slice(1 until events.size).map { it.domainEvent as UpdateEvent }
