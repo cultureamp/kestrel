@@ -56,7 +56,7 @@ interface AggregateWithProjection<UC: UpdateCommand, UE: UpdateEvent, Err: Domai
 interface AggregateConstructor<CC: CreationCommand, CE: CreationEvent, Err: DomainError, UC: UpdateCommand, UE: UpdateEvent, Self: Aggregate<UC, UE, Err, Self>> {
     fun created(event: CE): Self
     fun create(command: CC): Either<Err, CE>
-    fun aggregateType(): String = this::class.companionClass
+    fun aggregateType(): String = this::class.companionClassName
 
     companion object {
         inline fun <CC: CreationCommand, CE: CreationEvent, Err: DomainError, UC: UpdateCommand, UE: UpdateEvent, reified A: Any> from(
@@ -92,7 +92,7 @@ interface AggregateConstructor<CC: CreationCommand, CE: CreationEvent, Err: Doma
 interface AggregateConstructorWithProjection<CC: CreationCommand, CE: CreationEvent, Err: DomainError, UC: UpdateCommand, UE: UpdateEvent, P, Self : AggregateWithProjection<UC, UE, Err, P, Self>> {
     fun created(event: CE): Self
     fun create(projection: P, command: CC): Either<Err, CE>
-    fun aggregateType(): String = this::class.companionClass
+    fun aggregateType(): String = this::class.companionClassName
     fun partial(projection: P): AggregateConstructor<CC, CE, Err, UC, UE, Aggregate<UC, UE, Err, *>> {
         return object:AggregateConstructor<CC, CE, Err, UC, UE, Aggregate<UC, UE, Err, *>> {
             override fun created(event: CE): Aggregate<UC, UE, Err, *> {
@@ -174,6 +174,6 @@ private fun <UC: UpdateCommand, UE: UpdateEvent, Err: DomainError> Aggregate<UC,
     return updateEvents.fold(this) { aggregate, updateEvent -> aggregate.updated(updateEvent) as Aggregate<UC, UE, Err, *> }
 }
 
-val <T : Any> KClass<T>.companionClass get() = if (isCompanion) this.java.declaringClass.simpleName!! else this::class.simpleName!!
+val <T : Any> KClass<T>.companionClassName get() = if (isCompanion) this.java.declaringClass.simpleName!! else this::class.simpleName!!
 
 data class WrongAggregateConstructorForEvent(val aggregateType: String, val eventType: KClass<out CreationEvent>) : CommandError
