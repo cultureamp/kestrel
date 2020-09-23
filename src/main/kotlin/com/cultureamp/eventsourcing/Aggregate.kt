@@ -162,13 +162,13 @@ internal fun <CC : CreationCommand, CE : CreationEvent, Err : DomainError, UC : 
 private fun <CC : CreationCommand, CE : CreationEvent, Err : DomainError, M : EventMetadata, UC : UpdateCommand, UE : UpdateEvent>
     AggregateConstructor<CC, CE, Err, UC, UE, Aggregate<UC, UE, Err, *>>.rehydrate(
     events: List<Event<M>>
-): Either<WrongAggregateConstructorForEvent, Aggregate<UC, UE, Err, *>> {
+): Either<ConstructorTypeMismatch, Aggregate<UC, UE, Err, *>> {
     val creationEvent = events.first()
     val creationDomainEvent = creationEvent.domainEvent as CE
     val aggregate = if (creationEvent.aggregateType == aggregateType()) {
         Right(created(creationDomainEvent))
     } else {
-        Left(WrongAggregateConstructorForEvent(aggregateType(), creationDomainEvent::class))
+        Left(ConstructorTypeMismatch(aggregateType(), creationDomainEvent::class))
     }
     val updateEvents = events.drop(1).map { it.domainEvent as UE }
     return aggregate.map { it.updated(updateEvents) }
@@ -181,4 +181,4 @@ private fun <UC: UpdateCommand, UE: UpdateEvent, Err: DomainError> Aggregate<UC,
 
 val <T : Any> KClass<T>.companionClassName get() = if (isCompanion) this.java.declaringClass.simpleName!! else this::class.simpleName!!
 
-data class WrongAggregateConstructorForEvent(val aggregateType: String, val eventType: KClass<out CreationEvent>) : CommandError
+data class ConstructorTypeMismatch(val aggregateType: String, val eventType: KClass<out CreationEvent>) : CommandError

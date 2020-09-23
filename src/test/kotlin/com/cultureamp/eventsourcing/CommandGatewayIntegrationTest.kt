@@ -252,7 +252,7 @@ class CommandGatewayIntegrationTest : DescribeSpec({
             val surveyId = UUID.randomUUID()
             gateway.dispatch(CreateSurvey(surveyId, UUID.randomUUID(), mapOf(Locale.en to "name"), UUID.randomUUID(), DateTime.now()), metadata) shouldBe Right(Created)
             gateway.dispatch(Invite(surveyId, UUID.randomUUID(), UUID.randomUUID(), DateTime.now()), metadata) shouldBe
-                Left(WrongAggregateConstructorForEvent("ParticipantAggregate", SurveyCreated::class))
+                Left(ConstructorTypeMismatch("ParticipantAggregate", SurveyCreated::class))
         }
     }
 })
