@@ -108,7 +108,8 @@ interface AggregateConstructorWithProjection<CC: CreationCommand, CE: CreationEv
     }
 }
 
-internal fun <CC: CreationCommand, CE: CreationEvent, Err: DomainError, UC: UpdateCommand, UE: UpdateEvent, M : EventMetadata> AggregateConstructor<CC, CE, Err, UC, UE, Aggregate<UC, UE, Err, *>>.create(
+internal fun <CC : CreationCommand, CE : CreationEvent, Err : DomainError, UC : UpdateCommand, UE : UpdateEvent, M : EventMetadata>
+    AggregateConstructor<CC, CE, Err, UC, UE, Aggregate<UC, UE, Err, *>>.create(
     creationCommand: CC,
     metadata: M,
     eventStore: EventStore<M>
@@ -128,7 +129,8 @@ internal fun <CC: CreationCommand, CE: CreationEvent, Err: DomainError, UC: Upda
     }.flatten()
 }
 
-internal fun <CC: CreationCommand, CE: CreationEvent, Err: DomainError, UC: UpdateCommand, UE: UpdateEvent, M : EventMetadata> AggregateConstructor<CC, CE, Err, UC, UE, Aggregate<UC, UE, Err, *>>.update(
+internal fun <CC : CreationCommand, CE : CreationEvent, Err : DomainError, UC : UpdateCommand, UE : UpdateEvent, M : EventMetadata>
+    AggregateConstructor<CC, CE, Err, UC, UE, Aggregate<UC, UE, Err, *>>.update(
     updateCommand: UC,
     metadata: M,
     events: List<Event<M>>,
@@ -157,7 +159,10 @@ internal fun <CC: CreationCommand, CE: CreationEvent, Err: DomainError, UC: Upda
 }
 
 @Suppress("UNCHECKED_CAST")
-private fun <CC: CreationCommand, CE: CreationEvent, Err: DomainError, M: EventMetadata, UC: UpdateCommand, UE: UpdateEvent> AggregateConstructor<CC, CE, Err, UC, UE, Aggregate<UC, UE, Err, *>>.rehydrate(events: List<Event<M>>): Either<WrongAggregateConstructorForEvent, Aggregate<UC, UE, Err, *>> {
+private fun <CC : CreationCommand, CE : CreationEvent, Err : DomainError, M : EventMetadata, UC : UpdateCommand, UE : UpdateEvent>
+    AggregateConstructor<CC, CE, Err, UC, UE, Aggregate<UC, UE, Err, *>>.rehydrate(
+    events: List<Event<M>>
+): Either<WrongAggregateConstructorForEvent, Aggregate<UC, UE, Err, *>> {
     val creationEvent = events.first()
     val creationDomainEvent = creationEvent.domainEvent as CE
     val aggregate = if (creationEvent.aggregateType == aggregateType()) {
