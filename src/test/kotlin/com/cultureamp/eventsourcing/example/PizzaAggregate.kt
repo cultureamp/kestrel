@@ -75,8 +75,6 @@ class PizzaAlreadyEaten : PizzaError()
 data class PizzaAggregate(val baseStyle: PizzaStyle, val toppings: List<PizzaTopping>, val isEaten: Boolean = false) {
     constructor(event: PizzaCreated) : this(baseStyle = event.baseStyle, toppings = event.initialToppings)
 
-    fun aggregateType() = "pizza"
-
     fun updated(event: PizzaUpdateEvent): PizzaAggregate = when (event) {
         is PizzaToppingAdded -> this.copy(toppings = this.toppings + event.newTopping)
         is PizzaEaten -> this.copy(isEaten = true)
@@ -105,6 +103,8 @@ data class PizzaAggregate(val baseStyle: PizzaStyle, val toppings: List<PizzaTop
                 )
             }
         }
+
+        fun aggregateType() = "pizza"
     }
 
     fun update(command: PizzaUpdateCommand): Either<PizzaError, List<PizzaUpdateEvent>> {

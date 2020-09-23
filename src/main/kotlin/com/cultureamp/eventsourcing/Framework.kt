@@ -22,6 +22,7 @@ data class Event<M: EventMetadata> (
     val id: UUID,
     val aggregateId: UUID,
     val aggregateSequence: Long,
+    val aggregateType: String,
     val createdAt: DateTime,
     val metadata: M,
     val domainEvent: DomainEvent
@@ -79,6 +80,11 @@ fun <E, V, R> Either<E, V>.map(transform: (V) -> R): Either<E, R> = when (this) 
 fun <E, V> Either<E, Either<E,V>>.flatten(): Either<E, V> = when (this) {
     is Left -> this
     is Right -> this.value
+}
+
+fun <E, V, R> Either<E, V>.flatMap(transform: (V) -> Either<E, R>): Either<E, R> = when (this) {
+    is Left -> this
+    is Right -> transform(this.value)
 }
 
 fun <E, V, R> Either<E, V>.fold(left: (E) -> R, right: (V) -> R): R = when (this) {

@@ -57,8 +57,8 @@ class RelationalDatabaseEventStoreTest : DescribeSpec({
             val events = listOf(firstPizzaCreated, firstPizzaEaten)
             val otherEvents = listOf(secondPizzaCreated)
 
-            store.sink(events, aggregateId, "pizza") shouldBe Right(Unit)
-            store.sink(otherEvents, otherAggregateId, "pizza") shouldBe Right(Unit)
+            store.sink(events, aggregateId) shouldBe Right(Unit)
+            store.sink(otherEvents, otherAggregateId) shouldBe Right(Unit)
 
             store.eventsFor(aggregateId) shouldBe events
             store.eventsFor(otherAggregateId) shouldBe otherEvents
@@ -77,7 +77,7 @@ class RelationalDatabaseEventStoreTest : DescribeSpec({
             )
 
             store.lastSequence() shouldBe 0
-            store.sink(events, aggregateId, "pizza") shouldBe Right(Unit)
+            store.sink(events, aggregateId) shouldBe Right(Unit)
             store.lastSequence() shouldBe 3
         }
 
@@ -101,24 +101,26 @@ class RelationalDatabaseEventStoreTest : DescribeSpec({
                 id = UUID.randomUUID(),
                 aggregateId = UUID.randomUUID(),
                 aggregateSequence = 1,
+                aggregateType = "aggregateType",
                 createdAt = DateTime.now(),
                 metadata = SpecificMetadata("specialField"),
                 domainEvent = fooDomainEvent
             )
-            val bazDomainEvent = FooEvent("quux")
-            val bazEvent = Event(
+            val barDomainEvent = BarEvent("quux")
+            val barEvent = Event(
                 id = UUID.randomUUID(),
                 aggregateId = UUID.randomUUID(),
                 aggregateSequence = 2,
+                aggregateType = "aggregateType",
                 createdAt = DateTime.now(),
                 metadata = SpecificMetadata("specialField"),
-                domainEvent = bazDomainEvent
+                domainEvent = barDomainEvent
             )
 
 
             val storeWithProjectors = RelationalDatabaseEventStore.create(synchronousEventProcessors, db)
 
-            storeWithProjectors.sink(listOf(fooEvent, bazEvent), UUID.randomUUID(), "aggregateType")
+            storeWithProjectors.sink(listOf(fooEvent, barEvent), UUID.randomUUID())
 
             count shouldBe 4
         }
@@ -126,7 +128,7 @@ class RelationalDatabaseEventStoreTest : DescribeSpec({
 })
 
 fun <M : EventMetadata>event(domainEvent: DomainEvent, aggregateId: UUID, index: Int, metadata: M): Event<M> {
-    return Event(UUID.randomUUID(), aggregateId, index.toLong(), DateTime.now(), metadata, domainEvent)
+    return Event(UUID.randomUUID(), aggregateId, index.toLong(), "pizza", DateTime.now(), metadata, domainEvent)
 }
 
 

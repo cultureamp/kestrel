@@ -53,6 +53,8 @@ data class ThingAggregate(val tweaks: List<String> = emptyList(), val bops: List
         override fun create(projection: ThingCommandProjection, command: ThingCreationCommand): Either<ThingError, ThingCreationEvent> = when(command){
             is CreateThing -> Right(ThingCreated)
         }
+
+        override fun aggregateType() = "thing"
     }
 
     override fun updated(event: ThingUpdateEvent): ThingAggregate = when(event){
@@ -68,6 +70,4 @@ data class ThingAggregate(val tweaks: List<String> = emptyList(), val bops: List
         }
         is Explode -> Left(Expoded)
     }
-
-    override fun aggregateType() = "thing"
 }
