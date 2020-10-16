@@ -9,10 +9,13 @@ import com.fasterxml.jackson.datatype.joda.JodaModule
 import com.fasterxml.jackson.module.kotlin.registerKotlinModule
 import org.jetbrains.exposed.exceptions.ExposedSQLException
 import org.jetbrains.exposed.sql.*
+import org.jetbrains.exposed.sql.statements.Statement
+import org.jetbrains.exposed.sql.statements.StatementType
 import org.jetbrains.exposed.sql.transactions.transaction
 import org.jetbrains.exposed.sql.vendors.H2Dialect
 import org.jetbrains.exposed.sql.vendors.PostgreSQLDialect
 import java.lang.UnsupportedOperationException
+import java.sql.PreparedStatement
 import java.util.*
 import kotlin.reflect.KClass
 
@@ -27,7 +30,8 @@ class RelationalDatabaseEventStore<M: EventMetadata> @PublishedApi internal cons
     private val events: Events,
     private val synchronousEventProcessors: List<EventProcessor<M>>,
     private val metadataClass: Class<M>,
-    private val objectMapper: ObjectMapper
+    private val objectMapper: ObjectMapper,
+    private val blockingLockUntilTransactionEnd: Transaction.() -> Unit = {}
 ) : EventStore<M> {
 
     companion object {
@@ -59,6 +63,7 @@ class RelationalDatabaseEventStore<M: EventMetadata> @PublishedApi internal cons
     override fun sink(newEvents: List<Event<M>>, aggregateId: UUID): Either<CommandError, Unit> {
         return try {
             return transaction(db) {
+                blockingLockUntilTransactionEnd()
                 newEvents.forEach { event ->
                     val body = objectMapper.writeValueAsString(event.domainEvent)
                     val eventType = event.domainEvent.javaClass
@@ -178,7 +183,7 @@ object PostgresDatabaseEventStore {
         db: Database,
         objectMapper: ObjectMapper
     ): RelationalDatabaseEventStore<M> {
-        return RelationalDatabaseEventStore(db, Events(Table::jsonb), synchronousEventProcessors, M::class.java, objectMapper)
+        return RelationalDatabaseEventStore(db, Events(Table::jsonb), synchronousEventProcessors, M::class.java, objectMapper, Transaction::pgAdvisoryXactLock)
     }
 }
 
@@ -221,3 +226,23 @@ class Events(jsonb: Table.(String) -> Column<String>) : Table() {
 private fun Table.nonUniqueIndex(vararg columns: Column<*>) = index(false, *columns)
 
 object ConcurrencyError : RetriableError
+
+fun Transaction.pgAdvisoryXactLock() {
+    exec(object : Statement<Unit>(StatementType.SELECT, emptyList()) {
+        val lockTimeoutMilliseconds = 10_000
+        val statement = "SET LOCAL lock_timeout = '${lockTimeoutMilliseconds}ms'; SELECT pg_advisory_xact_lock(-1)"
+
+        override fun PreparedStatement.executeInternal(transaction: Transaction): Unit? {
+            // using execute rather than executeUpdate here due to this issue
+            // https://github.com/JetBrains/Exposed/issues/423
+            execute()
+            resultSet?.close()
+            return Unit
+        }
+
+        override fun prepareSQL(transaction: Transaction): String = statement
+
+        override fun arguments(): Iterable<Iterable<Pair<ColumnType, Any?>>> = emptyList()
+    })
+    return
+}

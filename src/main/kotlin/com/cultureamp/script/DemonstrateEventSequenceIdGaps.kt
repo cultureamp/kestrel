@@ -128,6 +128,7 @@ internal fun main(args: Array<String>) {
         }
     })
 
+    val startTime = System.currentTimeMillis()
     val threads = (1..20).map {
         thread(start = true, isDaemon = false, name = it.toString()) {
             while (!stop.get()) {
@@ -169,6 +170,9 @@ internal fun main(args: Array<String>) {
     println("processed sequences:\t${processedSequences.count()}")
     println("unprocessed sequences:\t${(actualSequences - processedSequences).count()}")
     println("Done")
+    val endTime = System.currentTimeMillis()
+    val elapsed = endTime - startTime
+    println("Elapsed ms: $elapsed")
 }
 
 sealed class SimpleThingCommand : Command
