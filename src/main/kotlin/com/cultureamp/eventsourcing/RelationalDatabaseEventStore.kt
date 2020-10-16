@@ -14,6 +14,7 @@ import org.jetbrains.exposed.sql.statements.StatementType
 import org.jetbrains.exposed.sql.transactions.transaction
 import org.jetbrains.exposed.sql.vendors.H2Dialect
 import org.jetbrains.exposed.sql.vendors.PostgreSQLDialect
+import org.postgresql.util.PSQLException
 import java.lang.UnsupportedOperationException
 import java.sql.PreparedStatement
 import java.util.*
@@ -31,7 +32,7 @@ class RelationalDatabaseEventStore<M: EventMetadata> @PublishedApi internal cons
     private val synchronousEventProcessors: List<EventProcessor<M>>,
     private val metadataClass: Class<M>,
     private val objectMapper: ObjectMapper,
-    private val blockingLockUntilTransactionEnd: Transaction.() -> Unit = {}
+    private val blockingLockUntilTransactionEnd: Transaction.() -> CommandError? = { null }
 ) : EventStore<M> {
 
     companion object {
@@ -63,26 +64,27 @@ class RelationalDatabaseEventStore<M: EventMetadata> @PublishedApi internal cons
     override fun sink(newEvents: List<Event<M>>, aggregateId: UUID): Either<CommandError, Unit> {
         return try {
             return transaction(db) {
-                blockingLockUntilTransactionEnd()
-                newEvents.forEach { event ->
-                    val body = objectMapper.writeValueAsString(event.domainEvent)
-                    val eventType = event.domainEvent.javaClass
-                    val metadata = objectMapper.writeValueAsString(event.metadata)
-                    validateSerialization(eventType, body, metadata)
-                    events.insert { row ->
-                        row[events.aggregateSequence] = event.aggregateSequence
-                        row[events.eventId] = event.id
-                        row[events.aggregateId] = aggregateId
-                        row[events.aggregateType] = event.aggregateType
-                        row[events.eventType] = eventType.canonicalName
-                        row[events.createdAt] = event.createdAt
-                        row[events.body] = body
-                        row[events.metadata] = metadata
+                blockingLockUntilTransactionEnd()?.let { Left(it) } ?: run {
+                    newEvents.forEach { event ->
+                        val body = objectMapper.writeValueAsString(event.domainEvent)
+                        val eventType = event.domainEvent.javaClass
+                        val metadata = objectMapper.writeValueAsString(event.metadata)
+                        validateSerialization(eventType, body, metadata)
+                        events.insert { row ->
+                            row[events.aggregateSequence] = event.aggregateSequence
+                            row[events.eventId] = event.id
+                            row[events.aggregateId] = aggregateId
+                            row[events.aggregateType] = event.aggregateType
+                            row[events.eventType] = eventType.canonicalName
+                            row[events.createdAt] = event.createdAt
+                            row[events.body] = body
+                            row[events.metadata] = metadata
+                        }
                     }
-                }
 
-                updateSynchronousProjections(newEvents)
-                Right(Unit)
+                    updateSynchronousProjections(newEvents)
+                    Right(Unit)
+                }
             }
         } catch (e: ExposedSQLException) {
             if (e.message.orEmpty().contains("violates unique constraint")) {
@@ -226,23 +228,31 @@ class Events(jsonb: Table.(String) -> Column<String>) : Table() {
 private fun Table.nonUniqueIndex(vararg columns: Column<*>) = index(false, *columns)
 
 object ConcurrencyError : RetriableError
+object LockingError : CommandError
 
-fun Transaction.pgAdvisoryXactLock() {
-    exec(object : Statement<Unit>(StatementType.SELECT, emptyList()) {
+fun Transaction.pgAdvisoryXactLock(): CommandError? {
+    return exec(object : Statement<CommandError>(StatementType.SELECT, emptyList()) {
         val lockTimeoutMilliseconds = 10_000
         val statement = "SET LOCAL lock_timeout = '${lockTimeoutMilliseconds}ms'; SELECT pg_advisory_xact_lock(-1)"
 
-        override fun PreparedStatement.executeInternal(transaction: Transaction): Unit? {
+        override fun PreparedStatement.executeInternal(transaction: Transaction): CommandError? {
             // using execute rather than executeUpdate here due to this issue
             // https://github.com/JetBrains/Exposed/issues/423
-            execute()
+            try {
+                execute()
+            } catch (e: PSQLException) {
+                if (e.message.orEmpty().contains("canceling statement due to lock timeout")) {
+                    return LockingError
+                } else {
+                    throw e
+                }
+            }
             resultSet?.close()
-            return Unit
+            return null
         }
 
         override fun prepareSQL(transaction: Transaction): String = statement
 
         override fun arguments(): Iterable<Iterable<Pair<ColumnType, Any?>>> = emptyList()
     })
-    return
 }

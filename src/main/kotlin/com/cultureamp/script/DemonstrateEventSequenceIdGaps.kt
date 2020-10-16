@@ -7,6 +7,7 @@ import com.cultureamp.eventsourcing.CreationEvent
 import com.cultureamp.eventsourcing.DomainError
 import com.cultureamp.eventsourcing.DomainEvent
 import com.cultureamp.eventsourcing.EventMetadata
+import com.cultureamp.eventsourcing.Left
 import com.cultureamp.eventsourcing.RelationalDatabaseEventStore
 import com.cultureamp.eventsourcing.Right
 import com.cultureamp.eventsourcing.Route
@@ -16,6 +17,7 @@ import com.cultureamp.eventsourcing.UpdateCommand
 import com.cultureamp.eventsourcing.UpdateEvent
 import org.jetbrains.exposed.sql.Database
 import org.jetbrains.exposed.sql.transactions.transaction
+import java.lang.RuntimeException
 import java.util.*
 import java.util.concurrent.atomic.AtomicBoolean
 import kotlin.concurrent.thread
@@ -96,7 +98,7 @@ that was part of a gap.
 
 [1]: https://github.com/envato/event_sourcery-postgres/blob/9fa5cec446e9335edb5b8d4aa2517d383c73b076/script/demonstrate_event_sequence_id_gaps.rb
  */
-internal fun main(args: Array<String>) {
+fun main(args: Array<String>) {
     val jdbcUrl = args.getOrElse(0) { "jdbc:postgresql://localhost:5432/demonstrate_sequence_gaps" }
     val driver = args.getOrElse(1) { "org.postgresql.Driver" }
     val user = args.getOrElse(2) { "william.boxhall" }
@@ -132,7 +134,10 @@ internal fun main(args: Array<String>) {
     val threads = (1..20).map {
         thread(start = true, isDaemon = false, name = it.toString()) {
             while (!stop.get()) {
-                commandGateway.dispatch(CreateSimpleThing(UUID.randomUUID()), EventMetadata())
+                val result = commandGateway.dispatch(CreateSimpleThing(UUID.randomUUID()), EventMetadata())
+                when (result) {
+                    is Left -> throw RuntimeException(result.error.toString())
+                }
             }
         }
     }
