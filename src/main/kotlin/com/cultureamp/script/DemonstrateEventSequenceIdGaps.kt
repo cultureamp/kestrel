@@ -97,9 +97,9 @@ that was part of a gap.
 [1]: https://github.com/envato/event_sourcery-postgres/blob/9fa5cec446e9335edb5b8d4aa2517d383c73b076/script/demonstrate_event_sequence_id_gaps.rb
  */
 internal fun main(args: Array<String>) {
-    val jdbcUrl = "jdbc:postgresql://localhost:5432/demonstrate_sequence_gaps"
-    val driver = "org.postgresql.Driver"
-    val user = "william.boxhall"
+    val jdbcUrl = args.getOrElse(0) { "jdbc:postgresql://localhost:5432/demonstrate_sequence_gaps" }
+    val driver = args.getOrElse(1) { "org.postgresql.Driver" }
+    val user = args.getOrElse(2) { "william.boxhall" }
     val database = Database.connect(url = jdbcUrl, driver = driver, user = user)
     val eventStore = RelationalDatabaseEventStore.create<EventMetadata>(database)
     eventStore.createSchemaIfNotExists()
