@@ -104,6 +104,10 @@ internal fun main(args: Array<String>) {
     val eventStore = RelationalDatabaseEventStore.create<EventMetadata>(database)
     eventStore.createSchemaIfNotExists()
 
+    transaction(database) {
+        exec("TRUNCATE events RESTART IDENTITY;")
+    }
+
     val routes = listOf(
         Route.from(SimpleThingAggregate)
     )
