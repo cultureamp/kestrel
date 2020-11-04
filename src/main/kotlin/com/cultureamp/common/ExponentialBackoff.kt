@@ -23,7 +23,7 @@ class ExponentialBackoff(
 		tailrec fun _run(consecutiveFailures: Int) {
 			val nextAction = try {
 				task()
-			} catch(throwable: Throwable) {
+			} catch (throwable: Throwable) {
 				Action.Error(throwable)
 			}
 
