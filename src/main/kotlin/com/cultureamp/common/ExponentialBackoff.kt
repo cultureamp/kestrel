@@ -1,7 +1,5 @@
 package com.cultureamp.common
 
-import arrow.core.Try
-import arrow.core.getOrElse
 import kotlin.math.min
 import kotlin.math.pow
 
@@ -23,9 +21,11 @@ class ExponentialBackoff(
 
 	fun run(task: () -> Action) {
 		tailrec fun _run(consecutiveFailures: Int) {
-			val nextAction = Try {
+			val nextAction = try {
 				task()
-			}.getOrElse { Action.Error(it) }
+			} catch (throwable: Throwable) {
+				Action.Error(throwable)
+			}
 
 			return when (nextAction) {
 				is Action.Wait -> {

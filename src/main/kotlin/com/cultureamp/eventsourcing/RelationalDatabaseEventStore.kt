@@ -1,6 +1,5 @@
 package com.cultureamp.eventsourcing
 
-import arrow.data.extensions.list.foldable.nonEmpty
 import com.fasterxml.jackson.core.JsonProcessingException
 import com.fasterxml.jackson.databind.ObjectMapper
 import com.fasterxml.jackson.databind.PropertyNamingStrategy
@@ -132,7 +131,7 @@ class RelationalDatabaseEventStore<M: EventMetadata> @PublishedApi internal cons
         return transaction(db) {
             events
                 .select {
-                    val eventTypeMatches = if (eventClasses.nonEmpty()) {
+                    val eventTypeMatches = if (eventClasses.isNotEmpty()) {
                         events.eventType.inList(eventClasses.map { it.java.canonicalName })
                     } else {
                         Op.TRUE
@@ -160,7 +159,7 @@ class RelationalDatabaseEventStore<M: EventMetadata> @PublishedApi internal cons
         events
             .slice(maxSequence)
             .select {
-                if (eventClasses.nonEmpty()) {
+                if (eventClasses.isNotEmpty()) {
                     events.eventType.inList(eventClasses.map { it.java.canonicalName })
                 } else {
                     Op.TRUE
