@@ -10,7 +10,7 @@ write (command) actions and read (query) actions are codified in entirely separa
 through your system. Used in tandem, event-sourcing and CQRS provide a powerful and flexible architectural pattern. In
 an event-sourced, CQRS system, writes typically happen via an event-centric domain model, also know as "Aggregates", and 
 these changes propagate through to "projections" of those events to be read from by the view side of the application.
-Event are thus considered the source of truth, and projections are 100% disposable and re-buildable off said events.
+Events are thus considered the source of truth, and projections are 100% disposable and re-buildable off said events.
 
 **Kes**trel is a **K**otlin **E**vent-**S**ourcing and CQRS framework that strives for 
 - Minimalism - *lack of boilerplate*
@@ -80,6 +80,43 @@ enum class Locale {
 }
 
 ```
+
+### Glossary
+
+- [**Aggregate**](https://github.com/cultureamp/kotlin-eventsourcing/blob/master/src/main/kotlin/com/cultureamp/eventsourcing/Aggregate.kt) -
+*The domain entity that  commands interact with and to which events happen. All events happen to a "thing" and this is that
+thing, a context in which to group events. A system may have multiple aggregates.*
+- [**Command**](https://github.com/cultureamp/kotlin-eventsourcing/blob/master/src/main/kotlin/com/cultureamp/eventsourcing/Framework.kt) -
+*A request to change the system via an event on an aggregate. May be accepted or denied based on business rules.*
+- [**Event**](https://github.com/cultureamp/kotlin-eventsourcing/blob/master/src/main/kotlin/com/cultureamp/eventsourcing/Framework.kt) -
+*A "semantic" (meaningful domain) event that has happened. Events can't be undone once they have happened, and can't be
+blocked like commands. Event exist in an immutable event stream and once they exist need to be handled forever. At an 
+implementation detail an `Event` is a wrapper around a `DomainEvent` with additional metadata attached.*
+- [**CommandGateway**](https://github.com/cultureamp/kotlin-eventsourcing/blob/master/src/main/kotlin/com/cultureamp/eventsourcing/CommandGateway.kt) -
+*The interface through which commands make their way through to aggregates. It's responsible for routing commands
+to aggregates, and orchestrates the loading and saving aggregates through events and the `EventStore`.*
+- [**EventStore**](https://github.com/cultureamp/kotlin-eventsourcing/blob/master/src/main/kotlin/com/cultureamp/eventsourcing/EventStore.kt) -
+*Implements two interfaces, an `EventSink`, for saving events for aggregates, and an `EventSource`, for retrieving those
+events. In general, the Event Store should only ever be written to via the `CommandGateway` and read from via an 
+`EventProcessor`. Kestrel provides support for a postgres backed event store out of the box.*
+- [**EventProcessor**](https://github.com/cultureamp/kotlin-eventsourcing/blob/master/src/main/kotlin/com/cultureamp/eventsourcing/EventProcessor.kt) -
+*Provides an abstraction over any event-processor, for example a `Projector` or a `Reactor`. This takes care of filtering
+out any irrelevant events from being passed to said projectors or reactors.*
+- **Projector** - *An event processor that merely updates a "projection" of the data. Should always be disposable and 
+re-runnable from the beginning of the event-sequence. Should be built in an [idempotent](https://en.wikipedia.org/wiki/Idempotence)
+fashion since event-sourced systems favour asynchronous, distributed systems where it becomes more and more impossible
+to create perfect transactions. Build these as if they are at-least-once delivery of events.*
+- **Reactor** - *Like a projector but has side effects, for example sending `Commands` to `Aggregates` via the 
+`CommandGateway`, or sending emails, etc. Best efforts should also be made to make these idempotent and re-runnable from
+the beginning of the event-sequence, although in practice this tends to be difficult.*
+- [**AsyncEventProcessor**](https://github.com/cultureamp/kotlin-eventsourcing/blob/master/src/main/kotlin/com/cultureamp/eventsourcing/BatchedAsyncEventProcessor.kt) -
+*Wraps an `EventProcessor` with logic to read events from an `EventSource`, dispatch events to the `EventProcessor`, and
+update a "bookmark" representing the sequence number of the last processed event in a `BookmarkStore`.*
+- [**BookmarkStore**](https://github.com/cultureamp/kotlin-eventsourcing/blob/master/src/main/kotlin/com/cultureamp/eventsourcing/BookmarkStore.kt) -
+*Stores the last processed sequence number as a bookmark for a given `EventProcessor`.*
+- [**AsyncEventProcessorMonitor**](https://github.com/cultureamp/kotlin-eventsourcing/blob/master/src/main/kotlin/com/cultureamp/eventsourcing/AsyncEventProcessorMonitor.kt) -
+*Provides a mechanism to establish how far `EventProcessor` bookmarks/processing is lagging behind the head of the event
+stream.*
 
 ## Getting Started
 
@@ -379,6 +416,29 @@ val asyncEventProcessor = BatchedAsyncEventProcessor(eventStore, bookmarkStore, 
 
 Using `EventProcessor#compose` allows one to wrap up the two event-handling methods as one `EventProcessor` which then
 allows the sharing of a single bookmark.
+
+### Event processor monitor
+
+When running `AsyncEventProcessors`, it becomes important to be able to monitor where each of these are up to in the 
+event stream. You can do this using the [AsyncEventProcessorMonitor](https://github.com/cultureamp/kotlin-eventsourcing/blob/master/src/main/kotlin/com/cultureamp/eventsourcing/AsyncEventProcessorMonitor.kt)
+
+```kotlin
+val asyncEventProcessors: List<AsyncEventProcessor> = ...
+thread(start = true, isDaemon = false, name = "eventProcessorMonitor") {
+    val eventProcessorMonitor = AsyncEventProcessorMonitor(asynchronousEventProcessors) {
+        println("msg='Lag calculation for event-processor' name='${it.name}' lag=${it.lag} bookmarkSequence=${it.bookmarkSequence} lastSequence=${it.lastSequence}")
+    }
+
+    ExponentialBackoff(
+        idleTimeMs = 60_000,
+        failureBackoffMs = { 60_000 },
+        onFailure = { throwable, _ -> println(throwable) }
+    ).run {
+        eventProcessorMonitor.run()
+        Action.Wait
+    }
+}
+```
 
 ## Trello
 
