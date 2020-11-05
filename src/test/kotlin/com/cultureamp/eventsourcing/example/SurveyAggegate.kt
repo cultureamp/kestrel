@@ -8,12 +8,10 @@ data class SurveyAggregate(val name: Map<Locale, String>, val accountId: UUID, v
     constructor(event: Created): this(event.name, event.accountId)
 
     companion object {
-        fun create(query: SurveyNamesQuery, command: SurveyCreationCommand): Either<SurveyError, Created> {
-            return when (command) {
-                is CreateSurvey -> when {
-                    command.name.any { (locale, name) -> query.nameExistsFor(command.accountId, name, locale)} -> Left(SurveyNameNotUnique)
-                    else -> Right(Created(command.name, command.accountId, command.createdAt))
-                }
+        fun create(query: SurveyNamesQuery, command: SurveyCreationCommand): Either<SurveyError, Created> = when (command) {
+            is CreateSurvey -> when {
+                command.name.any { (locale, name) -> query.nameExistsFor(command.accountId, name, locale)} -> Left(SurveyNameNotUnique)
+                else -> Right(Created(command.name, command.accountId, command.createdAt))
             }
         }
     }
@@ -43,18 +41,11 @@ data class SurveyAggregate(val name: Map<Locale, String>, val accountId: UUID, v
 
 sealed class SurveyCommand : Command
 sealed class SurveyCreationCommand : SurveyCommand(), CreationCommand
-data class CreateSurvey(
-    override val aggregateId: UUID,
-    val surveyCaptureLayoutAggregateId: UUID,
-    val name: Map<Locale, String>,
-    val accountId: UUID,
-    val createdAt: DateTime
-) : SurveyCreationCommand()
+data class CreateSurvey(override val aggregateId: UUID, val surveyCaptureLayoutAggregateId: UUID, val name: Map<Locale, String>, val accountId: UUID, val createdAt: DateTime) : SurveyCreationCommand()
 sealed class SurveyUpdateCommand : SurveyCommand(), UpdateCommand
 data class Rename(override val aggregateId: UUID, val newName: String, val locale: Locale, val renamedAt: DateTime) : SurveyUpdateCommand()
 data class Delete(override val aggregateId: UUID, val deletedAt: DateTime) : SurveyUpdateCommand()
 data class Restore(override val aggregateId: UUID, val restoredAt: DateTime) : SurveyUpdateCommand()
-
 
 sealed class SurveyEvent : DomainEvent
 data class Created(val name: Map<Locale, String>, val accountId: UUID, val createdAt: DateTime) : SurveyEvent(), CreationEvent

@@ -1,6 +1,85 @@
 # Kestrel (Kotlin Event-Sourcing)
 
-A framework for event-sourced Kotlin apps
+A framework for building event-sourced, CQRS applications in Kotlin.
+
+## Summary
+
+Event-sourcing is an architectural paradigm wherein application state is modelled and stored as an immutable sequence
+of "semantic" (meaningful domain) events. CQRS, Command/Query Responsibility Segregation, describes a pattern in which 
+write (command) actions and read (query) actions are codified in entirely separately classes, models and pathways 
+through your system. Used in tandem, event-sourcing and CQRS provide a powerful and flexible architectural pattern. In
+an event-sourced, CQRS system, writes typically happen via an event-centric domain model, also know as "Aggregates", and 
+these changes propagate through to "projections" of those events to be read from by the view side of the application.
+Event are thus considered the source of truth, and projections are 100% disposable and re-buildable off said events.
+
+**Kes**trel is a **K**otlin **E**vent-**S**ourcing and CQRS framework that strives for 
+- Minimalism - *lack of boilerplate*
+- Expressiveness - *expressing domain rules well*
+- Robustness - *help you not make mistakes, primarily through strong typing*
+
+Here's an example of how an Aggregate might look in Kestrel:
+```kotlin
+data class SurveyAggregate(val name: Map<Locale, String>, val accountId: UUID, val deleted: Boolean = false) {
+    constructor(event: Created): this(event.name, event.accountId)
+
+    companion object {
+        fun create(query: SurveyNamesQuery, command: SurveyCreationCommand): Either<SurveyError, Created> = when (command) {
+            is CreateSurvey -> when {
+                command.name.any { (locale, name) -> query.nameExistsFor(command.accountId, name, locale)} -> Left(SurveyNameNotUnique)
+                else -> Right(Created(command.name, command.accountId, command.createdAt))
+            }
+        }
+    }
+
+    fun updated(event: SurveyUpdateEvent): SurveyAggregate = when (event) {
+        is Renamed -> this.copy(name = name + (event.locale to event.name))
+        is Deleted -> this.copy(deleted = true)
+        is Restored -> this.copy(deleted = false)
+    }
+
+    fun update(query: SurveyNamesQuery, command: SurveyUpdateCommand): Either<SurveyError, List<SurveyUpdateEvent>> = when (command) {
+        is Rename -> when {
+            name.get(command.locale) == command.newName -> Left(AlreadyRenamed)
+            query.nameExistsFor(accountId, command.newName, command.locale) -> Left(SurveyNameNotUnique)
+            else -> Right.list(Renamed(command.newName, command.locale, command.renamedAt))
+        }
+        is Delete -> when (deleted) {
+            true -> Left(AlreadyDeleted)
+            false -> Right.list(Deleted(command.deletedAt))
+        }
+        is Restore -> when (deleted) {
+            true -> Right.list(Restored(command.restoredAt))
+            false -> Left(NotDeleted)
+        }
+    }
+}
+
+sealed class SurveyCommand : Command
+sealed class SurveyCreationCommand : SurveyCommand(), CreationCommand
+data class CreateSurvey(override val aggregateId: UUID, val surveyCaptureLayoutAggregateId: UUID, val name: Map<Locale, String>, val accountId: UUID, val createdAt: DateTime) : SurveyCreationCommand()
+sealed class SurveyUpdateCommand : SurveyCommand(), UpdateCommand
+data class Rename(override val aggregateId: UUID, val newName: String, val locale: Locale, val renamedAt: DateTime) : SurveyUpdateCommand()
+data class Delete(override val aggregateId: UUID, val deletedAt: DateTime) : SurveyUpdateCommand()
+data class Restore(override val aggregateId: UUID, val restoredAt: DateTime) : SurveyUpdateCommand()
+
+sealed class SurveyEvent : DomainEvent
+data class Created(val name: Map<Locale, String>, val accountId: UUID, val createdAt: DateTime) : SurveyEvent(), CreationEvent
+sealed class SurveyUpdateEvent : SurveyEvent(), UpdateEvent
+data class Renamed(val name: String, val locale: Locale, val namedAt: DateTime) : SurveyUpdateEvent()
+data class Deleted(val deletedAt: DateTime) : SurveyUpdateEvent()
+data class Restored(val restoredAt: DateTime) : SurveyUpdateEvent()
+
+sealed class SurveyError : DomainError
+object SurveyNameNotUnique : SurveyError()
+object AlreadyRenamed : SurveyError(), AlreadyActionedCommandError
+object AlreadyDeleted : SurveyError(), AlreadyActionedCommandError
+object NotDeleted : SurveyError(), AlreadyActionedCommandError
+
+enum class Locale {
+    en, de
+}
+
+```
 
 ## Getting Started
 
@@ -96,12 +175,10 @@ data class SurveyAggregate(val name: Map<Locale, String>, val accountId: UUID, v
     constructor(event: Created): this(event.name, event.accountId)
 
     companion object {
-        fun create(query: SurveyNamesQuery, command: SurveyCreationCommand): Either<SurveyError, Created> {
-            return when (command) {
-                is CreateSurvey -> when {
-                    command.name.any { (locale, name) -> query.nameExistsFor(command.accountId, name, locale)} -> Left(SurveyNameNotUnique)
-                    else -> Right(Created(command.name, command.accountId, command.createdAt))
-                }
+        fun create(query: SurveyNamesQuery, command: SurveyCreationCommand): Either<SurveyError, Created> = when (command) {
+            is CreateSurvey -> when {
+                command.name.any { (locale, name) -> query.nameExistsFor(command.accountId, name, locale)} -> Left(SurveyNameNotUnique)
+                else -> Right(Created(command.name, command.accountId, command.createdAt))
             }
         }
     }
@@ -306,3 +383,9 @@ allows the sharing of a single bookmark.
 ## Trello
 
 https://trello.com/b/9mZdY0ZS/kotlin-event-sourcing
+
+## Resources
+
+- [CQRS article by Martin Fowler](https://trello.com/c/71yvoeq9/81-cqrs-pattern-martin-fowler)
+- [Event-sourcing talk by Sebastian von Conrad](https://www.youtube.com/watch?v=iGt0DBOWDTs)
+- [CQRS and event-sourcing FAQ](https://cqrs.nu/Faq) 
