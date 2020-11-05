@@ -1,4 +1,4 @@
-# Kotlin-Eventsourcing (KES)
+# Kestrel (Kotlin Event-Sourcing)
 
 A framework for event-sourced Kotlin apps
 
@@ -20,7 +20,7 @@ repositories {
 }
 
 dependencies {
-    implementation "com.cultureamp:kotlin-eventsourcing:{kes_version}"
+    implementation "com.cultureamp:kestrel:{kestrel_version}"
 }
 ```
 
