@@ -6,15 +6,15 @@ import kotlin.reflect.KFunction2
 import kotlin.reflect.KFunction3
 import kotlin.reflect.KFunction4
 
-interface Command {
+interface Command<E : DomainError> {
     val aggregateId: UUID
 }
 
-interface CreationCommand : Command {
+interface CreationCommand<E : DomainError> : Command<E> {
     override val aggregateId: UUID
 }
 
-interface UpdateCommand : Command {
+interface UpdateCommand<E : DomainError> : Command<E> {
     override val aggregateId: UUID
 }
 
@@ -48,27 +48,58 @@ data class CAStandardMetadata(
 ): EventMetadata()
 
 interface DomainEvent
-
 interface CreationEvent : DomainEvent
-
 interface UpdateEvent : DomainEvent
 
 interface CommandError
-
 interface DomainError: CommandError
-
 interface AlreadyActionedCommandError : DomainError
 
-interface AuthorizationCommandError : CommandError
+sealed class Result<out E, out V> {
+    abstract val isSuccess: Boolean
+    abstract val isFailure: Boolean
+}
+data class Failure<E>(val error: E) : Result<E, Nothing>() {
+    override val isSuccess = false
+    override val isFailure = true
+}
 
-interface RetriableError : CommandError
+data class Success<V>(val value: V) : Result<Nothing, V>() {
+    override val isSuccess = false
+    override val isFailure = true
 
-sealed class Either<out E, out V>
-data class Left<E>(val error: E) : Either<E, Nothing>()
-data class Right<V>(val value: V) : Either<Nothing, V>() {
     companion object {
-        fun <V> list(vararg values: V): Either<Nothing, List<V>> = Right(listOf(*values))
+        fun <V> list(vararg values: V): Result<Nothing, List<V>> = Success(listOf(*values))
     }
+}
+
+fun <E, V, R> Result<E, V>.map(transform: (V) -> R): Result<E, R> = when (this) {
+    is Success -> Success(transform(this.value))
+    is Failure -> this
+}
+
+fun <E, V> Result<E, Result<E, V>>.flatten(): Result<E, V> = when (this) {
+    is Failure -> this
+    is Success -> this.value
+}
+
+fun <E, V, R> Result<E, V>.fold(failure: (E) -> R, success: (V) -> R): R = when (this) {
+    is Failure -> failure(this.error)
+    is Success -> success(this.value)
+}
+
+sealed class Either<out E, out V> {
+    abstract val isLeft: Boolean
+    abstract val isRight: Boolean
+}
+data class Left<E>(val value: E) : Either<E, Nothing>() {
+    override val isLeft = true
+    override val isRight = false
+}
+
+data class Right<V>(val value: V) : Either<Nothing, V>() {
+    override val isLeft = false
+    override val isRight = true
 }
 
 fun <E, V, R> Either<E, V>.map(transform: (V) -> R): Either<E, R> = when (this) {
@@ -82,7 +113,7 @@ fun <E, V> Either<E, Either<E,V>>.flatten(): Either<E, V> = when (this) {
 }
 
 fun <E, V, R> Either<E, V>.fold(left: (E) -> R, right: (V) -> R): R = when (this) {
-    is Left -> left(this.error)
+    is Left -> left(this.value)
     is Right -> right(this.value)
 }
 

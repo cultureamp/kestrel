@@ -18,7 +18,7 @@ data class SurveySagaAggregate(val surveyAggregateId: UUID,
     )
 
     companion object {
-        fun create(command: SurveySagaCreationCommand): Either<DomainError, SurveySagaStarted> = when (command) {
+        fun create(command: SurveySagaCreationCommand): Result<DomainError, SurveySagaStarted> = when (command) {
             is Create -> with(command) {
                 val startEvent = SurveySagaStarted(
                     surveyAggregateId = surveyAggregateId,
@@ -28,12 +28,12 @@ data class SurveySagaAggregate(val surveyAggregateId: UUID,
                     createdAt = createdAt,
                     startedAt = DateTime()
                 )
-                Right(startEvent)
+                Success(startEvent)
             }
         }
     }
 
-    fun update(command: SurveySagaUpdateCommand): Either<DomainError, List<SurveySagaUpdateEvent>> = Right.list(
+    fun update(command: SurveySagaUpdateCommand): Result<DomainError, List<SurveySagaUpdateEvent>> = Success.list(
         when (command) {
             is StartCreatingSurvey -> StartedCreatingSurvey(
                 CreateSurvey(
@@ -58,8 +58,8 @@ data class SurveySagaAggregate(val surveyAggregateId: UUID,
     )
 }
 
-sealed class SurveySagaCommand : Command
-sealed class SurveySagaCreationCommand : SurveySagaCommand(), CreationCommand
+sealed class SurveySagaCommand : Command<DomainError>
+sealed class SurveySagaCreationCommand : SurveySagaCommand(), CreationCommand<DomainError>
 data class Create(
     override val aggregateId: UUID,
     val surveyAggregateId: UUID,
@@ -69,7 +69,7 @@ data class Create(
     val createdAt: DateTime
 ): SurveySagaCreationCommand()
 
-sealed class SurveySagaUpdateCommand : SurveySagaCommand(), UpdateCommand
+sealed class SurveySagaUpdateCommand : SurveySagaCommand(), UpdateCommand<DomainError>
 data class StartCreatingSurvey(override val aggregateId: UUID, val startedAt: DateTime) : SurveySagaUpdateCommand()
 data class FinishCreatingSurvey(override val aggregateId: UUID, val finishedAt: DateTime) : SurveySagaUpdateCommand()
 data class FailCreatingSurvey(override val aggregateId: UUID, val errorType: String, val failedAt: DateTime) : SurveySagaUpdateCommand()

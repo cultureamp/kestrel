@@ -1,10 +1,10 @@
 package com.cultureamp.eventsourcing
 
-class CommandGateway<in M: EventMetadata>(private val eventStore: EventStore<M>, private val routes: List<Route<*, *>>) {
+class CommandGateway<in M: EventMetadata>(private val eventStore: EventStore<M>, private val routes: List<Route<*, *, *>>) {
 
-    tailrec fun dispatch(command: Command, metadata: M, retries: Int = 5): Either<CommandError, SuccessStatus> {
+    tailrec fun <E : DomainError> dispatch(command: Command<E>, metadata: M, retries: Int = 5): Result<Either<SystemError, E>, SuccessStatus> {
         val result = createOrUpdate(command, metadata)
-        return if (result is Left && result.error is RetriableError && retries > 0) {
+        return if (isConcurrencyError(result) && retries > 0) {
             Thread.sleep(500L)
             dispatch(command, metadata, retries - 1)
         } else {
@@ -12,29 +12,35 @@ class CommandGateway<in M: EventMetadata>(private val eventStore: EventStore<M>,
         }
     }
 
-    private fun createOrUpdate(command: Command, metadata: M): Either<CommandError, SuccessStatus> {
-        val constructor = constructorFor(command) ?: return Left(NoConstructorForCommand)
+    private fun <E : DomainError> isConcurrencyError(result: Result<Either<SystemError, E>, SuccessStatus>) =
+        result is Failure && result.error is Left && result.error.value is ConcurrencyError
+
+    private fun <E : DomainError> createOrUpdate(command: Command<E>, metadata: M): Result<Either<SystemError, E>, SuccessStatus> {
+        val constructor = constructorFor(command) ?: return Failure(Left(NoConstructorForCommand))
         val events = eventStore.eventsFor(command.aggregateId)
         return if (events.isEmpty()) when (command) {
             is CreationCommand -> constructor.create(command, metadata, eventStore).map { Created }
-            else -> Left(AggregateNotFound)
+            else -> Failure(Left(AggregateNotFound))
         } else when (command) {
             is UpdateCommand -> constructor.update(command, metadata, events, eventStore).map { Updated }
-            else -> Left(AggregateAlreadyExists)
+            else -> Failure(Left(AggregateAlreadyExists))
         }
     }
 
     @Suppress("UNCHECKED_CAST")
-    private fun constructorFor(command: Command): AggregateConstructor<CreationCommand, CreationEvent, DomainError, UpdateCommand, UpdateEvent, Aggregate<UpdateCommand, UpdateEvent, DomainError, *>>? {
+    private fun <E : DomainError> constructorFor(command: Command<E>): AggregateConstructor<CreationCommand<E>, CreationEvent, E, UpdateCommand<E>, UpdateEvent, Aggregate<UpdateCommand<E>, UpdateEvent, E, *>>? {
         val route = routes.find { it.creationCommandClass.isInstance(command) || it.updateCommandClass.isInstance(command) }
-        return route?.aggregateConstructor as AggregateConstructor<CreationCommand, CreationEvent, DomainError, UpdateCommand, UpdateEvent, Aggregate<UpdateCommand, UpdateEvent, DomainError, *>>?
+        return route?.aggregateConstructor as AggregateConstructor<CreationCommand<E>, CreationEvent, E, UpdateCommand<E>, UpdateEvent, Aggregate<UpdateCommand<E>, UpdateEvent, E, *>>?
     }
+
 }
 
 sealed class SuccessStatus
 object Created : SuccessStatus()
 object Updated : SuccessStatus()
 
-object NoConstructorForCommand : CommandError
-object AggregateAlreadyExists : CommandError
-object AggregateNotFound : CommandError
+sealed class SystemError : CommandError
+object NoConstructorForCommand : SystemError()
+object AggregateAlreadyExists : SystemError()
+object AggregateNotFound : SystemError()
+object ConcurrencyError : SystemError()

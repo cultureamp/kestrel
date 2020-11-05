@@ -57,8 +57,8 @@ class RelationalDatabaseEventStoreTest : DescribeSpec({
             val events = listOf(firstPizzaCreated, firstPizzaEaten)
             val otherEvents = listOf(secondPizzaCreated)
 
-            store.sink(events, aggregateId, "pizza") shouldBe Right(Unit)
-            store.sink(otherEvents, otherAggregateId, "pizza") shouldBe Right(Unit)
+            store.sink(events, aggregateId, "pizza") shouldBe Success(Unit)
+            store.sink(otherEvents, otherAggregateId, "pizza") shouldBe Success(Unit)
 
             store.eventsFor(aggregateId) shouldBe events
             store.eventsFor(otherAggregateId) shouldBe otherEvents
@@ -77,7 +77,7 @@ class RelationalDatabaseEventStoreTest : DescribeSpec({
             )
 
             store.lastSequence() shouldBe 0
-            store.sink(events, aggregateId, "pizza") shouldBe Right(Unit)
+            store.sink(events, aggregateId, "pizza") shouldBe Success(Unit)
             store.lastSequence() shouldBe 3
         }
 

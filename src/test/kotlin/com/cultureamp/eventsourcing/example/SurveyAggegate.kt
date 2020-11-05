@@ -8,11 +8,11 @@ data class SurveyAggregate(val name: Map<Locale, String>, val accountId: UUID, v
     constructor(event: Created): this(event.name, event.accountId)
 
     companion object {
-        fun create(query: SurveyNamesQuery, command: SurveyCreationCommand): Either<SurveyError, Created> {
+        fun create(query: SurveyNamesQuery, command: SurveyCreationCommand): Result<SurveyError, Created> {
             return when (command) {
                 is CreateSurvey -> when {
-                    command.name.any { (locale, name) -> query.nameExistsFor(command.accountId, name, locale)} -> Left(SurveyNameNotUnique)
-                    else -> Right(Created(command.name, command.accountId, command.createdAt))
+                    command.name.any { (locale, name) -> query.nameExistsFor(command.accountId, name, locale)} -> Failure(SurveyNameNotUnique)
+                    else -> Success(Created(command.name, command.accountId, command.createdAt))
                 }
             }
         }
@@ -24,25 +24,25 @@ data class SurveyAggregate(val name: Map<Locale, String>, val accountId: UUID, v
         is Restored -> this.copy(deleted = false)
     }
 
-    fun update(query: SurveyNamesQuery, command: SurveyUpdateCommand): Either<SurveyError, List<SurveyUpdateEvent>> = when (command) {
+    fun update(query: SurveyNamesQuery, command: SurveyUpdateCommand): Result<SurveyError, List<SurveyUpdateEvent>> = when (command) {
         is Rename -> when {
-            name.get(command.locale) == command.newName -> Left(AlreadyRenamed)
-            query.nameExistsFor(accountId, command.newName, command.locale) -> Left(SurveyNameNotUnique)
-            else -> Right.list(Renamed(command.newName, command.locale, command.renamedAt))
+            name.get(command.locale) == command.newName -> Failure(AlreadyRenamed)
+            query.nameExistsFor(accountId, command.newName, command.locale) -> Failure(SurveyNameNotUnique)
+            else -> Success.list(Renamed(command.newName, command.locale, command.renamedAt))
         }
         is Delete -> when (deleted) {
-            true -> Left(AlreadyDeleted)
-            false -> Right.list(Deleted(command.deletedAt))
+            true -> Failure(AlreadyDeleted)
+            false -> Success.list(Deleted(command.deletedAt))
         }
         is Restore -> when (deleted) {
-            true -> Right.list(Restored(command.restoredAt))
-            false -> Left(NotDeleted)
+            true -> Success.list(Restored(command.restoredAt))
+            false -> Failure(NotDeleted)
         }
     }
 }
 
-sealed class SurveyCommand : Command
-sealed class SurveyCreationCommand : SurveyCommand(), CreationCommand
+sealed class SurveyCommand : Command<SurveyError>
+sealed class SurveyCreationCommand : SurveyCommand(), CreationCommand<SurveyError>
 data class CreateSurvey(
     override val aggregateId: UUID,
     val surveyCaptureLayoutAggregateId: UUID,
@@ -50,7 +50,7 @@ data class CreateSurvey(
     val accountId: UUID,
     val createdAt: DateTime
 ) : SurveyCreationCommand()
-sealed class SurveyUpdateCommand : SurveyCommand(), UpdateCommand
+sealed class SurveyUpdateCommand : SurveyCommand(), UpdateCommand<SurveyError>
 data class Rename(override val aggregateId: UUID, val newName: String, val locale: Locale, val renamedAt: DateTime) : SurveyUpdateCommand()
 data class Delete(override val aggregateId: UUID, val deletedAt: DateTime) : SurveyUpdateCommand()
 data class Restore(override val aggregateId: UUID, val restoredAt: DateTime) : SurveyUpdateCommand()

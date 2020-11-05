@@ -18,8 +18,8 @@ data class SurveyCaptureLayoutAggregate(
             is Snapshot -> with(event) { SurveyCaptureLayoutAggregate(sectionsForIntendedPurpose, demographicSectionsPlacement, questions) }
         }
 
-        fun create(command: SurveyCaptureLayoutCreationCommand): Either<SurveyCaptureLayoutCommandError, Generated> = when (command) {
-            is Generate -> with(command) { Right(Generated(surveyId, generatedAt)) }
+        fun create(command: SurveyCaptureLayoutCreationCommand): Result<SurveyCaptureLayoutCommandError, Generated> = when (command) {
+            is Generate -> with(command) { Success(Generated(surveyId, generatedAt)) }
         }
     }
 
@@ -81,73 +81,73 @@ data class SurveyCaptureLayoutAggregate(
         }
     }
 
-    fun update(command: SurveyCaptureLayoutUpdateCommand): Either<SurveyCaptureLayoutCommandError, List<SurveyCaptureLayoutUpdateEvent>> = when (command) {
+    fun update(command: SurveyCaptureLayoutUpdateCommand): Result<SurveyCaptureLayoutCommandError, List<SurveyCaptureLayoutUpdateEvent>> = when (command) {
         is AddSection -> when {
-            hasSection(command.sectionId) -> Left(SectionAlreadyAdded)
-            hasSectionCode(command.code) -> Left(SectionCodeNotUnique)
-            command.positionedAfterSectionId != null && sectionFor(command.positionedAfterSectionId).intendedPurpose != command.intendedPurpose -> Left(SectionHasDifferentIntendedPurpose)
-            else -> with(command) { Right.list(SectionAdded(sectionId, name, shortDescription, longDescription, intendedPurpose, code, positionedAfterSectionId, addedAt)) }
+            hasSection(command.sectionId) -> Failure(SectionAlreadyAdded)
+            hasSectionCode(command.code) -> Failure(SectionCodeNotUnique)
+            command.positionedAfterSectionId != null && sectionFor(command.positionedAfterSectionId).intendedPurpose != command.intendedPurpose -> Failure(SectionHasDifferentIntendedPurpose)
+            else -> with(command) { Success.list(SectionAdded(sectionId, name, shortDescription, longDescription, intendedPurpose, code, positionedAfterSectionId, addedAt)) }
         }
         is MoveSection -> if (command.positionedAfterSectionId != null) when {
-            !hasSection(command.sectionId) || !hasSection(command.positionedAfterSectionId) -> Left(SectionNotFound)
-            indexOf(command.sectionId) == indexOf(command.positionedAfterSectionId) + 1 -> Left(SectionAlreadyMoved)
-            sectionFor(command.sectionId).intendedPurpose != sectionFor(command.positionedAfterSectionId).intendedPurpose -> Left(SectionHasDifferentIntendedPurpose)
-            else -> with(command) { Right.list(SectionMoved(sectionId, positionedAfterSectionId, movedAt)) }
+            !hasSection(command.sectionId) || !hasSection(command.positionedAfterSectionId) -> Failure(SectionNotFound)
+            indexOf(command.sectionId) == indexOf(command.positionedAfterSectionId) + 1 -> Failure(SectionAlreadyMoved)
+            sectionFor(command.sectionId).intendedPurpose != sectionFor(command.positionedAfterSectionId).intendedPurpose -> Failure(SectionHasDifferentIntendedPurpose)
+            else -> with(command) { Success.list(SectionMoved(sectionId, positionedAfterSectionId, movedAt)) }
         } else when {
-            !hasSection(command.sectionId) -> Left(SectionNotFound)
-            indexOf(command.sectionId) == 0 -> Left(SectionAlreadyMoved)
-            else -> with(command) { Right.list(SectionMoved(sectionId, positionedAfterSectionId, movedAt)) }
+            !hasSection(command.sectionId) -> Failure(SectionNotFound)
+            indexOf(command.sectionId) == 0 -> Failure(SectionAlreadyMoved)
+            else -> with(command) { Success.list(SectionMoved(sectionId, positionedAfterSectionId, movedAt)) }
         }
         is RemoveSection -> when {
-            !hasSection(command.sectionId) -> Left(SectionNotFound)
-            sectionFor(command.sectionId).status == Status.removed -> Left(SectionAlreadyRemoved)
-            else -> with(command) { Right.list(SectionRemoved(sectionId, removedAt)) }
+            !hasSection(command.sectionId) -> Failure(SectionNotFound)
+            sectionFor(command.sectionId).status == Status.removed -> Failure(SectionAlreadyRemoved)
+            else -> with(command) { Success.list(SectionRemoved(sectionId, removedAt)) }
         }
         is RestoreSection -> when {
-            !hasSection(command.sectionId) -> Left(SectionNotFound)
-            sectionFor(command.sectionId).status == Status.active -> Left(SectionAlreadyRestored)
-            else -> with(command) { Right.list(SectionRestored(sectionId, restoredAt)) }
+            !hasSection(command.sectionId) -> Failure(SectionNotFound)
+            sectionFor(command.sectionId).status == Status.active -> Failure(SectionAlreadyRestored)
+            else -> with(command) { Success.list(SectionRestored(sectionId, restoredAt)) }
         }
         is RenameSection -> when {
-            !hasSection(command.sectionId) -> Left(SectionNotFound)
-            sectionFor(command.sectionId).name[command.locale] == command.name -> Left(RenameAlreadyActioned)
-            else -> with(command) { Right.list(SectionRenamed(sectionId, name, locale, renamedAt)) }
+            !hasSection(command.sectionId) -> Failure(SectionNotFound)
+            sectionFor(command.sectionId).name[command.locale] == command.name -> Failure(RenameAlreadyActioned)
+            else -> with(command) { Success.list(SectionRenamed(sectionId, name, locale, renamedAt)) }
         }
         is ChangeSectionShortDescription -> when {
-            !hasSection(command.sectionId) -> Left(SectionNotFound)
-            sectionFor(command.sectionId).shortDescription[command.locale] == command.text -> Left(ShortDescriptionAlreadyChanged)
-            else -> with(command) { Right.list(SectionShortDescriptionChanged(sectionId, text, locale, changedAt)) }
+            !hasSection(command.sectionId) -> Failure(SectionNotFound)
+            sectionFor(command.sectionId).shortDescription[command.locale] == command.text -> Failure(ShortDescriptionAlreadyChanged)
+            else -> with(command) { Success.list(SectionShortDescriptionChanged(sectionId, text, locale, changedAt)) }
         }
         is ChangeSectionLongDescription -> when {
-            !hasSection(command.sectionId) -> Left(SectionNotFound)
-            sectionFor(command.sectionId).longDescription[command.locale] == command.text -> Left(LongDescriptionAlreadyChanged)
-            else -> with(command) { Right.list(SectionLongDescriptionChanged(sectionId, text, locale, changedAt)) }
+            !hasSection(command.sectionId) -> Failure(SectionNotFound)
+            sectionFor(command.sectionId).longDescription[command.locale] == command.text -> Failure(LongDescriptionAlreadyChanged)
+            else -> with(command) { Success.list(SectionLongDescriptionChanged(sectionId, text, locale, changedAt)) }
         }
         is RemoveSectionDescriptions -> when {
-            !hasSection(command.sectionId) -> Left(SectionNotFound)
-            sectionFor(command.sectionId).let { it.shortDescription.isEmpty() || it.longDescription.isEmpty()} -> Left(SectionDescriptionsAlreadyRemoved)
-            else -> with(command) { Right.list(SectionDescriptionsRemoved(sectionId, removedAt)) }
+            !hasSection(command.sectionId) -> Failure(SectionNotFound)
+            sectionFor(command.sectionId).let { it.shortDescription.isEmpty() || it.longDescription.isEmpty()} -> Failure(SectionDescriptionsAlreadyRemoved)
+            else -> with(command) { Success.list(SectionDescriptionsRemoved(sectionId, removedAt)) }
         }
         is PositionQuestion -> if (command.positionedAfterQuestionId != null) when {
-            !hasSection(command.sectionId) -> Left(SectionNotFound)
-            !questionExistsInSection(command.positionedAfterQuestionId) -> Left(QuestionNotFound)
-            sectionFor(command.sectionId) != sectionForQuestionId(command.positionedAfterQuestionId) -> Left(PositionedAfterQuestionInWrongSection)
-            sectionFor(command.sectionId).questions.let { it.indexOf(command.questionId) == it.indexOf(command.positionedAfterQuestionId) + 1 } -> Left(QuestionAlreadyInPosition)
-            else -> with(command) { Right.list(QuestionPositioned(questionId, positionedAfterQuestionId, sectionId, positionedAt)) }
+            !hasSection(command.sectionId) -> Failure(SectionNotFound)
+            !questionExistsInSection(command.positionedAfterQuestionId) -> Failure(QuestionNotFound)
+            sectionFor(command.sectionId) != sectionForQuestionId(command.positionedAfterQuestionId) -> Failure(PositionedAfterQuestionInWrongSection)
+            sectionFor(command.sectionId).questions.let { it.indexOf(command.questionId) == it.indexOf(command.positionedAfterQuestionId) + 1 } -> Failure(QuestionAlreadyInPosition)
+            else -> with(command) { Success.list(QuestionPositioned(questionId, positionedAfterQuestionId, sectionId, positionedAt)) }
         } else when {
-            !hasSection(command.sectionId) -> Left(SectionNotFound)
-            sectionFor(command.sectionId).questions.firstOrNull() == command.questionId -> Left(QuestionAlreadyInPosition)
-            else -> with(command) { Right.list(QuestionPositioned(questionId, positionedAfterQuestionId, sectionId, positionedAt)) }
+            !hasSection(command.sectionId) -> Failure(SectionNotFound)
+            sectionFor(command.sectionId).questions.firstOrNull() == command.questionId -> Failure(QuestionAlreadyInPosition)
+            else -> with(command) { Success.list(QuestionPositioned(questionId, positionedAfterQuestionId, sectionId, positionedAt)) }
         }
         is PositionDemographicSections -> when(command.placement) {
-            demographicSectionsPlacement -> Left(DemographicSectionsAlreadyPositioned)
-            top -> with(command) { Right.list(DemographicSectionsPositionedAtTop(positionedAt)) }
-            bottom -> with(command) { Right.list(DemographicSectionsPositionedAtTop(positionedAt)) }
+            demographicSectionsPlacement -> Failure(DemographicSectionsAlreadyPositioned)
+            top -> with(command) { Success.list(DemographicSectionsPositionedAtTop(positionedAt)) }
+            bottom -> with(command) { Success.list(DemographicSectionsPositionedAtTop(positionedAt)) }
         }
         is HideQuestionFromCapture -> when {
-            !questions.contains(command.questionId) -> Left(QuestionNotFound)
-            !questionExistsInSection(command.questionId) -> Left(QuestionAlreadyRemovedFromSection)
-            else -> with(command) { Right.list(QuestionHiddenFromCapture(questionId, hiddenAt)) }
+            !questions.contains(command.questionId) -> Failure(QuestionNotFound)
+            !questionExistsInSection(command.questionId) -> Failure(QuestionAlreadyRemovedFromSection)
+            else -> with(command) { Success.list(QuestionHiddenFromCapture(questionId, hiddenAt)) }
         }
     }
 
@@ -213,12 +213,12 @@ enum class Status {
     active, removed
 }
 
-sealed class SurveyCaptureLayoutCommand : Command
+sealed class SurveyCaptureLayoutCommand : Command<SurveyCaptureLayoutCommandError>
 
-sealed class SurveyCaptureLayoutCreationCommand : SurveyCaptureLayoutCommand(), CreationCommand
+sealed class SurveyCaptureLayoutCreationCommand : SurveyCaptureLayoutCommand(), CreationCommand<SurveyCaptureLayoutCommandError>
 data class Generate(override val aggregateId: UUID, val surveyId: UUID, val generatedAt: DateTime) : SurveyCaptureLayoutCreationCommand()
 
-sealed class SurveyCaptureLayoutUpdateCommand : SurveyCaptureLayoutCommand(), UpdateCommand
+sealed class SurveyCaptureLayoutUpdateCommand : SurveyCaptureLayoutCommand(), UpdateCommand<SurveyCaptureLayoutCommandError>
 data class AddSection(
     override val aggregateId: UUID,
     val sectionId: UUID,
@@ -418,14 +418,17 @@ object LongDescriptionAlreadyChanged : SurveyCaptureLayoutCommandError(), Alread
 object InvalidOrderForSections : SurveyCaptureLayoutCommandError()
 object InvalidSectionId : SurveyCaptureLayoutCommandError()
 object RenameAlreadyActioned : SurveyCaptureLayoutCommandError(), AlreadyActionedCommandError
-object SectionAlreadyAdded : SurveyCaptureLayoutCommandError(), AlreadyActionedCommandError
-object SectionAlreadyMoved : SurveyCaptureLayoutCommandError(), AlreadyActionedCommandError
-object SectionAlreadyRemoved : SurveyCaptureLayoutCommandError(), AlreadyActionedCommandError
-object SectionAlreadyRestored : SurveyCaptureLayoutCommandError(), AlreadyActionedCommandError
-object SectionCodeNotUnique : SurveyCaptureLayoutCommandError()
-object SectionDescriptionsAlreadyRemoved : SurveyCaptureLayoutCommandError(), AlreadyActionedCommandError
-object SectionNotFound : SurveyCaptureLayoutCommandError()
-object SectionHasDifferentIntendedPurpose : SurveyCaptureLayoutCommandError()
+
+sealed class SectionError : SurveyCaptureLayoutCommandError()
+object SectionAlreadyAdded : SectionError(), AlreadyActionedCommandError
+object SectionAlreadyMoved : SectionError(), AlreadyActionedCommandError
+object SectionAlreadyRemoved : SectionError(), AlreadyActionedCommandError
+object SectionAlreadyRestored : SectionError(), AlreadyActionedCommandError
+object SectionCodeNotUnique : SectionError()
+object SectionDescriptionsAlreadyRemoved : SectionError(), AlreadyActionedCommandError
+object SectionNotFound : SectionError()
+object SectionHasDifferentIntendedPurpose : SectionError()
+
 object QuestionAlreadyInPosition : SurveyCaptureLayoutCommandError(), AlreadyActionedCommandError
 object QuestionNotFound : SurveyCaptureLayoutCommandError()
 object QuestionAlreadyRemovedFromSection : SurveyCaptureLayoutCommandError(), AlreadyActionedCommandError

@@ -5,10 +5,10 @@ import com.cultureamp.eventsourcing.CreationCommand
 import com.cultureamp.eventsourcing.CreationEvent
 import com.cultureamp.eventsourcing.DomainError
 import com.cultureamp.eventsourcing.DomainEvent
-import com.cultureamp.eventsourcing.Either
+import com.cultureamp.eventsourcing.Result
 import com.cultureamp.eventsourcing.EventMetadata
-import com.cultureamp.eventsourcing.Left
-import com.cultureamp.eventsourcing.Right
+import com.cultureamp.eventsourcing.Failure
+import com.cultureamp.eventsourcing.Success
 import com.cultureamp.eventsourcing.UpdateCommand
 import com.cultureamp.eventsourcing.UpdateEvent
 import com.fasterxml.jackson.annotation.JsonInclude
@@ -41,11 +41,11 @@ enum class PizzaStyle {
     HAWAIIAN
 }
 
-sealed class PizzaCommand : Command
+sealed class PizzaCommand : Command<PizzaError>
 
-sealed class PizzaCreationCommand : PizzaCommand(), CreationCommand
+sealed class PizzaCreationCommand : PizzaCommand(), CreationCommand<PizzaError>
 
-sealed class PizzaUpdateCommand : PizzaCommand(), UpdateCommand
+sealed class PizzaUpdateCommand : PizzaCommand(), UpdateCommand<PizzaError>
 
 data class AddTopping(override val aggregateId: UUID, val topping: PizzaTopping) : PizzaUpdateCommand()
 data class EatPizza(override val aggregateId: UUID) : PizzaUpdateCommand()
@@ -94,10 +94,10 @@ data class PizzaAggregate(val baseStyle: PizzaStyle, val toppings: List<PizzaTop
         }
 
 
-        fun create(command: PizzaCreationCommand): Either<PizzaError, PizzaCreated> = when (command) {
+        fun create(command: PizzaCreationCommand): Result<PizzaError, PizzaCreated> = when (command) {
             is CreateClassicPizza -> {
                 val initialToppings = classicToppings(command.baseStyle)
-                Right(
+                Success(
                     PizzaCreated(
                         command.baseStyle,
                         initialToppings
@@ -107,15 +107,15 @@ data class PizzaAggregate(val baseStyle: PizzaStyle, val toppings: List<PizzaTop
         }
     }
 
-    fun update(command: PizzaUpdateCommand): Either<PizzaError, List<PizzaUpdateEvent>> {
+    fun update(command: PizzaUpdateCommand): Result<PizzaError, List<PizzaUpdateEvent>> {
         return when (isEaten) {
-            true -> Left(PizzaAlreadyEaten())
+            true -> Failure(PizzaAlreadyEaten())
             false -> when (command) {
                 is AddTopping -> when (toppings.contains(command.topping)) {
-                    true -> Left(ToppingAlreadyPresent())
-                    false -> Right(listOf(PizzaToppingAdded(command.topping)))
+                    true -> Failure(ToppingAlreadyPresent())
+                    false -> Success(listOf(PizzaToppingAdded(command.topping)))
                 }
-                is EatPizza -> Right(listOf(PizzaEaten()))
+                is EatPizza -> Success(listOf(PizzaEaten()))
             }
         }
     }

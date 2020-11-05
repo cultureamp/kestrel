@@ -5,28 +5,28 @@ import org.joda.time.DateTime
 import java.util.*
 
 object PaymentSagaAggregate {
-    fun create(command: StartPaymentSaga): Either<DomainError, PaymentSagaStarted> = with(command) {
-        Right(PaymentSagaStarted(fromUserId, toUserBankDetails, dollarAmount, DateTime()))
+    fun create(command: StartPaymentSaga): Result<DomainError, PaymentSagaStarted> = with(command) {
+        Success(PaymentSagaStarted(fromUserId, toUserBankDetails, dollarAmount, DateTime()))
     }
 
-    fun update(command: PaymentSagaUpdateCommand): Either<DomainError, List<PaymentSagaUpdateEvent>> = when (command) {
-        is StartThirdPartyPayment -> Right.list(StartedThirdPartyPayment(command.startedAt))
-        is RegisterThirdPartySuccess -> Right.list(FinishedThirdPartyPayment(DateTime()))
-        is RegisterThirdPartyFailure -> Right.list(FailedThirdPartyPayment(DateTime()))
-        is StartThirdPartyEmailNotification -> Right.list(StartedThirdPartyEmailNotification(command.message, command.startedAt))
+    fun update(command: PaymentSagaUpdateCommand): Result<DomainError, List<PaymentSagaUpdateEvent>> = when (command) {
+        is StartThirdPartyPayment -> Success.list(StartedThirdPartyPayment(command.startedAt))
+        is RegisterThirdPartySuccess -> Success.list(FinishedThirdPartyPayment(DateTime()))
+        is RegisterThirdPartyFailure -> Success.list(FailedThirdPartyPayment(DateTime()))
+        is StartThirdPartyEmailNotification -> Success.list(StartedThirdPartyEmailNotification(command.message, command.startedAt))
     }
 }
 
-sealed class PaymentSagaCommand : Command
+sealed class PaymentSagaCommand : Command<DomainError>
 
 data class StartPaymentSaga(
     override val aggregateId: UUID,
     val fromUserId: UUID,
     val toUserBankDetails: String,
     val dollarAmount: Int
-) : PaymentSagaCommand(), CreationCommand
+) : PaymentSagaCommand(), CreationCommand<DomainError>
 
-sealed class PaymentSagaUpdateCommand : PaymentSagaCommand(), UpdateCommand
+sealed class PaymentSagaUpdateCommand : PaymentSagaCommand(), UpdateCommand<DomainError>
 data class StartThirdPartyPayment(override val aggregateId: UUID, val startedAt: DateTime) : PaymentSagaUpdateCommand()
 data class StartThirdPartyEmailNotification(override val aggregateId: UUID, val message: String, val startedAt: DateTime) : PaymentSagaUpdateCommand()
 data class RegisterThirdPartySuccess(override val aggregateId: UUID) : PaymentSagaUpdateCommand()

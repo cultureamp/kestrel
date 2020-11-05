@@ -10,8 +10,8 @@ data class ParticipantAggregate(val state: State) {
         @Suppress("UNUSED_PARAMETER")
         fun created(event: Invited): ParticipantAggregate = ParticipantAggregate(INVITED)
 
-        fun create(command: Invite): Either<ParticipantError, Invited> = with(command) {
-            Right(Invited(surveyPeriodId, employeeId, invitedAt))
+        fun create(command: Invite): Result<ParticipantError, Invited> = with(command) {
+            Success(Invited(surveyPeriodId, employeeId, invitedAt))
         }
     }
 
@@ -21,17 +21,17 @@ data class ParticipantAggregate(val state: State) {
         is Reinvited -> this.copy(state = INVITED)
     }
 
-    fun update(command: ParticipantUpdateCommand): Either<ParticipantError, List<ParticipantUpdateEvent>> =
+    fun update(command: ParticipantUpdateCommand): Result<ParticipantError, List<ParticipantUpdateEvent>> =
         when (command) {
             is Invite -> when (state) {
-                INVITED -> Left(AlreadyInvitedException)
-                UNINVITED -> with(command) { Right.list(Reinvited(invitedAt)) }
+                INVITED -> Failure(AlreadyInvitedException)
+                UNINVITED -> with(command) { Success.list(Reinvited(invitedAt)) }
             }
             is Uninvite -> when (state) {
-                UNINVITED -> Left(AlreadyUninvitedException)
-                INVITED -> Right.list(Uninvited(command.uninvitedAt))
+                UNINVITED -> Failure(AlreadyUninvitedException)
+                INVITED -> Success.list(Uninvited(command.uninvitedAt))
             }
-            is Reinvite -> Right.list(Reinvited(command.reinvitedAt))
+            is Reinvite -> Success.list(Reinvited(command.reinvitedAt))
         }
 
 }
@@ -40,14 +40,14 @@ enum class State {
     INVITED, UNINVITED
 }
 
-sealed class ParticipantCommand : Command
-sealed class ParticipantUpdateCommand : ParticipantCommand(), UpdateCommand
+sealed class ParticipantCommand : Command<ParticipantError>
+sealed class ParticipantUpdateCommand : ParticipantCommand(), UpdateCommand<ParticipantError>
 data class Invite(
     override val aggregateId: UUID,
     val surveyPeriodId: UUID,
     val employeeId: UUID,
     val invitedAt: DateTime
-) : ParticipantUpdateCommand(), CreationCommand
+) : ParticipantUpdateCommand(), CreationCommand<ParticipantError>
 
 data class Uninvite(override val aggregateId: UUID, val uninvitedAt: DateTime) : ParticipantUpdateCommand()
 data class Reinvite(override val aggregateId: UUID, val reinvitedAt: DateTime) : ParticipantUpdateCommand()

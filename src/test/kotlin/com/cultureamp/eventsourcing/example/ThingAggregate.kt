@@ -7,19 +7,19 @@ import com.cultureamp.eventsourcing.CreationCommand
 import com.cultureamp.eventsourcing.CreationEvent
 import com.cultureamp.eventsourcing.DomainError
 import com.cultureamp.eventsourcing.DomainEvent
-import com.cultureamp.eventsourcing.Either
-import com.cultureamp.eventsourcing.Left
-import com.cultureamp.eventsourcing.Right
+import com.cultureamp.eventsourcing.Result
+import com.cultureamp.eventsourcing.Failure
+import com.cultureamp.eventsourcing.Success
 import com.cultureamp.eventsourcing.UpdateCommand
 import com.cultureamp.eventsourcing.UpdateEvent
 import java.util.*
 
-sealed class ThingCommand : Command
+sealed class ThingCommand : Command<ThingError>
 
-sealed class ThingCreationCommand : ThingCommand(), CreationCommand
+sealed class ThingCreationCommand : ThingCommand(), CreationCommand<ThingError>
 data class CreateThing(override val aggregateId: UUID) : ThingCreationCommand()
 
-sealed class ThingUpdateCommand : ThingCommand(), UpdateCommand
+sealed class ThingUpdateCommand : ThingCommand(), UpdateCommand<ThingError>
 data class Tweak(override val aggregateId: UUID, val tweak: String) : ThingUpdateCommand()
 data class Bop(override val aggregateId: UUID) : ThingUpdateCommand()
 data class Explode(override val aggregateId: UUID) : ThingUpdateCommand()
@@ -50,8 +50,8 @@ data class ThingAggregate(val tweaks: List<String> = emptyList(), val bops: List
             is ThingCreated -> ThingAggregate()
         }
 
-        override fun create(projection: ThingCommandProjection, command: ThingCreationCommand): Either<ThingError, ThingCreationEvent> = when(command){
-            is CreateThing -> Right(ThingCreated)
+        override fun create(projection: ThingCommandProjection, command: ThingCreationCommand): Result<ThingError, ThingCreationEvent> = when(command){
+            is CreateThing -> Success(ThingCreated)
         }
     }
 
@@ -60,13 +60,13 @@ data class ThingAggregate(val tweaks: List<String> = emptyList(), val bops: List
         is Bopped -> this.copy(bops = bops + event)
     }
 
-    override fun update(projection: ThingCommandProjection, command: ThingUpdateCommand): Either<ThingError, List<ThingUpdateEvent>> = when(command) {
-        is Tweak -> Right.list(Tweaked(command.tweak))
+    override fun update(projection: ThingCommandProjection, command: ThingUpdateCommand): Result<ThingError, List<ThingUpdateEvent>> = when(command) {
+        is Tweak -> Success.list(Tweaked(command.tweak))
         is Bop -> when(projection.isBoppable()) {
-            false -> Left(Unboppable)
-            true -> Right.list(Bopped)
+            false -> Failure(Unboppable)
+            true -> Success.list(Bopped)
         }
-        is Explode -> Left(Expoded)
+        is Explode -> Failure(Expoded)
     }
 
     override fun aggregateType() = "thing"

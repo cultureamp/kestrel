@@ -56,7 +56,7 @@ class RelationalDatabaseEventStore<M: EventMetadata> @PublishedApi internal cons
     }
 
 
-    override fun sink(newEvents: List<Event<M>>, aggregateId: UUID, aggregateType: String): Either<CommandError, Unit> {
+    override fun sink(newEvents: List<Event<M>>, aggregateId: UUID, aggregateType: String): Result<ConcurrencyError, Unit> {
         return try {
             return transaction(db) {
                 newEvents.forEach { event ->
@@ -77,11 +77,11 @@ class RelationalDatabaseEventStore<M: EventMetadata> @PublishedApi internal cons
                 }
 
                 updateSynchronousProjections(newEvents)
-                Right(Unit)
+                Success(Unit)
             }
         } catch (e: ExposedSQLException) {
             if (e.message.orEmpty().contains("violates unique constraint")) {
-                Left(ConcurrencyError)
+                Failure(ConcurrencyError)
             } else {
                 throw e
             }
@@ -218,5 +218,3 @@ class Events(jsonb: Table.(String) -> Column<String>) : Table() {
 }
 
 private fun Table.nonUniqueIndex(vararg columns: Column<*>) = index(false, *columns)
-
-object ConcurrencyError : RetriableError

@@ -46,7 +46,7 @@ data class SimpleThingAggregate(val tweaks: List<String> = emptyList(), val boop
         }
 
         override fun create(command: SimpleThingCreationCommand) = when(command){
-            is CreateSimpleThing -> Right(SimpleThingCreated)
+            is CreateSimpleThing -> Success(SimpleThingCreated)
         }
     }
 
@@ -56,9 +56,9 @@ data class SimpleThingAggregate(val tweaks: List<String> = emptyList(), val boop
     }
 
     override fun update(command: SimpleThingUpdateCommand) = when(command) {
-        is Twerk -> Right.list(Twerked(command.tweak))
-        is Boop -> Right.list(Booped)
-        is Bang -> Left(Banged)
+        is Twerk -> Success.list(Twerked(command.tweak))
+        is Boop -> Success.list(Booped)
+        is Bang -> Failure(Banged)
     }
 }
 ```
@@ -99,8 +99,8 @@ data class SurveyAggregate(val name: Map<Locale, String>, val accountId: UUID, v
         fun create(query: SurveyNamesQuery, command: SurveyCreationCommand): Either<SurveyError, Created> {
             return when (command) {
                 is CreateSurvey -> when {
-                    command.name.any { (locale, name) -> query.nameExistsFor(command.accountId, name, locale)} -> Left(SurveyNameNotUnique)
-                    else -> Right(Created(command.name, command.accountId, command.createdAt))
+                    command.name.any { (locale, name) -> query.nameExistsFor(command.accountId, name, locale)} -> Failure(SurveyNameNotUnique)
+                    else -> Success(Created(command.name, command.accountId, command.createdAt))
                 }
             }
         }
@@ -114,17 +114,17 @@ data class SurveyAggregate(val name: Map<Locale, String>, val accountId: UUID, v
 
     fun update(query: SurveyNamesQuery, command: SurveyUpdateCommand): Either<SurveyError, List<SurveyUpdateEvent>> = when (command) {
         is Rename -> when {
-            name.get(command.locale) == command.newName -> Left(AlreadyRenamed)
-            query.nameExistsFor(accountId, command.newName, command.locale) -> Left(SurveyNameNotUnique)
-            else -> Right.list(Renamed(command.newName, command.locale, command.renamedAt))
+            name.get(command.locale) == command.newName -> Failure(AlreadyRenamed)
+            query.nameExistsFor(accountId, command.newName, command.locale) -> Failure(SurveyNameNotUnique)
+            else -> Success.list(Renamed(command.newName, command.locale, command.renamedAt))
         }
         is Delete -> when (deleted) {
-            true -> Left(AlreadyDeleted)
-            false -> Right.list(Deleted(command.deletedAt))
+            true -> Failure(AlreadyDeleted)
+            false -> Success.list(Deleted(command.deletedAt))
         }
         is Restore -> when (deleted) {
-            true -> Right.list(Restored(command.restoredAt))
-            false -> Left(NotDeleted)
+            true -> Success.list(Restored(command.restoredAt))
+            false -> Failure(NotDeleted)
         }
     }
 }
@@ -151,14 +151,14 @@ can model that too:
 ```kotlin
 object PaymentSagaAggregate {
     fun create(command: StartPaymentSaga): Either<DomainError, PaymentSagaStarted> = with(command) {
-        Right(PaymentSagaStarted(fromUserId, toUserBankDetails, dollarAmount, DateTime()))
+        Success(PaymentSagaStarted(fromUserId, toUserBankDetails, dollarAmount, DateTime()))
     }
 
     fun update(command: PaymentSagaUpdateCommand): Either<DomainError, List<PaymentSagaUpdateEvent>> = when (command) {
-        is StartThirdPartyPayment -> Right.list(StartedThirdPartyPayment(command.startedAt))
-        is RegisterThirdPartySuccess -> Right.list(FinishedThirdPartyPayment(DateTime()))
-        is RegisterThirdPartyFailure -> Right.list(FailedThirdPartyPayment(DateTime()))
-        is StartThirdPartyEmailNotification -> Right.list(StartedThirdPartyEmailNotification(command.message, command.startedAt))
+        is StartThirdPartyPayment -> Success.list(StartedThirdPartyPayment(command.startedAt))
+        is RegisterThirdPartySuccess -> Success.list(FinishedThirdPartyPayment(DateTime()))
+        is RegisterThirdPartyFailure -> Success.list(FailedThirdPartyPayment(DateTime()))
+        is StartThirdPartyEmailNotification -> Success.list(StartedThirdPartyEmailNotification(command.message, command.startedAt))
     }
 }
 ```
