@@ -41,11 +41,18 @@ data class SurveyAggregate(val name: Map<Locale, String>, val accountId: UUID, v
 
 sealed class SurveyCommand : Command
 sealed class SurveyCreationCommand : SurveyCommand(), CreationCommand
-data class CreateSurvey(override val aggregateId: UUID, val surveyCaptureLayoutAggregateId: UUID, val name: Map<Locale, String>, val accountId: UUID, val createdAt: DateTime) : SurveyCreationCommand()
+data class CreateSurvey(
+    override val aggregateId: UUID,
+    val surveyCaptureLayoutAggregateId: UUID,
+    val name: Map<Locale, String>,
+    val accountId: UUID,
+    val createdAt: DateTime
+) : SurveyCreationCommand()
 sealed class SurveyUpdateCommand : SurveyCommand(), UpdateCommand
 data class Rename(override val aggregateId: UUID, val newName: String, val locale: Locale, val renamedAt: DateTime) : SurveyUpdateCommand()
 data class Delete(override val aggregateId: UUID, val deletedAt: DateTime) : SurveyUpdateCommand()
 data class Restore(override val aggregateId: UUID, val restoredAt: DateTime) : SurveyUpdateCommand()
+
 
 sealed class SurveyEvent : DomainEvent
 data class Created(val name: Map<Locale, String>, val accountId: UUID, val createdAt: DateTime) : SurveyEvent(), CreationEvent
