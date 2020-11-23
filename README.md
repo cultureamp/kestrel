@@ -4,13 +4,16 @@ A framework for building event-sourced, CQRS applications in Kotlin.
 
 ## Summary
 
-Event-sourcing is an architectural paradigm wherein application state is modelled and stored as an immutable sequence
-of "semantic" (meaningful domain) events. CQRS, Command/Query Responsibility Segregation, describes a pattern in which 
+Event-sourcing is an architectural paradigm wherein application state is modelled and stored as an immutable sequence of semantic events which are meaningful in your application's domain.
+
+CQRS, Command/Query Responsibility Segregation, describes a pattern in which 
 write (command) actions and read (query) actions are codified in entirely separately classes, models and pathways 
-through your system. Used in tandem, event-sourcing and CQRS provide a powerful and flexible architectural pattern. In
+through your system. 
+
+Used in tandem, event-sourcing and CQRS provide a powerful and flexible architectural pattern. In
 an event-sourced, CQRS system, writes typically happen via an event-centric domain model, also know as "Aggregates", and 
 these changes propagate through to "projections" of those events to be read from by the view side of the application.
-Events are thus considered the source of truth, and projections are 100% disposable and re-buildable off said events.
+Events are thus considered the source of truth, while projections are disposable and can be rebuilt by reprocessing the historical events.
 
 **Kes**trel is a **K**otlin **E**vent-**S**ourcing and CQRS framework that strives for 
 - Minimalism - *lack of boilerplate*
@@ -85,11 +88,11 @@ enum class Locale {
 
 - [**Aggregate**](https://github.com/cultureamp/kotlin-eventsourcing/blob/master/src/main/kotlin/com/cultureamp/eventsourcing/Aggregate.kt) -
 *The domain entity that  commands interact with and to which events happen. All events happen to a "thing" and this is that
-thing, a context in which to group events. A system may have multiple aggregates.*
+thing, a context in which to group events. A system will often have multiple aggregates.*
 - [**Command**](https://github.com/cultureamp/kotlin-eventsourcing/blob/master/src/main/kotlin/com/cultureamp/eventsourcing/Framework.kt) -
 *A request to change the system via an event on an aggregate. May be accepted or denied based on business rules.*
 - [**Event**](https://github.com/cultureamp/kotlin-eventsourcing/blob/master/src/main/kotlin/com/cultureamp/eventsourcing/Framework.kt) -
-*A "semantic" (meaningful domain) event that has happened. Events can't be undone once they have happened, and can't be
+*A "semantic" domain event that has happened. Events can't be undone once they have happened, and can't be
 blocked like commands. Event exist in an immutable event stream and once they exist need to be handled forever. At an 
 implementation detail an `Event` is a wrapper around a `DomainEvent` with additional metadata attached.*
 - [**CommandGateway**](https://github.com/cultureamp/kotlin-eventsourcing/blob/master/src/main/kotlin/com/cultureamp/eventsourcing/CommandGateway.kt) -
@@ -105,7 +108,7 @@ out any irrelevant events from being passed to said projectors or reactors.*
 - **Projector** - *An event processor that merely updates a "projection" of the data. Should always be disposable and 
 re-runnable from the beginning of the event-sequence. Should be built in an [idempotent](https://en.wikipedia.org/wiki/Idempotence)
 fashion since event-sourced systems favour asynchronous, distributed systems where it becomes more and more impossible
-to create perfect transactions. Build these as if they are at-least-once delivery of events.*
+to create perfect transactions. Build these as if they are an at-least-once delivery of events.*
 - **Reactor** - *Like a projector but has side effects, for example sending `Commands` to `Aggregates` via the 
 `CommandGateway`, or sending emails, etc. Best efforts should also be made to make these idempotent and re-runnable from
 the beginning of the event-sequence, although in practice this tends to be difficult.*
