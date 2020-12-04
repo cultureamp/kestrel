@@ -133,11 +133,6 @@ on top of this framework.
 Gradle:
 
 ```
-repositories {
-    maven { url 'https://package-repository.continuous-integration.cultureamp.net/repository/maven-snapshots' }
-    maven { url 'https://package-repository.continuous-integration.cultureamp.net/repository/maven-releases' }
-}
-
 dependencies {
     implementation "com.cultureamp:kestrel:{kestrel_version}"
 }
