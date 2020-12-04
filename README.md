@@ -1,3 +1,5 @@
+<img src="logo/png/Kestrel-Logo_FA-OL-1Kpx.png" width="425" alt="">
+
 # Kestrel (Kotlin Event-Sourcing)
 
 A framework for building event-sourced, CQRS applications in Kotlin.
