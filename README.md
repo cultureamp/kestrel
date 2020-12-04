@@ -13,11 +13,11 @@ write (command) actions and read (query) actions are codified in entirely separa
 through your system. 
 
 Used in tandem, event-sourcing and CQRS provide a powerful and flexible architectural pattern. In
-an event-sourced, CQRS system, writes typically happen via an event-centric domain model, also know as "Aggregates", and 
+an event-sourced, CQRS system, writes typically happen via an event-centric domain model, also known as "Aggregates", and 
 these changes propagate through to "projections" of those events to be read from by the view side of the application.
 Events are thus considered the source of truth, while projections are disposable and can be rebuilt by reprocessing the historical events.
 
-**Kes**trel is a **K**otlin **E**vent-**S**ourcing and CQRS framework that strives for 
+**Kes**trel is a **K**otlin **E**vent-**S**ourcing and CQRS framework that strives for:
 - Minimalism - *lack of boilerplate*
 - Expressiveness - *expressing domain rules well*
 - Robustness - *help you not make mistakes, primarily through strong typing*
@@ -95,14 +95,14 @@ thing, a context in which to group events. A system will often have multiple agg
 *A request to change the system via an event on an aggregate. May be accepted or denied based on business rules.*
 - [**Event**](https://github.com/cultureamp/kotlin-eventsourcing/blob/master/src/main/kotlin/com/cultureamp/eventsourcing/Framework.kt) -
 *A "semantic" domain event that has happened. Events can't be undone once they have happened, and can't be
-blocked like commands. Event exist in an immutable event stream and once they exist need to be handled forever. At an 
+blocked like commands. Events exist in an immutable event stream and once they exist need to be supported forever. At an 
 implementation detail an `Event` is a wrapper around a `DomainEvent` with additional metadata attached.*
 - [**CommandGateway**](https://github.com/cultureamp/kotlin-eventsourcing/blob/master/src/main/kotlin/com/cultureamp/eventsourcing/CommandGateway.kt) -
 *The interface through which commands make their way through to aggregates. It's responsible for routing commands
-to aggregates, and orchestrates the loading and saving aggregates through events and the `EventStore`.*
+to aggregates, and orchestrates the loading and saving of aggregates through events and the `EventStore`.*
 - [**EventStore**](https://github.com/cultureamp/kotlin-eventsourcing/blob/master/src/main/kotlin/com/cultureamp/eventsourcing/EventStore.kt) -
 *Implements two interfaces, an `EventSink`, for saving events for aggregates, and an `EventSource`, for retrieving those
-events. In general, the Event Store should only ever be written to via the `CommandGateway` and read from via an 
+events. In general, the event store should only ever be written to via the `CommandGateway` and read from via an 
 `EventProcessor`. Kestrel provides support for a postgres backed event store out of the box.*
 - [**EventProcessor**](https://github.com/cultureamp/kotlin-eventsourcing/blob/master/src/main/kotlin/com/cultureamp/eventsourcing/EventProcessor.kt) -
 *Provides an abstraction over any event-processor, for example a `Projector` or a `Reactor`. This takes care of filtering
@@ -127,7 +127,7 @@ stream.*
 
 ### Sample App
 
-See the [sample app](https://github.com/cultureamp/kotlin-es-sample-service) for an example of create a web-app built
+See the [sample app](https://github.com/cultureamp/kotlin-es-sample-service) for an example of creating a web-app built
 on top of this framework.
 
 ### Adding as a dependency
@@ -259,7 +259,7 @@ val routes = listOf(
 val commandGateway = CommandGateway(eventStore, routes)
 ```
 
-If you happen to have a "stateless" aggregate that doesn't need to update it's internal state to handle commands, you
+If you happen to have a "stateless" aggregate that doesn't need to update its internal state to handle commands, you
 can model that too:
 
 ```kotlin
@@ -290,7 +290,7 @@ val gateway = CommandGateway(eventStore, routes)
 
 ### Event-processors (Projectors and Reactors)
 
-KES offers multiple ways of defining your event-processors depending on your needs.
+Kestrel offers multiple ways of defining your event-processors depending on your needs.
 
 #### Using interfaces
 
@@ -439,10 +439,6 @@ thread(start = true, isDaemon = false, name = "eventProcessorMonitor") {
     }
 }
 ```
-
-## Trello
-
-https://trello.com/b/9mZdY0ZS/kotlin-event-sourcing
 
 ## Resources
 
