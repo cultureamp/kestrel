@@ -5,32 +5,3 @@ steps:
     command: bin/ci_build
     agents:
       queue: build-restricted
-
-  - wait
-
-  - name: deploy
-    branches: "master"
-    command: bin/ci_deploy
-    agents:
-      queue: build-restricted
-
-  - name: build
-    branches: "!master"
-    command: bin/ci_build
-    agents:
-      queue: build-unrestricted
-
-  - block: 'Push to Nexus'
-    branches: "!master"
-    prompt: Push to Nexus?
-    fields:
-      - select: 'Push'
-        key: 'allow-deploy'
-        options: ['yes', 'no']
-        default: 'no'
-
-  - name: deploy
-    branches: "!master"
-    command: bin/ci_deploy
-    agents:
-      queue: build-unrestricted
