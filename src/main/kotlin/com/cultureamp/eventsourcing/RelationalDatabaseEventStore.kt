@@ -25,6 +25,8 @@ val defaultObjectMapper = ObjectMapper()
     .configure(WRITE_DATES_AS_TIMESTAMPS, false)
     .setPropertyNamingStrategy(PropertyNamingStrategy.SNAKE_CASE)
 
+val defaultTableName = "events"
+
 class RelationalDatabaseEventStore<M: EventMetadata> @PublishedApi internal constructor(
     private val db: Database,
     private val events: Events,
@@ -38,19 +40,21 @@ class RelationalDatabaseEventStore<M: EventMetadata> @PublishedApi internal cons
         inline fun <reified M: EventMetadata> create(
             synchronousEventProcessors: List<EventProcessor<M>>,
             db: Database,
-            objectMapper: ObjectMapper = defaultObjectMapper
+            objectMapper: ObjectMapper = defaultObjectMapper,
+            tableName: String = defaultTableName
         ): RelationalDatabaseEventStore<M> =
             when (db.dialect) {
-                is H2Dialect -> H2DatabaseEventStore.create(synchronousEventProcessors, db, objectMapper)
-                is PostgreSQLDialect -> PostgresDatabaseEventStore.create(synchronousEventProcessors, db, objectMapper)
+                is H2Dialect -> H2DatabaseEventStore.create(synchronousEventProcessors, db, objectMapper, tableName)
+                is PostgreSQLDialect -> PostgresDatabaseEventStore.create(synchronousEventProcessors, db, objectMapper, tableName)
                 else -> throw UnsupportedOperationException("${db.dialect} not currently supported")
             }
 
         inline fun <reified M : EventMetadata> create(
             db: Database,
-            objectMapper: ObjectMapper = defaultObjectMapper
+            objectMapper: ObjectMapper = defaultObjectMapper,
+            tableName: String = defaultTableName
         ) =
-            create<M>(emptyList(), db, objectMapper)
+            create<M>(emptyList(), db, objectMapper, tableName)
     }
 
     fun createSchemaIfNotExists() {
@@ -182,9 +186,10 @@ object PostgresDatabaseEventStore {
     @PublishedApi internal inline fun <reified M: EventMetadata> create(
         synchronousEventProcessors: List<EventProcessor<M>>,
         db: Database,
-        objectMapper: ObjectMapper
+        objectMapper: ObjectMapper,
+        tableName: String
     ): RelationalDatabaseEventStore<M> {
-        return RelationalDatabaseEventStore(db, Events(Table::jsonb), synchronousEventProcessors, M::class.java, objectMapper, Transaction::pgAdvisoryXactLock)
+        return RelationalDatabaseEventStore(db, Events(tableName, Table::jsonb), synchronousEventProcessors, M::class.java, objectMapper, Transaction::pgAdvisoryXactLock)
     }
 }
 
@@ -193,12 +198,13 @@ object H2DatabaseEventStore {
     @PublishedApi internal inline fun <reified M: EventMetadata> create(
         synchronousEventProcessors: List<EventProcessor<M>>,
         db: Database,
-        objectMapper: ObjectMapper
+        objectMapper: ObjectMapper,
+        tableName: String
     ): RelationalDatabaseEventStore<M> {
-        return RelationalDatabaseEventStore(db, eventsTable(), synchronousEventProcessors, M::class.java, objectMapper)
+        return RelationalDatabaseEventStore(db, eventsTable(tableName), synchronousEventProcessors, M::class.java, objectMapper)
     }
 
-    @PublishedApi internal fun eventsTable() = Events { name -> this.text(name) }
+    @PublishedApi internal fun eventsTable(tableName: String = defaultTableName) = Events(tableName) { name -> this.text(name) }
 }
 
 private fun <T> String.asClass(): Class<out T>? {
@@ -206,7 +212,7 @@ private fun <T> String.asClass(): Class<out T>? {
     return Class.forName(this) as Class<out T>?
 }
 
-class Events(jsonb: Table.(String) -> Column<String>) : Table() {
+class Events(tableName: String = defaultTableName, jsonb: Table.(String) -> Column<String> = Table::jsonb) : Table(tableName) {
     val sequence = long("sequence").autoIncrement().primaryKey()
     val eventId = uuid("id")
     val aggregateSequence = long("aggregate_sequence")
