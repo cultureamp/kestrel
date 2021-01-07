@@ -8,9 +8,9 @@ interface EventSink<M: EventMetadata> {
 }
 
 interface EventSource<out M: EventMetadata>  {
-    fun getAfter(sequence: Long, eventClasses: List<KClass<out DomainEvent>> = emptyList(), batchSize: Int = 100) : List<SequencedEvent<out M>>
+    fun getAfter(sequence: Long, eventClasses: Collection<KClass<out DomainEvent>> = emptySet(), batchSize: Int = 100) : List<SequencedEvent<out M>>
 
-    fun lastSequence(eventClasses: List<KClass<out DomainEvent>> = emptyList()): Long
+    fun lastSequence(eventClasses: Collection<KClass<out DomainEvent>> = emptySet()): Long
 }
 
 interface EventStore<M: EventMetadata> : EventSink<M>, EventSource<M> {

@@ -127,7 +127,7 @@ class RelationalDatabaseEventStore<M: EventMetadata> @PublishedApi internal cons
         )
     }
 
-    override fun getAfter(sequence: Long, eventClasses: List<KClass<out DomainEvent>>, batchSize: Int): List<SequencedEvent<M>> {
+    override fun getAfter(sequence: Long, eventClasses: Collection<KClass<out DomainEvent>>, batchSize: Int): List<SequencedEvent<M>> {
         return transaction(db) {
             events
                 .select {
@@ -154,7 +154,7 @@ class RelationalDatabaseEventStore<M: EventMetadata> @PublishedApi internal cons
         }
     }
 
-    override fun lastSequence(eventClasses: List<KClass<out DomainEvent>>): Long = transaction(db) {
+    override fun lastSequence(eventClasses: Collection<KClass<out DomainEvent>>): Long = transaction(db) {
         val maxSequence = events.sequence.max()
         events
             .slice(maxSequence)
