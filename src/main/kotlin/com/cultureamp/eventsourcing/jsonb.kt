@@ -4,6 +4,7 @@ package com.cultureamp.eventsourcing
 import org.jetbrains.exposed.sql.Column
 import org.jetbrains.exposed.sql.StringColumnType
 import org.jetbrains.exposed.sql.Table
+import org.jetbrains.exposed.sql.statements.api.PreparedStatementApi
 import org.postgresql.util.PGobject
 import java.sql.PreparedStatement
 
@@ -18,15 +19,15 @@ fun Table.jsonb(name: String): Column<String> =
 private class Jsonb : StringColumnType() {
     override fun sqlType() = "jsonb"
 
-    override fun setParameter(stmt: PreparedStatement, index: Int, value: Any?) {
+    override fun setParameter(stmt: PreparedStatementApi, index: Int, value: Any?) {
         val obj = PGobject()
         obj.type = "jsonb"
         obj.value = value as String
-        stmt.setObject(index, obj)
+        stmt[index] = obj
     }
 
     override fun valueFromDB(value: Any): Any {
         value as PGobject
-        return value.value
+        return value.value as Any
     }
 }

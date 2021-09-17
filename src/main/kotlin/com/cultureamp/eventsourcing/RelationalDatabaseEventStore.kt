@@ -2,14 +2,17 @@ package com.cultureamp.eventsourcing
 
 import com.fasterxml.jackson.core.JsonProcessingException
 import com.fasterxml.jackson.databind.ObjectMapper
+import com.fasterxml.jackson.databind.PropertyNamingStrategies
 import com.fasterxml.jackson.databind.PropertyNamingStrategy
 import com.fasterxml.jackson.databind.SerializationFeature.WRITE_DATES_AS_TIMESTAMPS
 import com.fasterxml.jackson.datatype.joda.JodaModule
 import com.fasterxml.jackson.module.kotlin.registerKotlinModule
 import org.jetbrains.exposed.exceptions.ExposedSQLException
 import org.jetbrains.exposed.sql.*
+import org.jetbrains.exposed.sql.jodatime.datetime
 import org.jetbrains.exposed.sql.statements.Statement
 import org.jetbrains.exposed.sql.statements.StatementType
+import org.jetbrains.exposed.sql.statements.api.PreparedStatementApi
 import org.jetbrains.exposed.sql.transactions.transaction
 import org.jetbrains.exposed.sql.vendors.H2Dialect
 import org.jetbrains.exposed.sql.vendors.PostgreSQLDialect
@@ -23,7 +26,7 @@ val defaultObjectMapper = ObjectMapper()
     .registerKotlinModule()
     .registerModule(JodaModule())
     .configure(WRITE_DATES_AS_TIMESTAMPS, false)
-    .setPropertyNamingStrategy(PropertyNamingStrategy.SNAKE_CASE)
+    .setPropertyNamingStrategy(PropertyNamingStrategies.SNAKE_CASE)
 
 val defaultTableName = "events"
 
@@ -212,8 +215,9 @@ private fun <T> String.asClass(): Class<out T>? {
     return Class.forName(this) as Class<out T>?
 }
 
-class Events(tableName: String = defaultTableName, jsonb: Table.(String) -> Column<String> = Table::jsonb) : Table(tableName) {
-    val sequence = long("sequence").autoIncrement().primaryKey()
+class Events(tableName: String = defaultTableName, jsonb: Table.(String) -> Column<String> = Table::jsonb) :
+    Table(tableName) {
+    val sequence = long("sequence").autoIncrement()
     val eventId = uuid("id")
     val aggregateSequence = long("aggregate_sequence")
     val aggregateId = uuid("aggregate_id")
@@ -222,6 +226,7 @@ class Events(tableName: String = defaultTableName, jsonb: Table.(String) -> Colu
     val createdAt = datetime("created_at")
     val body = jsonb("json_body")
     val metadata = jsonb("metadata")
+    override val primaryKey: PrimaryKey = PrimaryKey(sequence)
 
     init {
         uniqueIndex(eventId)
@@ -240,11 +245,15 @@ fun Transaction.pgAdvisoryXactLock(): CommandError? {
         val lockTimeoutMilliseconds = 10_000
         val statement = "SET LOCAL lock_timeout = '${lockTimeoutMilliseconds}ms'; SELECT pg_advisory_xact_lock(-1)"
 
-        override fun PreparedStatement.executeInternal(transaction: Transaction): CommandError? {
+        override fun prepareSQL(transaction: Transaction): String = statement
+
+        override fun arguments(): Iterable<Iterable<Pair<ColumnType, Any?>>> = emptyList()
+
+        override fun PreparedStatementApi.executeInternal(transaction: Transaction): CommandError? {
             // using execute rather than executeUpdate here due to this issue
             // https://github.com/JetBrains/Exposed/issues/423
             try {
-                execute()
+                execute(transaction)
             } catch (e: PSQLException) {
                 if (e.message.orEmpty().contains("canceling statement due to lock timeout")) {
                     return LockingError
@@ -255,9 +264,5 @@ fun Transaction.pgAdvisoryXactLock(): CommandError? {
             resultSet?.close()
             return null
         }
-
-        override fun prepareSQL(transaction: Transaction): String = statement
-
-        override fun arguments(): Iterable<Iterable<Pair<ColumnType, Any?>>> = emptyList()
     })
 }
