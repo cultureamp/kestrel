@@ -1,7 +1,7 @@
 package com.cultureamp.eventsourcing
 
+import io.kotest.core.Tuple3
 import io.kotest.core.spec.style.DescribeSpec
-import io.kotest.fp.Tuple3
 import io.kotest.matchers.maps.shouldContain
 import io.kotest.matchers.shouldBe
 import org.joda.time.DateTime
