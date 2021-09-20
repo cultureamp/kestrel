@@ -2,7 +2,7 @@ package com.cultureamp.pg
 
 import org.jetbrains.exposed.sql.Database
 
-// To use this, you need to input your database details
+// H2 is the default databse. To use this, you need to input your database details
 object PgTestConfig {
     val testerName = ""
     val jdbcUrl = "jdbc:postgresql://localhost:5432/${testerName}"
