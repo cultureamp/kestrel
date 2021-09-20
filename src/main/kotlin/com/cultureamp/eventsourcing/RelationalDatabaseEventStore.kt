@@ -13,6 +13,7 @@ import org.jetbrains.exposed.sql.jodatime.datetime
 import org.jetbrains.exposed.sql.statements.Statement
 import org.jetbrains.exposed.sql.statements.StatementType
 import org.jetbrains.exposed.sql.statements.api.PreparedStatementApi
+import org.jetbrains.exposed.sql.transactions.TransactionManager
 import org.jetbrains.exposed.sql.transactions.transaction
 import org.jetbrains.exposed.sql.vendors.H2Dialect
 import org.jetbrains.exposed.sql.vendors.PostgreSQLDialect
@@ -241,28 +242,16 @@ object ConcurrencyError : RetriableError
 object LockingError : CommandError
 
 fun Transaction.pgAdvisoryXactLock(): CommandError? {
-    return exec(object : Statement<CommandError>(StatementType.SELECT, emptyList()) {
-        val lockTimeoutMilliseconds = 10_000
-        val statement = "SET LOCAL lock_timeout = '${lockTimeoutMilliseconds}ms'; SELECT pg_advisory_xact_lock(-1)"
-
-        override fun prepareSQL(transaction: Transaction): String = statement
-
-        override fun arguments(): Iterable<Iterable<Pair<ColumnType, Any?>>> = emptyList()
-
-        override fun PreparedStatementApi.executeInternal(transaction: Transaction): CommandError? {
-            // using execute rather than executeUpdate here due to this issue
-            // https://github.com/JetBrains/Exposed/issues/423
-            try {
-                execute(transaction)
-            } catch (e: PSQLException) {
-                if (e.message.orEmpty().contains("canceling statement due to lock timeout")) {
-                    return LockingError
-                } else {
-                    throw e
-                }
-            }
-            resultSet?.close()
-            return null
+    val lockTimeoutMilliseconds = 10_000
+    try {
+        TransactionManager.current().exec("SET LOCAL lock_timeout = '${lockTimeoutMilliseconds}ms';")
+        TransactionManager.current().exec("SELECT pg_advisory_xact_lock(-1)")
+    } catch (e: PSQLException) {
+        if (e.message.orEmpty().contains("canceling statement due to lock timeout")) {
+            return LockingError
+        } else {
+            throw e
         }
-    })
+    }
+    return null
 }
