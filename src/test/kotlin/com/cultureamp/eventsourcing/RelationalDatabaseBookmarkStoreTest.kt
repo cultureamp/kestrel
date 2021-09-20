@@ -1,7 +1,5 @@
-package com.cultureamp.pg
+package com.cultureamp.eventsourcing
 
-import com.cultureamp.eventsourcing.Bookmark
-import com.cultureamp.eventsourcing.RelationalDatabaseBookmarkStore
 import io.kotest.core.spec.style.DescribeSpec
 import org.jetbrains.exposed.sql.Database
 import io.kotest.matchers.shouldBe

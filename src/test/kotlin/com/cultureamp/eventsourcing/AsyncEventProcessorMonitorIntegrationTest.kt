@@ -1,6 +1,5 @@
-package com.cultureamp.pg
+package com.cultureamp.eventsourcing
 
-import com.cultureamp.eventsourcing.*
 import com.cultureamp.eventsourcing.example.CreateSurvey
 import com.cultureamp.eventsourcing.example.Created
 import com.cultureamp.eventsourcing.example.Invite

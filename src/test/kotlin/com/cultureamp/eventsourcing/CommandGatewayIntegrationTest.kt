@@ -1,6 +1,5 @@
-package com.cultureamp.pg
+package com.cultureamp.eventsourcing
 
-import com.cultureamp.eventsourcing.*
 import com.cultureamp.eventsourcing.example.AddSection
 import com.cultureamp.eventsourcing.example.AlwaysBoppable
 import com.cultureamp.eventsourcing.example.Boop

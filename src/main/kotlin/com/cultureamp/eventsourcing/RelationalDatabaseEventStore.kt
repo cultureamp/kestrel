@@ -244,8 +244,8 @@ object LockingError : CommandError
 fun Transaction.pgAdvisoryXactLock(): CommandError? {
     val lockTimeoutMilliseconds = 10_000
     try {
-        TransactionManager.current().exec("SET LOCAL lock_timeout = '${lockTimeoutMilliseconds}ms';")
-        TransactionManager.current().exec("SELECT pg_advisory_xact_lock(-1)")
+        exec("SET LOCAL lock_timeout = '${lockTimeoutMilliseconds}ms';")
+        exec("SELECT pg_advisory_xact_lock(-1)")
     } catch (e: PSQLException) {
         if (e.message.orEmpty().contains("canceling statement due to lock timeout")) {
             return LockingError

@@ -1,12 +1,8 @@
-package com.cultureamp.pg
+package com.cultureamp.eventsourcing
 
-import com.cultureamp.eventsourcing.*
 import com.cultureamp.eventsourcing.sample.*
 import com.cultureamp.eventsourcing.sample.PizzaStyle.MARGHERITA
 import com.cultureamp.eventsourcing.sample.PizzaTopping.*
-import com.cultureamp.pg.PgTestConfig.db
-import com.cultureamp.pg.PgTestConfig.driver
-import com.cultureamp.pg.PgTestConfig.jdbcUrl
 import io.kotest.core.spec.style.DescribeSpec
 import io.kotest.matchers.shouldBe
 import org.jetbrains.exposed.sql.Database
