@@ -48,10 +48,10 @@ import java.util.*
 import com.cultureamp.eventsourcing.example.Created as SurveyCreated
 
 class CommandGatewayIntegrationTest : DescribeSpec({
-    val h2DbUrl = "jdbc:h2:mem:test;MODE=MySQL;DB_CLOSE_DELAY=-1;"
-    val h2Driver = "org.h2.Driver"
-    val db = Database.connect(url = h2DbUrl, driver = h2Driver)
-    val eventsTable = H2DatabaseEventStore.eventsTable()
+    val db = PgTestConfig.db ?: Database.connect(url = "jdbc:h2:mem:test;MODE=MySQL;DB_CLOSE_DELAY=-1;", driver = "org.h2.Driver")
+    val table = Events()
+    val tableH2 = H2DatabaseEventStore.eventsTable()
+    val eventsTable = if(PgTestConfig.db != null) table else tableH2
     val eventStore = RelationalDatabaseEventStore.create<StandardEventMetadata>(db)
     val routes = listOf(
         Route.from(

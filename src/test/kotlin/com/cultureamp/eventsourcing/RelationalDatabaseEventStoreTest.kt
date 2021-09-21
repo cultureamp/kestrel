@@ -12,22 +12,21 @@ import org.joda.time.DateTime
 import java.util.*
 
 class RelationalDatabaseEventStoreTest : DescribeSpec({
-    val h2DbUrl = "jdbc:h2:mem:test;MODE=MySQL;DB_CLOSE_DELAY=-1;"
-    val h2Driver = "org.h2.Driver"
-    val db = Database.connect(url = h2DbUrl, driver = h2Driver)
+    val db = PgTestConfig.db ?: Database.connect(url = "jdbc:h2:mem:test;MODE=MySQL;DB_CLOSE_DELAY=-1;", driver = "org.h2.Driver")
     val tableName = "eventStore"
-    val table = H2DatabaseEventStore.eventsTable(tableName)
-    val store = RelationalDatabaseEventStore.create<StandardEventMetadata>(db, tableName = tableName)
+    val table = Events(tableName)
+    val tableH2 = H2DatabaseEventStore.eventsTable(tableName)
+    val store = RelationalDatabaseEventStore.create<StandardEventMetadata>(db, tableName = "eventStore")
 
     beforeTest {
         transaction(db) {
-            SchemaUtils.create(table)
+            SchemaUtils.create(if(PgTestConfig.db != null) table else tableH2)
         }
     }
 
     afterTest {
         transaction(db) {
-            SchemaUtils.drop(table)
+            SchemaUtils.drop(if(PgTestConfig.db != null) table else tableH2)
         }
     }
 
