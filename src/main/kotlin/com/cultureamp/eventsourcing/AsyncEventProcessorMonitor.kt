@@ -7,7 +7,7 @@ class AsyncEventProcessorMonitor<M: EventMetadata>(
     fun run() {
         val lags = asyncEventProcessors.map {
             val bookmarkSequence = it.bookmarkStore.bookmarkFor(it.bookmarkName).sequence
-            val lastSequence = it.eventSource.lastSequence(it.eventProcessor.eventClasses)
+            val lastSequence = it.eventSource.lastSequence(it.eventProcessor.domainEventClasses())
             Lag(
                 name = it.bookmarkName,
                 bookmarkSequence = bookmarkSequence,
