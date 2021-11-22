@@ -186,7 +186,7 @@ like so:
 val routes = listOf(
     Route.from(SimpleThingAggregate)
 )
-val commandGateway = EventStoreCommandGateway(eventStore, routes)
+val commandGateway = CommandGateway(eventStore, routes)
 ```
 
 If you need access to dependencies during command-handling, or want finer grained control over returned error types or
@@ -256,7 +256,7 @@ val routes = listOf(
         SurveyAggregate::updated
     )
 )
-val commandGateway = EventStoreCommandGateway(eventStore, routes)
+val commandGateway = CommandGateway(eventStore, routes)
 ```
 
 If you happen to have a "stateless" aggregate that doesn't need to update its internal state to handle commands, you
@@ -285,7 +285,7 @@ val routes = listOf(
         PaymentSagaAggregate
     )
 )
-val gateway = EventStoreCommandGateway(eventStore, routes)
+val gateway = CommandGateway(eventStore, routes)
 ```
 
 ### Event-processors (Projectors and Reactors)

@@ -1,12 +1,12 @@
 package com.cultureamp.script
 
 import com.cultureamp.eventsourcing.Command
+import com.cultureamp.eventsourcing.CommandGateway
 import com.cultureamp.eventsourcing.CreationCommand
 import com.cultureamp.eventsourcing.CreationEvent
 import com.cultureamp.eventsourcing.DomainError
 import com.cultureamp.eventsourcing.DomainEvent
 import com.cultureamp.eventsourcing.EventMetadata
-import com.cultureamp.eventsourcing.EventStoreCommandGateway
 import com.cultureamp.eventsourcing.Left
 import com.cultureamp.eventsourcing.RelationalDatabaseEventStore
 import com.cultureamp.eventsourcing.Right
@@ -114,7 +114,7 @@ fun main(args: Array<String>) {
         Route.from(SimpleThingAggregate)
     )
 
-    val commandGateway = EventStoreCommandGateway(eventStore, routes)
+    val commandGateway = CommandGateway(eventStore, routes)
 
     val stop = AtomicBoolean(false)
     val mainThread = Thread.currentThread()

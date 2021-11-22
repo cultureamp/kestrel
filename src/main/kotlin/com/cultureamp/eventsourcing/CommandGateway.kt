@@ -1,6 +1,9 @@
 package com.cultureamp.eventsourcing
 
 interface CommandGateway<in M : EventMetadata> {
+    companion object {
+        operator fun <M : EventMetadata> invoke(eventStore: EventStore<M>, routes: List<Route<*, *>>) = EventStoreCommandGateway(eventStore, routes)
+    }
     fun dispatch(command: Command, metadata: M, retries: Int = 5): Either<CommandError, SuccessStatus>
 }
 
