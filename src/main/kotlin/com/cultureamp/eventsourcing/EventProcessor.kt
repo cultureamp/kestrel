@@ -4,6 +4,11 @@ import com.cultureamp.common.asNestedSealedConcreteClasses
 import java.util.UUID
 import kotlin.reflect.KClass
 
+interface SequencedEventProcessor<in M : EventMetadata> {
+    fun process(sequencedEvent: SequencedEvent<out M>)
+    fun domainEventClasses(): List<KClass<out DomainEvent>> = emptyList()
+}
+
 interface EventProcessor<in M : EventMetadata> {
     companion object {
         inline fun <reified E : DomainEvent> from(noinline process: (E, UUID) -> Any?) = CompositeDomainEventProcessor.from(process)
