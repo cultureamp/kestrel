@@ -1,8 +1,11 @@
 package com.cultureamp.eventsourcing
 
-class CommandGateway<in M: EventMetadata>(private val eventStore: EventStore<M>, private val routes: List<Route<*, *>>) {
+interface CommandGateway<in M : EventMetadata> {
+    fun dispatch(command: Command, metadata: M, retries: Int = 5): Either<CommandError, SuccessStatus>
+}
 
-    tailrec fun dispatch(command: Command, metadata: M, retries: Int = 5): Either<CommandError, SuccessStatus> {
+class EventStoreCommandGateway<in M : EventMetadata>(private val eventStore: EventStore<M>, private val routes: List<Route<*, *>>) : CommandGateway<M> {
+    override tailrec fun dispatch(command: Command, metadata: M, retries: Int): Either<CommandError, SuccessStatus> {
         val result = createOrUpdate(command, metadata)
         return if (result is Left && result.error is RetriableError && retries > 0) {
             Thread.sleep(500L)
