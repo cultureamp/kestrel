@@ -18,6 +18,7 @@ import org.jetbrains.exposed.sql.and
 import org.jetbrains.exposed.sql.insert
 import org.jetbrains.exposed.sql.jodatime.datetime
 import org.jetbrains.exposed.sql.max
+import org.jetbrains.exposed.sql.replace
 import org.jetbrains.exposed.sql.select
 import org.jetbrains.exposed.sql.transactions.transaction
 import org.jetbrains.exposed.sql.vendors.H2Dialect
@@ -32,11 +33,13 @@ val defaultObjectMapper = ObjectMapper()
     .configure(WRITE_DATES_AS_TIMESTAMPS, false)
     .setPropertyNamingStrategy(PropertyNamingStrategies.SNAKE_CASE)
 
-val defaultTableName = "events"
+val defaultEventsTableName = "events"
+val defaultEventsSequenceStatsTableName = "events_sequence_stats"
 
 class RelationalDatabaseEventStore<M : EventMetadata> @PublishedApi internal constructor(
     private val db: Database,
     private val events: Events,
+    private val eventsSequenceStats: EventsSequenceStats,
     private val synchronousEventProcessors: List<EventProcessor<M>>,
     private val metadataClass: Class<M>,
     private val objectMapper: ObjectMapper,
@@ -48,25 +51,27 @@ class RelationalDatabaseEventStore<M : EventMetadata> @PublishedApi internal con
             synchronousEventProcessors: List<EventProcessor<M>>,
             db: Database,
             objectMapper: ObjectMapper = defaultObjectMapper,
-            tableName: String = defaultTableName
+            eventsTableName: String = defaultEventsTableName,
+            eventsSequenceStateTableName: String = defaultEventsSequenceStatsTableName,
         ): RelationalDatabaseEventStore<M> =
             when (db.dialect) {
-                is H2Dialect -> H2DatabaseEventStore.create(synchronousEventProcessors, db, objectMapper, tableName)
-                is PostgreSQLDialect -> PostgresDatabaseEventStore.create(synchronousEventProcessors, db, objectMapper, tableName)
+                is H2Dialect -> H2DatabaseEventStore.create(synchronousEventProcessors, db, objectMapper, eventsTableName, eventsSequenceStateTableName)
+                is PostgreSQLDialect -> PostgresDatabaseEventStore.create(synchronousEventProcessors, db, objectMapper, eventsTableName, eventsSequenceStateTableName)
                 else -> throw UnsupportedOperationException("${db.dialect} not currently supported")
             }
 
         inline fun <reified M : EventMetadata> create(
             db: Database,
             objectMapper: ObjectMapper = defaultObjectMapper,
-            tableName: String = defaultTableName
+            eventsTableName: String = defaultEventsTableName,
+            eventsSequenceStateTableName: String = defaultEventsSequenceStatsTableName,
         ) =
-            create<M>(emptyList(), db, objectMapper, tableName)
+            create<M>(emptyList(), db, objectMapper, eventsTableName, eventsSequenceStateTableName)
     }
 
     fun createSchemaIfNotExists() {
         transaction(db) {
-            SchemaUtils.create(events)
+            SchemaUtils.create(events, eventsSequenceStats)
         }
     }
 
@@ -79,7 +84,7 @@ class RelationalDatabaseEventStore<M : EventMetadata> @PublishedApi internal con
                         val eventType = event.domainEvent.javaClass
                         val metadata = objectMapper.writeValueAsString(event.metadata)
                         validateSerialization(eventType, body, metadata)
-                        events.insert { row ->
+                        val insertResult = events.insert { row ->
                             row[events.aggregateSequence] = event.aggregateSequence
                             row[events.eventId] = event.id
                             row[events.aggregateId] = aggregateId
@@ -89,9 +94,12 @@ class RelationalDatabaseEventStore<M : EventMetadata> @PublishedApi internal con
                             row[events.body] = body
                             row[events.metadata] = metadata
                         }
+                        eventsSequenceStats.replace {
+                            it[eventsSequenceStats.eventType] = eventType.canonicalName
+                            it[eventsSequenceStats.sequence] = insertResult[events.sequence]
+                        }
+                        synchronousEventProcessors.forEach { it.process(event) }
                     }
-
-                    updateSynchronousProjections(newEvents)
                     Right(Unit)
                 }
             }
@@ -166,22 +174,18 @@ class RelationalDatabaseEventStore<M : EventMetadata> @PublishedApi internal con
     }
 
     override fun lastSequence(eventClasses: List<KClass<out DomainEvent>>): Long = transaction(db) {
-        val maxSequence = events.sequence.max()
-        events
+        val maxSequence = eventsSequenceStats.sequence.max()
+        eventsSequenceStats
             .slice(maxSequence)
             .select {
                 if (eventClasses.isNotEmpty()) {
-                    events.eventType.inList(eventClasses.map { it.java.canonicalName })
+                    eventsSequenceStats.eventType.inList(eventClasses.map { it.java.canonicalName })
                 } else {
                     Op.TRUE
                 }
             }
             .map { it[maxSequence] }
             .first() ?: 0
-    }
-
-    private fun updateSynchronousProjections(newEvents: List<Event<out M>>) {
-        newEvents.forEach { event -> synchronousEventProcessors.forEach { it.process(event) } }
     }
 }
 
@@ -195,9 +199,10 @@ object PostgresDatabaseEventStore {
         synchronousEventProcessors: List<EventProcessor<M>>,
         db: Database,
         objectMapper: ObjectMapper,
-        tableName: String
+        tableName: String,
+        eventsSequenceStateTableName: String
     ): RelationalDatabaseEventStore<M> {
-        return RelationalDatabaseEventStore(db, Events(tableName, Table::jsonb), synchronousEventProcessors, M::class.java, objectMapper, Transaction::pgAdvisoryXactLock)
+        return RelationalDatabaseEventStore(db, Events(tableName, Table::jsonb), EventsSequenceStats(eventsSequenceStateTableName), synchronousEventProcessors, M::class.java, objectMapper, Transaction::pgAdvisoryXactLock)
     }
 }
 
@@ -208,13 +213,14 @@ object H2DatabaseEventStore {
         synchronousEventProcessors: List<EventProcessor<M>>,
         db: Database,
         objectMapper: ObjectMapper,
-        tableName: String
+        tableName: String,
+        eventsSequenceStateTableName: String
     ): RelationalDatabaseEventStore<M> {
-        return RelationalDatabaseEventStore(db, eventsTable(tableName), synchronousEventProcessors, M::class.java, objectMapper)
+        return RelationalDatabaseEventStore(db, eventsTable(tableName), EventsSequenceStats(eventsSequenceStateTableName), synchronousEventProcessors, M::class.java, objectMapper)
     }
 
     @PublishedApi
-    internal fun eventsTable(tableName: String = defaultTableName) = Events(tableName) { name -> this.text(name) }
+    internal fun eventsTable(tableName: String = defaultEventsTableName) = Events(tableName) { name -> this.text(name) }
 }
 
 private fun <T> String.asClass(): Class<out T>? {
@@ -222,7 +228,7 @@ private fun <T> String.asClass(): Class<out T>? {
     return Class.forName(this) as Class<out T>?
 }
 
-class Events(tableName: String = defaultTableName, jsonb: Table.(String) -> Column<String> = Table::jsonb) :
+class Events(tableName: String = defaultEventsTableName, jsonb: Table.(String) -> Column<String> = Table::jsonb) :
     Table(tableName) {
     val sequence = long("sequence").autoIncrement()
     val eventId = uuid("id")
@@ -240,6 +246,12 @@ class Events(tableName: String = defaultTableName, jsonb: Table.(String) -> Colu
         uniqueIndex(aggregateId, aggregateSequence)
         nonUniqueIndex(eventType, aggregateType)
     }
+}
+
+class EventsSequenceStats(tableName: String = defaultEventsSequenceStatsTableName) : Table(tableName) {
+    val eventType = varchar("event_type", 256)
+    override val primaryKey = PrimaryKey(eventType)
+    val sequence = long("sequence")
 }
 
 private fun Table.nonUniqueIndex(vararg columns: Column<*>) = index(false, *columns)

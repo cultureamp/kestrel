@@ -1,32 +1,40 @@
 package com.cultureamp.eventsourcing
 
-import com.cultureamp.eventsourcing.sample.*
+import com.cultureamp.eventsourcing.sample.PizzaCreated
+import com.cultureamp.eventsourcing.sample.PizzaEaten
 import com.cultureamp.eventsourcing.sample.PizzaStyle.MARGHERITA
-import com.cultureamp.eventsourcing.sample.PizzaTopping.*
+import com.cultureamp.eventsourcing.sample.PizzaTopping.BASIL
+import com.cultureamp.eventsourcing.sample.PizzaTopping.CHEESE
+import com.cultureamp.eventsourcing.sample.PizzaTopping.TOMATO_PASTE
+import com.cultureamp.eventsourcing.sample.PizzaToppingAdded
+import com.cultureamp.eventsourcing.sample.StandardEventMetadata
 import io.kotest.core.spec.style.DescribeSpec
 import io.kotest.matchers.shouldBe
 import org.jetbrains.exposed.sql.Database
 import org.jetbrains.exposed.sql.SchemaUtils
 import org.jetbrains.exposed.sql.transactions.transaction
 import org.joda.time.DateTime
-import java.util.*
+import java.util.UUID
 
 class RelationalDatabaseEventStoreTest : DescribeSpec({
     val db = PgTestConfig.db ?: Database.connect(url = "jdbc:h2:mem:test;MODE=MySQL;DB_CLOSE_DELAY=-1;", driver = "org.h2.Driver")
     val tableName = "eventStore"
     val table = Events(tableName)
     val tableH2 = H2DatabaseEventStore.eventsTable(tableName)
-    val store = RelationalDatabaseEventStore.create<StandardEventMetadata>(db, tableName = "eventStore")
+    val eventsSequenceStats = EventsSequenceStats()
+    val store = RelationalDatabaseEventStore.create<StandardEventMetadata>(db, eventsTableName = "eventStore")
 
     beforeTest {
         transaction(db) {
-            SchemaUtils.create(if(PgTestConfig.db != null) table else tableH2)
+            SchemaUtils.create(if (PgTestConfig.db != null) table else tableH2)
+            SchemaUtils.create(eventsSequenceStats)
         }
     }
 
     afterTest {
         transaction(db) {
-            SchemaUtils.drop(if(PgTestConfig.db != null) table else tableH2)
+            SchemaUtils.drop(if (PgTestConfig.db != null) table else tableH2)
+            SchemaUtils.drop(eventsSequenceStats)
         }
     }
 
@@ -79,6 +87,9 @@ class RelationalDatabaseEventStoreTest : DescribeSpec({
             store.lastSequence() shouldBe 0
             store.sink(events, aggregateId) shouldBe Right(Unit)
             store.lastSequence() shouldBe 3
+            store.lastSequence(listOf(PizzaCreated::class)) shouldBe 1
+            store.lastSequence(listOf(PizzaEaten::class)) shouldBe 2
+            store.lastSequence(listOf(PizzaCreated::class, PizzaEaten::class)) shouldBe 2
         }
 
         it("sends each sunk event to passed synchronous event-processors") {
@@ -117,8 +128,7 @@ class RelationalDatabaseEventStoreTest : DescribeSpec({
                 domainEvent = barDomainEvent
             )
 
-
-            val storeWithProjectors = RelationalDatabaseEventStore.create(synchronousEventProcessors, db, tableName = tableName)
+            val storeWithProjectors = RelationalDatabaseEventStore.create(synchronousEventProcessors, db, eventsTableName = tableName)
 
             storeWithProjectors.sink(listOf(fooEvent, barEvent), UUID.randomUUID())
 
@@ -127,8 +137,6 @@ class RelationalDatabaseEventStoreTest : DescribeSpec({
     }
 })
 
-fun <M : EventMetadata>event(domainEvent: DomainEvent, aggregateId: UUID, index: Int, metadata: M): Event<M> {
+fun <M : EventMetadata> event(domainEvent: DomainEvent, aggregateId: UUID, index: Int, metadata: M): Event<M> {
     return Event(UUID.randomUUID(), aggregateId, index.toLong(), "pizza", DateTime.now(), metadata, domainEvent)
 }
-
-
