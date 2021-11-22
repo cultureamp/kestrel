@@ -3,24 +3,27 @@ package com.cultureamp.eventsourcing
 import com.fasterxml.jackson.core.JsonProcessingException
 import com.fasterxml.jackson.databind.ObjectMapper
 import com.fasterxml.jackson.databind.PropertyNamingStrategies
-import com.fasterxml.jackson.databind.PropertyNamingStrategy
 import com.fasterxml.jackson.databind.SerializationFeature.WRITE_DATES_AS_TIMESTAMPS
 import com.fasterxml.jackson.datatype.joda.JodaModule
 import com.fasterxml.jackson.module.kotlin.registerKotlinModule
 import org.jetbrains.exposed.exceptions.ExposedSQLException
-import org.jetbrains.exposed.sql.*
+import org.jetbrains.exposed.sql.Column
+import org.jetbrains.exposed.sql.Database
+import org.jetbrains.exposed.sql.Op
+import org.jetbrains.exposed.sql.ResultRow
+import org.jetbrains.exposed.sql.SchemaUtils
+import org.jetbrains.exposed.sql.Table
+import org.jetbrains.exposed.sql.Transaction
+import org.jetbrains.exposed.sql.and
+import org.jetbrains.exposed.sql.insert
 import org.jetbrains.exposed.sql.jodatime.datetime
-import org.jetbrains.exposed.sql.statements.Statement
-import org.jetbrains.exposed.sql.statements.StatementType
-import org.jetbrains.exposed.sql.statements.api.PreparedStatementApi
-import org.jetbrains.exposed.sql.transactions.TransactionManager
+import org.jetbrains.exposed.sql.max
+import org.jetbrains.exposed.sql.select
 import org.jetbrains.exposed.sql.transactions.transaction
 import org.jetbrains.exposed.sql.vendors.H2Dialect
 import org.jetbrains.exposed.sql.vendors.PostgreSQLDialect
 import org.postgresql.util.PSQLException
-import java.lang.UnsupportedOperationException
-import java.sql.PreparedStatement
-import java.util.*
+import java.util.UUID
 import kotlin.reflect.KClass
 
 val defaultObjectMapper = ObjectMapper()
@@ -31,7 +34,7 @@ val defaultObjectMapper = ObjectMapper()
 
 val defaultTableName = "events"
 
-class RelationalDatabaseEventStore<M: EventMetadata> @PublishedApi internal constructor(
+class RelationalDatabaseEventStore<M : EventMetadata> @PublishedApi internal constructor(
     private val db: Database,
     private val events: Events,
     private val synchronousEventProcessors: List<EventProcessor<M>>,
@@ -41,7 +44,7 @@ class RelationalDatabaseEventStore<M: EventMetadata> @PublishedApi internal cons
 ) : EventStore<M> {
 
     companion object {
-        inline fun <reified M: EventMetadata> create(
+        inline fun <reified M : EventMetadata> create(
             synchronousEventProcessors: List<EventProcessor<M>>,
             db: Database,
             objectMapper: ObjectMapper = defaultObjectMapper,
@@ -66,7 +69,6 @@ class RelationalDatabaseEventStore<M: EventMetadata> @PublishedApi internal cons
             SchemaUtils.create(events)
         }
     }
-
 
     override fun sink(newEvents: List<Event<M>>, aggregateId: UUID): Either<CommandError, Unit> {
         return try {
@@ -131,7 +133,8 @@ class RelationalDatabaseEventStore<M: EventMetadata> @PublishedApi internal cons
                 createdAt = row[events.createdAt],
                 metadata = metadata,
                 domainEvent = domainEvent
-            ), row[events.sequence]
+            ),
+            row[events.sequence]
         )
     }
 
@@ -187,7 +190,8 @@ class EventBodySerializationException(e: Exception) : EventDataException(e)
 class EventMetadataSerializationException(e: Exception) : EventDataException(e)
 
 object PostgresDatabaseEventStore {
-    @PublishedApi internal inline fun <reified M: EventMetadata> create(
+    @PublishedApi
+    internal inline fun <reified M : EventMetadata> create(
         synchronousEventProcessors: List<EventProcessor<M>>,
         db: Database,
         objectMapper: ObjectMapper,
@@ -199,7 +203,8 @@ object PostgresDatabaseEventStore {
 
 object H2DatabaseEventStore {
     // need a `@PublishedApi` here to make it callable from `RelationalDatabaseEventStore.create()`
-    @PublishedApi internal inline fun <reified M: EventMetadata> create(
+    @PublishedApi
+    internal inline fun <reified M : EventMetadata> create(
         synchronousEventProcessors: List<EventProcessor<M>>,
         db: Database,
         objectMapper: ObjectMapper,
@@ -208,7 +213,8 @@ object H2DatabaseEventStore {
         return RelationalDatabaseEventStore(db, eventsTable(tableName), synchronousEventProcessors, M::class.java, objectMapper)
     }
 
-    @PublishedApi internal fun eventsTable(tableName: String = defaultTableName) = Events(tableName) { name -> this.text(name) }
+    @PublishedApi
+    internal fun eventsTable(tableName: String = defaultTableName) = Events(tableName) { name -> this.text(name) }
 }
 
 private fun <T> String.asClass(): Class<out T>? {
