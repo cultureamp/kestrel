@@ -22,6 +22,7 @@ class AsyncEventProcessorMonitorIntegrationTest : DescribeSpec({
     val tableEvent = Events()
     val tableH2 = H2DatabaseEventStore.eventsTable()
     val table = if(PgTestConfig.db != null) tableEvent else tableH2
+    val eventsSequenceStatsTable = EventsSequenceStats()
     val eventStore =  RelationalDatabaseEventStore.create<EventMetadata>(db)
     val bookmarksTable = Bookmarks()
     val bookmarkStore = RelationalDatabaseBookmarkStore(db, bookmarksTable)
@@ -44,6 +45,7 @@ class AsyncEventProcessorMonitorIntegrationTest : DescribeSpec({
         transaction(db) {
             addLogger(StdOutSqlLogger)
             SchemaUtils.create(table)
+            SchemaUtils.create(eventsSequenceStatsTable)
             SchemaUtils.create(bookmarksTable)
         }
     }
@@ -51,6 +53,7 @@ class AsyncEventProcessorMonitorIntegrationTest : DescribeSpec({
     afterTest {
         transaction(db) {
             SchemaUtils.drop(bookmarksTable)
+            SchemaUtils.drop(eventsSequenceStatsTable)
             SchemaUtils.drop(table)
         }
     }
