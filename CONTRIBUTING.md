@@ -26,12 +26,12 @@ LastPass. Once you're past the GPG agent, the archives will be pushed up to the 
 To push from Sonatype to Maven Central, you need to do the following steps adapted from
 [the documentation](https://www.albertgao.xyz/2018/01/18/how-to-publish-artifact-to-maven-central-via-gradle/):
 
-- Open Nexus Repository Manager
+- Open [Nexus Repository Manager](https://oss.sonatype.org/#welcome)
 - Click the Log in at upper right corner
-- On the right side, click Staging Repositories
+- On the left side, click Staging Repositories
 - Search for the project by using "comcultureamp"
 - Select the right item and click the Close button to close it. This finalizes the package in order to publish it.
-- Click the Refresh button until the state updates.
+- Click the Refresh button until the state in the "Activity" tab shows that repository has been closed.
 - If there are any errors:
   - You can inspect them at the Activity panel.
   - You need to Drop this upload
@@ -40,7 +40,7 @@ To push from Sonatype to Maven Central, you need to do the following steps adapt
   - Then Close then continue
 - If there are no errors:
   - Click Release button
-- Your artifact has uploaded to Maven central (may take  up to 2 hours to appear but should be much faster)
+- Your artifact has uploaded to [Maven central](https://search.maven.org/artifact/com.cultureamp/kestrel) (may take up to 2 hours to appear but should be much faster).
 
 # Links
 
