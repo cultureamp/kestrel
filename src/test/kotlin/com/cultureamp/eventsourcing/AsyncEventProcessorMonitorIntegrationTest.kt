@@ -7,6 +7,7 @@ import com.cultureamp.eventsourcing.example.ParticipantAggregate
 import com.cultureamp.eventsourcing.example.SurveyAggregate
 import com.cultureamp.eventsourcing.example.SurveyNameAlwaysAvailable
 import com.cultureamp.eventsourcing.example.SurveyNamesCommandProjector
+import com.cultureamp.eventsourcing.sample.StandardEventMetadata
 import io.kotest.core.spec.style.DescribeSpec
 import io.kotest.matchers.shouldBe
 import org.jetbrains.exposed.sql.Database
@@ -23,7 +24,7 @@ class AsyncEventProcessorMonitorIntegrationTest : DescribeSpec({
     val tableH2 = H2DatabaseEventStore.eventsTable()
     val table = if(PgTestConfig.db != null) tableEvent else tableH2
     val eventsSequenceStatsTable = EventsSequenceStats()
-    val eventStore =  RelationalDatabaseEventStore.create<EventMetadata>(db)
+    val eventStore =  RelationalDatabaseEventStore.create<StandardEventMetadata>(db)
     val bookmarksTable = Bookmarks()
     val bookmarkStore = RelationalDatabaseBookmarkStore(db, bookmarksTable)
     val commandGateway = CommandGateway(eventStore, listOf(
@@ -75,8 +76,8 @@ class AsyncEventProcessorMonitorIntegrationTest : DescribeSpec({
             )
 
             val surveyId = UUID.randomUUID()
-            commandGateway.dispatch(CreateSurvey(surveyId, UUID.randomUUID(), emptyMap(), UUID.randomUUID(), DateTime.now()), EventMetadata())
-            commandGateway.dispatch(Invite(UUID.randomUUID(), UUID.randomUUID(), UUID.randomUUID(), DateTime.now()), EventMetadata())
+            commandGateway.dispatch(CreateSurvey(surveyId, UUID.randomUUID(), emptyMap(), UUID.randomUUID(), DateTime.now()), StandardEventMetadata("executorId"))
+            commandGateway.dispatch(Invite(UUID.randomUUID(), UUID.randomUUID(), UUID.randomUUID(), DateTime.now()), StandardEventMetadata("executorId"))
 
             eventStore.lastSequence() shouldBe 2
             eventStore.lastSequence(listOf(Created::class)) shouldBe 1

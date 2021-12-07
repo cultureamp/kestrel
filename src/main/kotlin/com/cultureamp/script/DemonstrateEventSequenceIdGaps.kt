@@ -6,6 +6,7 @@ import com.cultureamp.eventsourcing.CreationCommand
 import com.cultureamp.eventsourcing.CreationEvent
 import com.cultureamp.eventsourcing.DomainError
 import com.cultureamp.eventsourcing.DomainEvent
+import com.cultureamp.eventsourcing.Either
 import com.cultureamp.eventsourcing.EventMetadata
 import com.cultureamp.eventsourcing.Left
 import com.cultureamp.eventsourcing.RelationalDatabaseEventStore
@@ -196,18 +197,18 @@ data class Twerked(val tweak: String) : SimpleThingUpdateEvent()
 
 sealed class SimpleThingError : DomainError
 
-data class SimpleThingAggregate(val tweaks: List<String> = emptyList()) : SimpleAggregate<SimpleThingUpdateCommand, SimpleThingUpdateEvent> {
-    companion object : SimpleAggregateConstructor<CreateSimpleThing, SimpleThingCreated, SimpleThingUpdateCommand, SimpleThingUpdateEvent> {
+data class SimpleThingAggregate(val tweaks: List<String> = emptyList()) : SimpleAggregate<SimpleThingUpdateCommand, SimpleThingUpdateEvent, EventMetadata> {
+    companion object : SimpleAggregateConstructor<CreateSimpleThing, SimpleThingCreated, SimpleThingUpdateCommand, SimpleThingUpdateEvent, EventMetadata> {
         override fun created(event: SimpleThingCreated) = SimpleThingAggregate()
 
-        override fun create(command: CreateSimpleThing) = Right(SimpleThingCreated)
+        override fun create(command: CreateSimpleThing, metadata: EventMetadata): Either<DomainError, SimpleThingCreated> = Right(SimpleThingCreated)
     }
 
     override fun updated(event: SimpleThingUpdateEvent) = when (event) {
         is Twerked -> this.copy(tweaks = tweaks + event.tweak)
     }
 
-    override fun update(command: SimpleThingUpdateCommand) = when (command) {
+    override fun update(command: SimpleThingUpdateCommand, metadata: EventMetadata) = when (command) {
         is Twerk -> Right.list(Twerked(command.tweak))
     }
 }

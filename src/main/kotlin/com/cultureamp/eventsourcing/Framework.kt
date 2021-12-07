@@ -100,6 +100,10 @@ fun <A, B, C> ((A, B) -> C).partial(a: A): (B) -> C {
     return { b -> invoke(a, b) }
 }
 
+fun <A, B, C, D> KFunction3<A, B, C, D>.partial(a: A): (B, C) -> D {
+    return { b, c -> invoke(a, b, c) }
+}
+
 fun <A, B, C, D> KFunction3<A, B, C, D>.partial2(b: B): (A, C) -> D {
     return { a, c -> invoke(a, b, c) }
 }

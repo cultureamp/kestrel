@@ -1,14 +1,15 @@
 package com.cultureamp.eventsourcing
 
+import com.cultureamp.eventsourcing.sample.StandardEventMetadata
 import org.joda.time.DateTime
 import java.util.*
 
 object PaymentSagaAggregate {
-    fun create(command: StartPaymentSaga): Either<DomainError, PaymentSagaStarted> = with(command) {
+    fun create(command: StartPaymentSaga, metadata: StandardEventMetadata): Either<DomainError, PaymentSagaStarted> = with(command) {
         Right(PaymentSagaStarted(fromUserId, toUserBankDetails, dollarAmount, DateTime()))
     }
 
-    fun update(command: PaymentSagaUpdateCommand): Either<DomainError, List<PaymentSagaUpdateEvent>> = when (command) {
+    fun update(command: PaymentSagaUpdateCommand, metadata: StandardEventMetadata): Either<DomainError, List<PaymentSagaUpdateEvent>> = when (command) {
         is StartThirdPartyPayment -> Right.list(StartedThirdPartyPayment(command.startedAt))
         is RegisterThirdPartySuccess -> Right.list(FinishedThirdPartyPayment(DateTime()))
         is RegisterThirdPartyFailure -> Right.list(FailedThirdPartyPayment(DateTime()))

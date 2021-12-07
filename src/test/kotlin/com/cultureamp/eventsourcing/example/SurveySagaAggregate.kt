@@ -1,8 +1,17 @@
 package com.cultureamp.eventsourcing.example
 
-import com.cultureamp.eventsourcing.*
+import com.cultureamp.eventsourcing.Command
+import com.cultureamp.eventsourcing.CreationCommand
+import com.cultureamp.eventsourcing.CreationEvent
+import com.cultureamp.eventsourcing.DomainError
+import com.cultureamp.eventsourcing.DomainEvent
+import com.cultureamp.eventsourcing.Either
+import com.cultureamp.eventsourcing.Right
+import com.cultureamp.eventsourcing.UpdateCommand
+import com.cultureamp.eventsourcing.UpdateEvent
+import com.cultureamp.eventsourcing.sample.StandardEventMetadata
 import org.joda.time.DateTime
-import java.util.*
+import java.util.UUID
 
 data class SurveySagaAggregate(val surveyAggregateId: UUID,
                                val surveyCaptureLayoutAggregateId: UUID,
@@ -18,7 +27,7 @@ data class SurveySagaAggregate(val surveyAggregateId: UUID,
     )
 
     companion object {
-        fun create(command: SurveySagaCreationCommand): Either<DomainError, SurveySagaStarted> = when (command) {
+        fun create(command: SurveySagaCreationCommand, metadata: StandardEventMetadata): Either<DomainError, SurveySagaStarted> = when (command) {
             is Create -> with(command) {
                 val startEvent = SurveySagaStarted(
                     surveyAggregateId = surveyAggregateId,
@@ -33,7 +42,7 @@ data class SurveySagaAggregate(val surveyAggregateId: UUID,
         }
     }
 
-    fun update(command: SurveySagaUpdateCommand): Either<DomainError, List<SurveySagaUpdateEvent>> = Right.list(
+    fun update(command: SurveySagaUpdateCommand, metadata: StandardEventMetadata): Either<DomainError, List<SurveySagaUpdateEvent>> = Right.list(
         when (command) {
             is StartCreatingSurvey -> StartedCreatingSurvey(
                 CreateSurvey(

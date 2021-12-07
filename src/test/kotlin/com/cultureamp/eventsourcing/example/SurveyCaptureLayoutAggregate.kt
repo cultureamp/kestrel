@@ -4,6 +4,7 @@ import com.cultureamp.eventsourcing.*
 import org.joda.time.DateTime
 import com.cultureamp.eventsourcing.example.DemographicSectionPosition.bottom
 import com.cultureamp.eventsourcing.example.DemographicSectionPosition.top
+import com.cultureamp.eventsourcing.sample.StandardEventMetadata
 import java.util.UUID
 
 
@@ -18,7 +19,7 @@ data class SurveyCaptureLayoutAggregate(
             is Snapshot -> with(event) { SurveyCaptureLayoutAggregate(sectionsForIntendedPurpose, demographicSectionsPlacement, questions) }
         }
 
-        fun create(command: SurveyCaptureLayoutCreationCommand): Either<SurveyCaptureLayoutCommandError, Generated> = when (command) {
+        fun create(command: SurveyCaptureLayoutCreationCommand, metadata: StandardEventMetadata): Either<SurveyCaptureLayoutCommandError, Generated> = when (command) {
             is Generate -> with(command) { Right(Generated(surveyId, generatedAt)) }
         }
     }
@@ -81,7 +82,7 @@ data class SurveyCaptureLayoutAggregate(
         }
     }
 
-    fun update(command: SurveyCaptureLayoutUpdateCommand): Either<SurveyCaptureLayoutCommandError, List<SurveyCaptureLayoutUpdateEvent>> = when (command) {
+    fun update(command: SurveyCaptureLayoutUpdateCommand, metadata: StandardEventMetadata): Either<SurveyCaptureLayoutCommandError, List<SurveyCaptureLayoutUpdateEvent>> = when (command) {
         is AddSection -> when {
             hasSection(command.sectionId) -> Left(SectionAlreadyAdded)
             hasSectionCode(command.code) -> Left(SectionCodeNotUnique)
