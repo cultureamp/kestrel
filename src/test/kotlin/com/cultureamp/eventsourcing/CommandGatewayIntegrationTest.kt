@@ -166,10 +166,20 @@ class CommandGatewayIntegrationTest : DescribeSpec({
             }
         }
 
-        it("can route to an aggregate created with function handles") {
+        it("can route to an aggregate created with function handles with metadata") {
             val pizzaId = UUID.randomUUID()
             gateway.dispatch(CreateClassicPizza(pizzaId, PizzaStyle.MARGHERITA), metadata) shouldBe Right(Created)
             gateway.dispatch(AddTopping(pizzaId, PizzaTopping.PINEAPPLE), metadata) shouldBe Right(Updated)
+
+            transaction(db) {
+                eventsTable.selectAll().count() shouldBe 2
+            }
+        }
+
+        it("can route to an aggregate created with function handles without metadata") {
+            val surveyCaptureLayoutId = UUID.randomUUID()
+            gateway.dispatch(Generate(surveyCaptureLayoutId, UUID.randomUUID(), DateTime.now()), metadata) shouldBe Right(Created)
+            gateway.dispatch(AddSection(surveyCaptureLayoutId, UUID.randomUUID(), listOf(LocalizedText("hello", Locale.en)), emptyList(), emptyList(), IntendedPurpose.standard, "code", null, DateTime.now()), metadata) shouldBe Right(Updated)
 
             transaction(db) {
                 eventsTable.selectAll().count() shouldBe 2

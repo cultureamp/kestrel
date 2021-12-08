@@ -27,6 +27,14 @@ data class Route<CC : CreationCommand, UC : UpdateCommand, M: EventMetadata>(
             noinline aggregateType: () -> String = { A::class.simpleName!! }
         ): Route<CC, UC, M> = from(AggregateConstructor.from(create, update, created, updated, aggregateType))
 
+        inline fun <reified CC: CreationCommand, CE: CreationEvent, Err: DomainError, reified M: EventMetadata, reified UC: UpdateCommand, UE: UpdateEvent, reified A: Any> from(
+            noinline create: (CC) -> Either<Err, CE>,
+            noinline update: A.(UC) -> Either<Err, List<UE>>,
+            noinline created: (CE) -> A,
+            noinline updated: A.(UE) -> A = { _ -> this },
+            noinline aggregateType: () -> String = { A::class.simpleName!! }
+        ): Route<CC, UC, M> = from(AggregateConstructor.from(create, update, created, updated, aggregateType))
+
         inline fun <reified CC : CreationCommand, CE : CreationEvent, Err : DomainError, reified UC : UpdateCommand, UE : UpdateEvent, reified M : EventMetadata, reified A : Any> fromStateless(
             noinline create: (CC, M) -> Either<Err, CE>,
             noinline update: (UC, M) -> Either<Err, List<UE>>,
