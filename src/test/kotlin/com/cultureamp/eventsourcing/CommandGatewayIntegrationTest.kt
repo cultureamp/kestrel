@@ -53,7 +53,8 @@ class CommandGatewayIntegrationTest : DescribeSpec({
     val tableH2 = H2DatabaseEventStore.eventsTable()
     val eventsTable = if(PgTestConfig.db != null) table else tableH2
     val eventStore = RelationalDatabaseEventStore.create<StandardEventMetadata>(db)
-    val routes = listOf(
+    val gateway = EventStoreCommandGateway(
+        eventStore,
         Route.from(
             PizzaAggregate.Companion::create,
             PizzaAggregate::update,
@@ -92,7 +93,6 @@ class CommandGatewayIntegrationTest : DescribeSpec({
             ParticipantAggregate::updated
         )
     )
-    val gateway = EventStoreCommandGateway(eventStore, routes)
 
     afterTest {
         transaction(db) {

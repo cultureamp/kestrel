@@ -27,7 +27,8 @@ class AsyncEventProcessorMonitorIntegrationTest : DescribeSpec({
     val eventStore =  RelationalDatabaseEventStore.create<StandardEventMetadata>(db)
     val bookmarksTable = Bookmarks()
     val bookmarkStore = RelationalDatabaseBookmarkStore(db, bookmarksTable)
-    val commandGateway = CommandGateway(eventStore, listOf(
+    val commandGateway = CommandGateway(
+        eventStore,
         Route.from(
             SurveyAggregate.Companion::create.partial(SurveyNameAlwaysAvailable),
             SurveyAggregate::update.partial2(SurveyNameAlwaysAvailable),
@@ -39,8 +40,9 @@ class AsyncEventProcessorMonitorIntegrationTest : DescribeSpec({
             ParticipantAggregate::update,
             ParticipantAggregate.Companion::created,
             ParticipantAggregate::updated
+
         )
-    ))
+    )
 
     beforeTest {
         transaction(db) {

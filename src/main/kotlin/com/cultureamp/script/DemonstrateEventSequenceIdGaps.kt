@@ -112,9 +112,8 @@ fun main(args: Array<String>) {
     }
 
     val commandGateway = CommandGateway(
-        eventStore, listOf(
-            Route.from(SimpleThingAggregate)
-        )
+        eventStore,
+        Route.from(SimpleThingAggregate)
     )
 
     val stop = AtomicBoolean(false)
