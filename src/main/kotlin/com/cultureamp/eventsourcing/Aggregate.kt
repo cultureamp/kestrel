@@ -14,8 +14,40 @@ interface SimpleAggregateConstructor<CC : CreationCommand, CE : CreationEvent, U
     fun aggregateType(): String = this::class.companionClassName
 }
 
-interface SimpleAggregateWithProjection<UC : UpdateCommand, UE : UpdateEvent, P>
-interface SimpleAggregateConstructorWithProjection<CC : CreationCommand, CE : CreationEvent, UC : UpdateCommand, UE : UpdateEvent, P>
+interface SimpleAggregateWithProjection<UC : UpdateCommand, UE : UpdateEvent, P> {
+    fun updated(event: UE): SimpleAggregateWithProjection<UC, UE, P>
+    fun update(projection: P, command: UC): Either<DomainError, List<UE>>
+
+    fun partial(projection: P): SimpleAggregate<UC, UE> {
+        return object : SimpleAggregate<UC, UE> {
+            override fun updated(event: UE): SimpleAggregate<UC, UE> {
+                return this@SimpleAggregateWithProjection.updated(event).partial(projection)
+            }
+
+            override fun update(command: UC): Either<DomainError, List<UE>> {
+                return update(projection, command)
+            }
+        }
+    }
+}
+interface SimpleAggregateConstructorWithProjection<CC : CreationCommand, CE : CreationEvent, UC : UpdateCommand, UE : UpdateEvent, P> {
+    fun created(event: CE): SimpleAggregateWithProjection<UC, UE, P>
+    fun create(projection: P, command: CC): Either<DomainError, CE>
+    fun aggregateType(): String = this::class.companionClassName
+    fun partial(projection: P): SimpleAggregateConstructor<CC, CE, UC, UE> {
+        return object : SimpleAggregateConstructor<CC, CE, UC, UE> {
+            override fun created(event: CE): SimpleAggregate<UC, UE> {
+                return this@SimpleAggregateConstructorWithProjection.created(event).partial(projection)
+            }
+
+            override fun create(command: CC): Either<DomainError, CE> {
+                return create(projection, command)
+            }
+
+            override fun aggregateType(): String = this@SimpleAggregateConstructorWithProjection.aggregateType()
+        }
+    }
+}
 
 interface Aggregate<UC : UpdateCommand, UE : UpdateEvent, Err : DomainError, M : EventMetadata, out Self : Aggregate<UC, UE, Err, M, Self>> {
     fun updated(event: UE): Self

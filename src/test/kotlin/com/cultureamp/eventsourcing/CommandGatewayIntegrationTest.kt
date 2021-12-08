@@ -3,9 +3,11 @@ package com.cultureamp.eventsourcing
 import com.cultureamp.eventsourcing.example.AddSection
 import com.cultureamp.eventsourcing.example.AlwaysBoppable
 import com.cultureamp.eventsourcing.example.Boop
+import com.cultureamp.eventsourcing.example.BoopWithProjection
 import com.cultureamp.eventsourcing.example.Bop
 import com.cultureamp.eventsourcing.example.Create
 import com.cultureamp.eventsourcing.example.CreateSimpleThing
+import com.cultureamp.eventsourcing.example.CreateSimpleThingWithProjection
 import com.cultureamp.eventsourcing.example.CreateSurvey
 import com.cultureamp.eventsourcing.example.CreateThing
 import com.cultureamp.eventsourcing.example.Delete
@@ -16,9 +18,11 @@ import com.cultureamp.eventsourcing.example.Locale
 import com.cultureamp.eventsourcing.example.LocalizedText
 import com.cultureamp.eventsourcing.example.ParticipantAggregate
 import com.cultureamp.eventsourcing.example.PositionQuestion
+import com.cultureamp.eventsourcing.example.RandomNumberGenerator
 import com.cultureamp.eventsourcing.example.RemoveSection
 import com.cultureamp.eventsourcing.example.SectionNotFound
 import com.cultureamp.eventsourcing.example.SimpleThingAggregate
+import com.cultureamp.eventsourcing.example.SimpleThingWithProjectionAggregate
 import com.cultureamp.eventsourcing.example.StartCreatingSurvey
 import com.cultureamp.eventsourcing.example.SurveyAggregate
 import com.cultureamp.eventsourcing.example.SurveyCaptureLayoutAggregate
@@ -27,6 +31,7 @@ import com.cultureamp.eventsourcing.example.SurveySagaAggregate
 import com.cultureamp.eventsourcing.example.ThingAggregate
 import com.cultureamp.eventsourcing.example.Tweak
 import com.cultureamp.eventsourcing.example.Twerk
+import com.cultureamp.eventsourcing.example.TwerkWithProjection
 import com.cultureamp.eventsourcing.example.Uninvite
 import com.cultureamp.eventsourcing.sample.AddTopping
 import com.cultureamp.eventsourcing.sample.CreateClassicPizza
@@ -64,6 +69,7 @@ class CommandGatewayIntegrationTest : DescribeSpec({
         ),
         Route.from(ThingAggregate.partial(AlwaysBoppable)),
         Route.from(SimpleThingAggregate),
+        Route.from(SimpleThingWithProjectionAggregate.partial(RandomNumberGenerator())),
         Route.fromStateless(
             PaymentSagaAggregate::create,
             PaymentSagaAggregate::update,
@@ -175,6 +181,17 @@ class CommandGatewayIntegrationTest : DescribeSpec({
             gateway.dispatch(CreateSimpleThing(simpleThingId), metadata) shouldBe Right(Created)
             gateway.dispatch(Boop(simpleThingId), metadata) shouldBe Right(Updated)
             gateway.dispatch(Twerk(simpleThingId, "dink"), metadata) shouldBe Right(Updated)
+
+            transaction(db) {
+                eventsTable.selectAll().count() shouldBe 3
+            }
+        }
+
+        it("can route to a simple aggregate with a projection") {
+            val simpleThingId = UUID.randomUUID()
+            gateway.dispatch(CreateSimpleThingWithProjection(simpleThingId), metadata) shouldBe Right(Created)
+            gateway.dispatch(BoopWithProjection(simpleThingId), metadata) shouldBe Right(Updated)
+            gateway.dispatch(TwerkWithProjection(simpleThingId, "dink"), metadata) shouldBe Right(Updated)
 
             transaction(db) {
                 eventsTable.selectAll().count() shouldBe 3
