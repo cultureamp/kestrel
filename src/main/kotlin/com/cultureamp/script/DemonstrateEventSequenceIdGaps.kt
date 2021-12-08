@@ -111,11 +111,11 @@ fun main(args: Array<String>) {
         exec("TRUNCATE events RESTART IDENTITY;")
     }
 
-    val routes = listOf(
-        Route.from(SimpleThingAggregate)
+    val commandGateway = CommandGateway(
+        eventStore, listOf(
+            Route.from(SimpleThingAggregate)
+        )
     )
-
-    val commandGateway = CommandGateway(eventStore, routes)
 
     val stop = AtomicBoolean(false)
     val mainThread = Thread.currentThread()
@@ -197,18 +197,18 @@ data class Twerked(val tweak: String) : SimpleThingUpdateEvent()
 
 sealed class SimpleThingError : DomainError
 
-data class SimpleThingAggregate(val tweaks: List<String> = emptyList()) : SimpleAggregate<SimpleThingUpdateCommand, SimpleThingUpdateEvent, EventMetadata> {
-    companion object : SimpleAggregateConstructor<CreateSimpleThing, SimpleThingCreated, SimpleThingUpdateCommand, SimpleThingUpdateEvent, EventMetadata> {
+data class SimpleThingAggregate(val tweaks: List<String> = emptyList()) : SimpleAggregate<SimpleThingUpdateCommand, SimpleThingUpdateEvent> {
+    companion object : SimpleAggregateConstructor<CreateSimpleThing, SimpleThingCreated, SimpleThingUpdateCommand, SimpleThingUpdateEvent> {
         override fun created(event: SimpleThingCreated) = SimpleThingAggregate()
 
-        override fun create(command: CreateSimpleThing, metadata: EventMetadata): Either<DomainError, SimpleThingCreated> = Right(SimpleThingCreated)
+        override fun create(command: CreateSimpleThing): Either<DomainError, SimpleThingCreated> = Right(SimpleThingCreated)
     }
 
     override fun updated(event: SimpleThingUpdateEvent) = when (event) {
         is Twerked -> this.copy(tweaks = tweaks + event.tweak)
     }
 
-    override fun update(command: SimpleThingUpdateCommand, metadata: EventMetadata) = when (command) {
+    override fun update(command: SimpleThingUpdateCommand) = when (command) {
         is Twerk -> Right.list(Twerked(command.tweak))
     }
 }

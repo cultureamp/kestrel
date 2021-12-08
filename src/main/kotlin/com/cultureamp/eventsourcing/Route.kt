@@ -13,6 +13,12 @@ data class Route<CC : CreationCommand, UC : UpdateCommand, M: EventMetadata>(
             aggregateConstructor: AggregateConstructor<CC, *, *, UC, *, M, *>
         ): Route<CC, UC, M> = Route(CC::class, UC::class, M::class, aggregateConstructor)
 
+        inline fun <reified CC : CreationCommand, reified UC : UpdateCommand, CE : CreationEvent, UE : UpdateEvent, reified M : EventMetadata> from(
+            simpleAggregateConstructor: SimpleAggregateConstructor<CC, CE, UC, UE>
+        ): Route<CC, UC, M> {
+            return from(AggregateConstructor.from<CC, CE, UC, UE, M, SimpleAggregate<UC, UE>>(simpleAggregateConstructor))
+        }
+
         inline fun <reified CC: CreationCommand, CE: CreationEvent, Err: DomainError, reified M: EventMetadata, reified UC: UpdateCommand, UE: UpdateEvent, reified A: Any> from(
             noinline create: (CC, M) -> Either<Err, CE>,
             noinline update: A.(UC, M) -> Either<Err, List<UE>>,

@@ -35,11 +35,11 @@ object Booped : SimpleThingUpdateEvent()
 sealed class SimpleThingError : DomainError
 object Banged : SimpleThingError()
 
-data class SimpleThingAggregate(val tweaks: List<String> = emptyList(), val boops: List<Booped> = emptyList()) : SimpleAggregate<SimpleThingUpdateCommand, SimpleThingUpdateEvent, StandardEventMetadata> {
-    companion object : SimpleAggregateConstructor<CreateSimpleThing, SimpleThingCreated, SimpleThingUpdateCommand, SimpleThingUpdateEvent, StandardEventMetadata> {
+data class SimpleThingAggregate(val tweaks: List<String> = emptyList(), val boops: List<Booped> = emptyList()) : SimpleAggregate<SimpleThingUpdateCommand, SimpleThingUpdateEvent> {
+    companion object : SimpleAggregateConstructor<CreateSimpleThing, SimpleThingCreated, SimpleThingUpdateCommand, SimpleThingUpdateEvent> {
         override fun created(event: SimpleThingCreated) = SimpleThingAggregate()
 
-        override fun create(command: CreateSimpleThing, metadata: StandardEventMetadata) = Right(SimpleThingCreated)
+        override fun create(command: CreateSimpleThing) = Right(SimpleThingCreated)
     }
 
     override fun updated(event: SimpleThingUpdateEvent) = when(event){
@@ -47,7 +47,7 @@ data class SimpleThingAggregate(val tweaks: List<String> = emptyList(), val boop
         is Booped -> this.copy(boops = boops + event)
     }
 
-    override fun update(command: SimpleThingUpdateCommand, metadata: StandardEventMetadata) = when(command) {
+    override fun update(command: SimpleThingUpdateCommand) = when(command) {
         is Twerk -> Right.list(Twerked(command.tweak))
         is Boop -> Right.list(Booped)
         is Bang -> Left(Banged)

@@ -92,7 +92,7 @@ class CommandGatewayIntegrationTest : DescribeSpec({
             ParticipantAggregate::updated
         )
     )
-    val gateway = CommandGateway(eventStore, routes)
+    val gateway = EventStoreCommandGateway(eventStore, routes)
 
     afterTest {
         transaction(db) {

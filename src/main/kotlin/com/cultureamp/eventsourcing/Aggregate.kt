@@ -4,11 +4,18 @@ import org.joda.time.DateTime
 import java.util.*
 import kotlin.reflect.KClass
 
-interface SimpleAggregate<UC : UpdateCommand, UE : UpdateEvent, M: EventMetadata> : Aggregate<UC, UE, DomainError, M, SimpleAggregate<UC, UE, M>>
-interface SimpleAggregateConstructor<CC : CreationCommand, CE : CreationEvent, UC : UpdateCommand, UE : UpdateEvent, M : EventMetadata> : AggregateConstructor<CC, CE, DomainError, UC, UE, M, SimpleAggregate<UC, UE, M>>
+interface SimpleAggregate<UC : UpdateCommand, UE : UpdateEvent> {
+    fun updated(event: UE): SimpleAggregate<UC, UE>
+    fun update(command: UC): Either<DomainError, List<UE>>
+}
+interface SimpleAggregateConstructor<CC : CreationCommand, CE : CreationEvent, UC : UpdateCommand, UE : UpdateEvent> {
+    fun created(event: CE): SimpleAggregate<UC, UE>
+    fun create(command: CC): Either<DomainError, CE>
+    fun aggregateType(): String = this::class.companionClassName
+}
 
-interface SimpleAggregateWithProjection<UC : UpdateCommand, UE : UpdateEvent, P> : AggregateWithProjection<UC, UE, DomainError, P, EventMetadata, SimpleAggregateWithProjection<UC, UE, P>>
-interface SimpleAggregateConstructorWithProjection<CC : CreationCommand, CE : CreationEvent, UC : UpdateCommand, UE : UpdateEvent, P> : AggregateConstructorWithProjection<CC, CE, DomainError, UC, UE, P, EventMetadata, SimpleAggregateWithProjection<UC, UE, P>>
+interface SimpleAggregateWithProjection<UC : UpdateCommand, UE : UpdateEvent, P>
+interface SimpleAggregateConstructorWithProjection<CC : CreationCommand, CE : CreationEvent, UC : UpdateCommand, UE : UpdateEvent, P>
 
 interface Aggregate<UC : UpdateCommand, UE : UpdateEvent, Err : DomainError, M : EventMetadata, out Self : Aggregate<UC, UE, Err, M, Self>> {
     fun updated(event: UE): Self
@@ -28,6 +35,21 @@ interface Aggregate<UC : UpdateCommand, UE : UpdateEvent, Err : DomainError, M :
 
                 override fun update(command: UC, metadata: M): Either<Err, List<UE>> {
                     return aggregate.update(command, metadata)
+                }
+            }
+        }
+
+        fun <UC : UpdateCommand, UE : UpdateEvent, M : EventMetadata, A : Any> from(
+            aggregate: SimpleAggregate<UC, UE>,
+        ): Aggregate<UC, UE, DomainError, M, Aggregate<UC, UE, DomainError, M, *>> {
+            return object : Aggregate<UC, UE, DomainError, M, Aggregate<UC, UE, DomainError, M, *>> {
+                override fun updated(event: UE): Aggregate<UC, UE, DomainError, M, *> {
+                    val updatedAggregate = aggregate.updated(event)
+                    return from<UC, UE, M, A>(updatedAggregate)
+                }
+
+                override fun update(command: UC, metadata: M): Either<DomainError, List<UE>> {
+                    return aggregate.update(command)
                 }
             }
         }
@@ -74,6 +96,21 @@ interface AggregateConstructor<CC : CreationCommand, CE : CreationEvent, Err : D
                 override fun create(command: CC, metadata: M): Either<Err, CE> = create(command, metadata)
 
                 override fun aggregateType() = aggregateType()
+            }
+        }
+
+        inline fun <CC : CreationCommand, CE : CreationEvent, UC : UpdateCommand, UE : UpdateEvent, M : EventMetadata, reified A : Any> from(
+            simpleAggregateConstructor: SimpleAggregateConstructor<CC, CE, UC, UE>
+        ): AggregateConstructor<CC, CE, DomainError, UC, UE, M, Aggregate<UC, UE, DomainError, M, *>> {
+            return object : AggregateConstructor<CC, CE, DomainError, UC, UE, M, Aggregate<UC, UE, DomainError, M, *>> {
+                override fun created(event: CE): Aggregate<UC, UE, DomainError, M, *> {
+                    val createdAggregate = simpleAggregateConstructor.created(event)
+                    return Aggregate.from<UC, UE, M, SimpleAggregate<UC, UE>>(createdAggregate)
+                }
+
+                override fun create(command: CC, metadata: M): Either<DomainError, CE> = simpleAggregateConstructor.create(command)
+
+                override fun aggregateType() = simpleAggregateConstructor.aggregateType()
             }
         }
 
