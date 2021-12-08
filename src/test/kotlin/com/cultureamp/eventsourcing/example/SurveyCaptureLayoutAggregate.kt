@@ -4,6 +4,7 @@ import com.cultureamp.eventsourcing.*
 import org.joda.time.DateTime
 import com.cultureamp.eventsourcing.example.DemographicSectionPosition.bottom
 import com.cultureamp.eventsourcing.example.DemographicSectionPosition.top
+import com.cultureamp.eventsourcing.sample.StandardEventMetadata
 import java.util.UUID
 
 

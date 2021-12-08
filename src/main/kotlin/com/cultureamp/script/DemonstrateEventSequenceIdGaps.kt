@@ -6,6 +6,7 @@ import com.cultureamp.eventsourcing.CreationCommand
 import com.cultureamp.eventsourcing.CreationEvent
 import com.cultureamp.eventsourcing.DomainError
 import com.cultureamp.eventsourcing.DomainEvent
+import com.cultureamp.eventsourcing.Either
 import com.cultureamp.eventsourcing.EventMetadata
 import com.cultureamp.eventsourcing.Left
 import com.cultureamp.eventsourcing.RelationalDatabaseEventStore
@@ -110,11 +111,10 @@ fun main(args: Array<String>) {
         exec("TRUNCATE events RESTART IDENTITY;")
     }
 
-    val routes = listOf(
+    val commandGateway = CommandGateway(
+        eventStore,
         Route.from(SimpleThingAggregate)
     )
-
-    val commandGateway = CommandGateway(eventStore, routes)
 
     val stop = AtomicBoolean(false)
     val mainThread = Thread.currentThread()
@@ -200,7 +200,7 @@ data class SimpleThingAggregate(val tweaks: List<String> = emptyList()) : Simple
     companion object : SimpleAggregateConstructor<CreateSimpleThing, SimpleThingCreated, SimpleThingUpdateCommand, SimpleThingUpdateEvent> {
         override fun created(event: SimpleThingCreated) = SimpleThingAggregate()
 
-        override fun create(command: CreateSimpleThing) = Right(SimpleThingCreated)
+        override fun create(command: CreateSimpleThing): Either<DomainError, SimpleThingCreated> = Right(SimpleThingCreated)
     }
 
     override fun updated(event: SimpleThingUpdateEvent) = when (event) {

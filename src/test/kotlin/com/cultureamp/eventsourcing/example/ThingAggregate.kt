@@ -8,10 +8,12 @@ import com.cultureamp.eventsourcing.CreationEvent
 import com.cultureamp.eventsourcing.DomainError
 import com.cultureamp.eventsourcing.DomainEvent
 import com.cultureamp.eventsourcing.Either
+import com.cultureamp.eventsourcing.EventMetadata
 import com.cultureamp.eventsourcing.Left
 import com.cultureamp.eventsourcing.Right
 import com.cultureamp.eventsourcing.UpdateCommand
 import com.cultureamp.eventsourcing.UpdateEvent
+import com.cultureamp.eventsourcing.sample.StandardEventMetadata
 import java.util.*
 
 sealed class ThingCommand : Command
@@ -44,13 +46,13 @@ object AlwaysBoppable : ThingCommandProjection {
     override fun isBoppable() = true
 }
 
-data class ThingAggregate(val tweaks: List<String> = emptyList(), val bops: List<Bopped> = emptyList()) : AggregateWithProjection<ThingUpdateCommand, ThingUpdateEvent, ThingError, ThingCommandProjection, ThingAggregate> {
-    companion object : AggregateConstructorWithProjection<ThingCreationCommand, ThingCreationEvent, ThingError, ThingUpdateCommand, ThingUpdateEvent, ThingCommandProjection, ThingAggregate> {
+data class ThingAggregate(val tweaks: List<String> = emptyList(), val bops: List<Bopped> = emptyList()) : AggregateWithProjection<ThingUpdateCommand, ThingUpdateEvent, ThingError, ThingCommandProjection, StandardEventMetadata, ThingAggregate> {
+    companion object : AggregateConstructorWithProjection<ThingCreationCommand, ThingCreationEvent, ThingError, ThingUpdateCommand, ThingUpdateEvent, ThingCommandProjection, StandardEventMetadata, ThingAggregate> {
         override fun created(event: ThingCreationEvent): ThingAggregate = when(event) {
             is ThingCreated -> ThingAggregate()
         }
 
-        override fun create(projection: ThingCommandProjection, command: ThingCreationCommand): Either<ThingError, ThingCreationEvent> = when(command){
+        override fun create(projection: ThingCommandProjection, command: ThingCreationCommand, metadata: StandardEventMetadata): Either<ThingError, ThingCreationEvent> = when(command){
             is CreateThing -> Right(ThingCreated)
         }
 
@@ -62,7 +64,7 @@ data class ThingAggregate(val tweaks: List<String> = emptyList(), val bops: List
         is Bopped -> this.copy(bops = bops + event)
     }
 
-    override fun update(projection: ThingCommandProjection, command: ThingUpdateCommand): Either<ThingError, List<ThingUpdateEvent>> = when(command) {
+    override fun update(projection: ThingCommandProjection, command: ThingUpdateCommand, metadata: StandardEventMetadata): Either<ThingError, List<ThingUpdateEvent>> = when(command) {
         is Tweak -> Right.list(Tweaked(command.tweak))
         is Bop -> when(projection.isBoppable()) {
             false -> Left(Unboppable)

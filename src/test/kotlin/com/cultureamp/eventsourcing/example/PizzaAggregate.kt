@@ -91,8 +91,7 @@ data class PizzaAggregate(val baseStyle: PizzaStyle, val toppings: List<PizzaTop
             )
         }
 
-
-        fun create(command: PizzaCreationCommand): Either<PizzaError, PizzaCreated> = when (command) {
+        fun create(command: PizzaCreationCommand, metadata: StandardEventMetadata): Either<PizzaError, PizzaCreated> = when (command) {
             is CreateClassicPizza -> {
                 val initialToppings = classicToppings(command.baseStyle)
                 Right(
@@ -107,7 +106,7 @@ data class PizzaAggregate(val baseStyle: PizzaStyle, val toppings: List<PizzaTop
         fun aggregateType() = "pizza"
     }
 
-    fun update(command: PizzaUpdateCommand): Either<PizzaError, List<PizzaUpdateEvent>> {
+    fun update(command: PizzaUpdateCommand, metadata: StandardEventMetadata): Either<PizzaError, List<PizzaUpdateEvent>> {
         return when (isEaten) {
             true -> Left(PizzaAlreadyEaten())
             false -> when (command) {

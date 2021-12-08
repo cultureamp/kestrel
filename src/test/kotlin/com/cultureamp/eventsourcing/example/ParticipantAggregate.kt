@@ -3,6 +3,7 @@ package com.cultureamp.eventsourcing.example
 import com.cultureamp.eventsourcing.*
 import org.joda.time.DateTime
 import com.cultureamp.eventsourcing.example.State.*
+import com.cultureamp.eventsourcing.sample.StandardEventMetadata
 import java.util.*
 
 data class ParticipantAggregate(val state: State) {
@@ -10,7 +11,7 @@ data class ParticipantAggregate(val state: State) {
         @Suppress("UNUSED_PARAMETER")
         fun created(event: Invited): ParticipantAggregate = ParticipantAggregate(INVITED)
 
-        fun create(command: Invite): Either<ParticipantError, Invited> = with(command) {
+        fun create(command: Invite, metadata: StandardEventMetadata): Either<ParticipantError, Invited> = with(command) {
             Right(Invited(surveyPeriodId, employeeId, invitedAt))
         }
     }
@@ -21,7 +22,7 @@ data class ParticipantAggregate(val state: State) {
         is Reinvited -> this.copy(state = INVITED)
     }
 
-    fun update(command: ParticipantUpdateCommand): Either<ParticipantError, List<ParticipantUpdateEvent>> =
+    fun update(command: ParticipantUpdateCommand, metadata: StandardEventMetadata): Either<ParticipantError, List<ParticipantUpdateEvent>> =
         when (command) {
             is Invite -> when (state) {
                 INVITED -> Left(AlreadyInvitedException)

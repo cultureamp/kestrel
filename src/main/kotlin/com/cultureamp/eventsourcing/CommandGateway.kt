@@ -1,13 +1,13 @@
 package com.cultureamp.eventsourcing
 
-interface CommandGateway<in M : EventMetadata> {
+interface CommandGateway<M : EventMetadata> {
     companion object {
-        operator fun <M : EventMetadata> invoke(eventStore: EventStore<M>, routes: List<Route<*, *>>) = EventStoreCommandGateway(eventStore, routes)
+        operator fun <M : EventMetadata> invoke(eventStore: EventStore<M>, vararg routes: Route<*, *, M>) = EventStoreCommandGateway(eventStore, *routes)
     }
     fun dispatch(command: Command, metadata: M, retries: Int = 5): Either<CommandError, SuccessStatus>
 }
 
-class EventStoreCommandGateway<in M : EventMetadata>(private val eventStore: EventStore<M>, private val routes: List<Route<*, *>>) : CommandGateway<M> {
+class EventStoreCommandGateway<M : EventMetadata>(private val eventStore: EventStore<M>, private vararg val routes: Route<*, *, M>) : CommandGateway<M> {
     override tailrec fun dispatch(command: Command, metadata: M, retries: Int): Either<CommandError, SuccessStatus> {
         val result = createOrUpdate(command, metadata)
         return if (result is Left && result.error is RetriableError && retries > 0) {
@@ -31,9 +31,9 @@ class EventStoreCommandGateway<in M : EventMetadata>(private val eventStore: Eve
     }
 
     @Suppress("UNCHECKED_CAST")
-    private fun constructorFor(command: Command): AggregateConstructor<CreationCommand, CreationEvent, DomainError, UpdateCommand, UpdateEvent, Aggregate<UpdateCommand, UpdateEvent, DomainError, *>>? {
+    private fun constructorFor(command: Command): AggregateConstructor<CreationCommand, CreationEvent, DomainError, UpdateCommand, UpdateEvent, M, Aggregate<UpdateCommand, UpdateEvent, DomainError, M, *>>? {
         val route = routes.find { it.creationCommandClass.isInstance(command) || it.updateCommandClass.isInstance(command) }
-        return route?.aggregateConstructor as AggregateConstructor<CreationCommand, CreationEvent, DomainError, UpdateCommand, UpdateEvent, Aggregate<UpdateCommand, UpdateEvent, DomainError, *>>?
+        return route?.aggregateConstructor as AggregateConstructor<CreationCommand, CreationEvent, DomainError, UpdateCommand, UpdateEvent, M, Aggregate<UpdateCommand, UpdateEvent, DomainError, M, *>>?
     }
 }
 

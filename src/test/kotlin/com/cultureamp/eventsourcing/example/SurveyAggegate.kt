@@ -1,6 +1,7 @@
 package com.cultureamp.eventsourcing.example
 
 import com.cultureamp.eventsourcing.*
+import com.cultureamp.eventsourcing.sample.StandardEventMetadata
 import org.joda.time.DateTime
 import java.util.*
 
@@ -8,7 +9,7 @@ data class SurveyAggregate(val name: Map<Locale, String>, val accountId: UUID, v
     constructor(event: Created): this(event.name, event.accountId)
 
     companion object {
-        fun create(query: SurveyNamesQuery, command: SurveyCreationCommand): Either<SurveyError, Created> = when (command) {
+        fun create(query: SurveyNamesQuery, command: SurveyCreationCommand, metadata: StandardEventMetadata): Either<SurveyError, Created> = when (command) {
             is CreateSurvey -> when {
                 command.name.any { (locale, name) -> query.nameExistsFor(command.accountId, name, locale)} -> Left(SurveyNameNotUnique)
                 else -> Right(Created(command.name, command.accountId, command.createdAt))
@@ -22,7 +23,7 @@ data class SurveyAggregate(val name: Map<Locale, String>, val accountId: UUID, v
         is Restored -> this.copy(deleted = false)
     }
 
-    fun update(query: SurveyNamesQuery, command: SurveyUpdateCommand): Either<SurveyError, List<SurveyUpdateEvent>> = when (command) {
+    fun update(query: SurveyNamesQuery, command: SurveyUpdateCommand, metadata: StandardEventMetadata): Either<SurveyError, List<SurveyUpdateEvent>> = when (command) {
         is Rename -> when {
             name.get(command.locale) == command.newName -> Left(AlreadyRenamed)
             query.nameExistsFor(accountId, command.newName, command.locale) -> Left(SurveyNameNotUnique)
