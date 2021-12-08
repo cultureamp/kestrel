@@ -183,10 +183,7 @@ This can then by wired into your [`CommandGateway`](/src/main/kotlin/com/culture
 like so:
 
 ```kotlin
-val routes = listOf(
-    Route.from(SimpleThingAggregate)
-)
-val commandGateway = CommandGateway(eventStore, routes)
+val commandGateway = CommandGateway(eventStore, Route.from(SimpleThingAggregate))
 ```
 
 If you need access to dependencies during command-handling, or want finer grained control over returned error types or
@@ -248,7 +245,8 @@ This can then by wired into your [`CommandGateway`](/src/main/kotlin/com/culture
 like so:
 
 ```kotlin
-val routes = listOf(
+val commandGateway = CommandGateway(
+    eventStore,
     Route.from(
         SurveyAggregate.Companion::create.partial(SurveyNameAlwaysAvailable),
         SurveyAggregate::update.partial2(SurveyNameAlwaysAvailable),
@@ -256,7 +254,6 @@ val routes = listOf(
         SurveyAggregate::updated
     )
 )
-val commandGateway = CommandGateway(eventStore, routes)
 ```
 
 If you happen to have a "stateless" aggregate that doesn't need to update its internal state to handle commands, you
@@ -278,14 +275,14 @@ object PaymentSagaAggregate {
 ```
 
 ```kotlin
-val routes = listOf(
+val gateway = CommandGateway(
+    eventStore,
     Route.fromStateless(
         PaymentSagaAggregate::create,
         PaymentSagaAggregate::update,
         PaymentSagaAggregate
     )
 )
-val gateway = CommandGateway(eventStore, routes)
 ```
 
 ### Event-processors (Projectors and Reactors)
