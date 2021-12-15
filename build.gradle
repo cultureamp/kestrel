@@ -7,12 +7,14 @@ buildscript {
     dependencies {
         classpath "org.jetbrains.kotlin:kotlin-gradle-plugin:$kotlin_version"
         classpath("com.cinnober.gradle:semver-git:2.3.1")
+        classpath("org.owasp:dependency-check-gradle:6.4.1.1")
     }
 }
 
 apply plugin: 'kotlin'
 apply plugin: 'maven'
 apply plugin: 'signing'
+apply plugin: "org.owasp.dependencycheck"
 
 group group_id
 version "$base_version$version_suffix"
@@ -83,6 +85,15 @@ uploadArchives {
     }
 }
 
+dependencyCheck {
+    // anything over a 5.0 is above a 'warning'
+    failBuildOnCVSS = 0.0F
+    // this is the default, added here for clarity
+    failOnError = true
+    // if needed, a supression file can be added
+    // suppressionFile = file("$rootDir/owasp-suppression.xml").toString()
+    analyzers.assemblyEnabled = false
+}
 
 signing {
     useGpgCmd()
