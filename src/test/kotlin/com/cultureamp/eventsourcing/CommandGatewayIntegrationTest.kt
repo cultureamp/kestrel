@@ -189,11 +189,10 @@ class CommandGatewayIntegrationTest : DescribeSpec({
         it("can route to a simple aggregate") {
             val simpleThingId = UUID.randomUUID()
             gateway.dispatch(CreateSimpleThing(simpleThingId), metadata) shouldBe Right(Created)
-            gateway.dispatch(Boop(simpleThingId), metadata) shouldBe Right(Updated)
             gateway.dispatch(Twerk(simpleThingId, "dink"), metadata) shouldBe Right(Updated)
 
             transaction(db) {
-                eventsTable.selectAll().count() shouldBe 3
+                eventsTable.selectAll().count() shouldBe 2
             }
         }
 
@@ -279,6 +278,17 @@ class CommandGatewayIntegrationTest : DescribeSpec({
             gateway.dispatch(CreateSurvey(surveyId, UUID.randomUUID(), mapOf(Locale.en to "name"), UUID.randomUUID(), DateTime.now()), metadata) shouldBe Right(Created)
             gateway.dispatch(Invite(surveyId, UUID.randomUUID(), UUID.randomUUID(), DateTime.now()), metadata) shouldBe
                 Left(ConstructorTypeMismatch("ParticipantAggregate", SurveyCreated::class))
+        }
+
+        it("supports singleton/object events") {
+            val simpleThingId = UUID.randomUUID()
+            gateway.dispatch(CreateSimpleThing(simpleThingId), metadata) shouldBe Right(Created)
+            gateway.dispatch(Boop(simpleThingId), metadata) shouldBe Right(Updated) // singleton event
+            gateway.dispatch(Twerk(simpleThingId, "booped"), metadata) shouldBe Right(Updated)
+
+            transaction(db) {
+                eventsTable.selectAll().count() shouldBe 3
+            }
         }
     }
 })

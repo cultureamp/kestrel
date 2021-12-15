@@ -44,7 +44,7 @@ data class SimpleThingAggregate(val tweaks: List<String> = emptyList(), val boop
 
     override fun updated(event: SimpleThingUpdateEvent) = when(event){
         is Twerked -> this.copy(tweaks = tweaks + event.tweak)
-        is Booped -> this.copy(boops = boops + event)
+        Booped -> this.copy(boops = boops + Booped)
     }
 
     override fun update(command: SimpleThingUpdateCommand) = when(command) {
