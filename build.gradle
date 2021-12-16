@@ -36,6 +36,16 @@ task sourcesJar(type: Jar) {
     from sourceSets.main.allSource
 }
 
+dependencyCheck {
+    // anything over a 5.0 is above a 'warning'
+    failBuildOnCVSS = 2.0F
+    // this is the default, added here for clarity
+    failOnError = true
+    // if needed, a supression file can be added
+    suppressionFile = file("$rootDir/owasp-suppression.xml").toString()
+    analyzers.assemblyEnabled = false
+}
+
 artifacts {
     archives javadocJar, sourcesJar
 }
@@ -83,16 +93,6 @@ uploadArchives {
             }
         }
     }
-}
-
-dependencyCheck {
-    // anything over a 5.0 is above a 'warning'
-    failBuildOnCVSS = 0.0F
-    // this is the default, added here for clarity
-    failOnError = true
-    // if needed, a supression file can be added
-    // suppressionFile = file("$rootDir/owasp-suppression.xml").toString()
-    analyzers.assemblyEnabled = false
 }
 
 signing {
@@ -152,6 +152,7 @@ dependencies {
     implementation "org.jetbrains.exposed:exposed-jodatime:$exposed_version"
     implementation "io.github.microutils:kotlin-logging:2.0.11"
     implementation "org.postgresql:postgresql:42.2.23"
+    implementation "org.owasp:dependency-check-gradle:6.4.1.1"
 }
 
 
