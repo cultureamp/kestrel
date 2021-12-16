@@ -36,6 +36,7 @@ val defaultObjectMapper = ObjectMapper()
 
 val defaultEventsTableName = "events"
 val defaultEventsSequenceStatsTableName = "events_sequence_stats"
+val defaultEventTypeResolver = CanonicalNameEventTypeResolver
 
 class RelationalDatabaseEventStore<M : EventMetadata> @PublishedApi internal constructor(
     private val db: Database,
@@ -44,6 +45,7 @@ class RelationalDatabaseEventStore<M : EventMetadata> @PublishedApi internal con
     private val synchronousEventProcessors: List<EventProcessor<M>>,
     private val metadataClass: Class<M>,
     private val objectMapper: ObjectMapper,
+    private val eventTypeResolver: EventTypeResolver,
     private val blockingLockUntilTransactionEnd: Transaction.() -> CommandError? = { null }
 ) : EventStore<M> {
 
@@ -54,10 +56,11 @@ class RelationalDatabaseEventStore<M : EventMetadata> @PublishedApi internal con
             objectMapper: ObjectMapper = defaultObjectMapper,
             eventsTableName: String = defaultEventsTableName,
             eventsSequenceStateTableName: String = defaultEventsSequenceStatsTableName,
+            eventTypeResolver: EventTypeResolver = defaultEventTypeResolver
         ): RelationalDatabaseEventStore<M> =
             when (db.dialect) {
-                is H2Dialect -> H2DatabaseEventStore.create(synchronousEventProcessors, db, objectMapper, eventsTableName, eventsSequenceStateTableName)
-                is PostgreSQLDialect -> PostgresDatabaseEventStore.create(synchronousEventProcessors, db, objectMapper, eventsTableName, eventsSequenceStateTableName)
+                is H2Dialect -> H2DatabaseEventStore.create(synchronousEventProcessors, db, objectMapper, eventsTableName, eventsSequenceStateTableName, eventTypeResolver)
+                is PostgreSQLDialect -> PostgresDatabaseEventStore.create(synchronousEventProcessors, db, objectMapper, eventsTableName, eventsSequenceStateTableName, eventTypeResolver)
                 else -> throw UnsupportedOperationException("${db.dialect} not currently supported")
             }
 
@@ -66,8 +69,9 @@ class RelationalDatabaseEventStore<M : EventMetadata> @PublishedApi internal con
             objectMapper: ObjectMapper = defaultObjectMapper,
             eventsTableName: String = defaultEventsTableName,
             eventsSequenceStateTableName: String = defaultEventsSequenceStatsTableName,
+            eventTypeResolver: EventTypeResolver = defaultEventTypeResolver
         ) =
-            create<M>(emptyList(), db, objectMapper, eventsTableName, eventsSequenceStateTableName)
+            create<M>(emptyList(), db, objectMapper, eventsTableName, eventsSequenceStateTableName, eventTypeResolver)
     }
 
     fun createSchemaIfNotExists() {
@@ -82,21 +86,22 @@ class RelationalDatabaseEventStore<M : EventMetadata> @PublishedApi internal con
                 blockingLockUntilTransactionEnd()?.let { Left(it) } ?: run {
                     newEvents.forEach { event ->
                         val body = objectMapper.writeValueAsString(event.domainEvent)
-                        val eventType = event.domainEvent.javaClass
+                        val domainEventClass = event.domainEvent.javaClass
                         val metadata = objectMapper.writeValueAsString(event.metadata)
-                        validateSerialization(eventType, body, metadata)
+                        validateSerialization(domainEventClass, body, metadata)
+                        val eventType = eventTypeResolver.serialize(domainEventClass)
                         val insertResult = events.insert { row ->
                             row[events.aggregateSequence] = event.aggregateSequence
                             row[events.eventId] = event.id
                             row[events.aggregateId] = aggregateId
                             row[events.aggregateType] = event.aggregateType
-                            row[events.eventType] = eventType.canonicalName
+                            row[events.eventType] = eventType
                             row[events.createdAt] = event.createdAt
                             row[events.body] = body
                             row[events.metadata] = metadata
                         }
                         eventsSequenceStats.replace {
-                            it[eventsSequenceStats.eventType] = eventType.canonicalName
+                            it[eventsSequenceStats.eventType] = eventType
                             it[eventsSequenceStats.sequence] = insertResult[events.sequence]
                         }
                         synchronousEventProcessors.forEach { it.process(event) }
@@ -113,10 +118,10 @@ class RelationalDatabaseEventStore<M : EventMetadata> @PublishedApi internal con
         }
     }
 
-    private fun validateSerialization(eventType: Class<DomainEvent>, body: String, metadata: String) {
+    private fun validateSerialization(domainEventClass: Class<DomainEvent>, body: String, metadata: String) {
         // prove that json body can be deserialized, which catches invalid fields types, e.g. interfaces
         try {
-            objectMapper.readValue<DomainEvent>(body, eventType)
+            objectMapper.readValue(body, domainEventClass)
         } catch (e: JsonProcessingException) {
             throw EventBodySerializationException(e)
         }
@@ -129,7 +134,7 @@ class RelationalDatabaseEventStore<M : EventMetadata> @PublishedApi internal con
     }
 
     private fun rowToSequencedEvent(row: ResultRow): SequencedEvent<M> = row.let {
-        val eventType = row[events.eventType].asClass<DomainEvent>()!!
+        val eventType = eventTypeResolver.deserialize(row[events.eventType])
         val domainEvent = objectMapper.readValue(row[events.body], eventType)
         val metadata = objectMapper.readValue(row[events.metadata], metadataClass)
 
@@ -152,7 +157,7 @@ class RelationalDatabaseEventStore<M : EventMetadata> @PublishedApi internal con
             events
                 .select {
                     val eventTypeMatches = if (eventClasses.isNotEmpty()) {
-                        events.eventType.inList(eventClasses.map { it.java.canonicalName })
+                        events.eventType.inList(eventClasses.map { eventTypeResolver.serialize(it.java) })
                     } else {
                         Op.TRUE
                     }
@@ -180,7 +185,7 @@ class RelationalDatabaseEventStore<M : EventMetadata> @PublishedApi internal con
             .slice(maxSequence)
             .select {
                 if (eventClasses.isNotEmpty()) {
-                    eventsSequenceStats.eventType.inList(eventClasses.map { it.java.canonicalName })
+                    eventsSequenceStats.eventType.inList(eventClasses.map { eventTypeResolver.serialize(it.java) })
                 } else {
                     Op.TRUE
                 }
@@ -201,9 +206,10 @@ object PostgresDatabaseEventStore {
         db: Database,
         objectMapper: ObjectMapper,
         tableName: String,
-        eventsSequenceStateTableName: String
+        eventsSequenceStateTableName: String,
+        eventTypeResolver: EventTypeResolver
     ): RelationalDatabaseEventStore<M> {
-        return RelationalDatabaseEventStore(db, Events(tableName, Table::jsonb), EventsSequenceStats(eventsSequenceStateTableName), synchronousEventProcessors, M::class.java, objectMapper, Transaction::pgAdvisoryXactLock)
+        return RelationalDatabaseEventStore(db, Events(tableName, Table::jsonb), EventsSequenceStats(eventsSequenceStateTableName), synchronousEventProcessors, M::class.java, objectMapper, eventTypeResolver, Transaction::pgAdvisoryXactLock)
     }
 }
 
@@ -215,16 +221,17 @@ object H2DatabaseEventStore {
         db: Database,
         objectMapper: ObjectMapper,
         tableName: String,
-        eventsSequenceStateTableName: String
+        eventsSequenceStateTableName: String,
+        eventTypeResolver: EventTypeResolver
     ): RelationalDatabaseEventStore<M> {
-        return RelationalDatabaseEventStore(db, eventsTable(tableName), EventsSequenceStats(eventsSequenceStateTableName), synchronousEventProcessors, M::class.java, objectMapper)
+        return RelationalDatabaseEventStore(db, eventsTable(tableName), EventsSequenceStats(eventsSequenceStateTableName), synchronousEventProcessors, M::class.java, objectMapper, eventTypeResolver)
     }
 
     @PublishedApi
     internal fun eventsTable(tableName: String = defaultEventsTableName) = Events(tableName) { name -> this.text(name) }
 }
 
-private fun <T> String.asClass(): Class<out T>? {
+internal fun <T> String.asClass(): Class<out T>? {
     @Suppress("UNCHECKED_CAST")
     return Class.forName(this) as Class<out T>?
 }
@@ -273,4 +280,15 @@ fun Transaction.pgAdvisoryXactLock(): CommandError? {
         }
     }
     return null
+}
+
+interface EventTypeResolver {
+    fun serialize(domainEventClass: Class<out DomainEvent>): String
+    fun deserialize(eventType: String): Class<out DomainEvent>
+}
+
+object CanonicalNameEventTypeResolver : EventTypeResolver {
+    override fun serialize(domainEventClass: Class<out DomainEvent>) = domainEventClass.canonicalName
+
+    override fun deserialize(eventType: String) = eventType.asClass<DomainEvent>()!!
 }

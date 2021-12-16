@@ -12,6 +12,7 @@ import io.kotest.core.spec.style.DescribeSpec
 import io.kotest.matchers.shouldBe
 import org.jetbrains.exposed.sql.Database
 import org.jetbrains.exposed.sql.SchemaUtils
+import org.jetbrains.exposed.sql.selectAll
 import org.jetbrains.exposed.sql.transactions.transaction
 import org.joda.time.DateTime
 import java.util.UUID
@@ -19,21 +20,20 @@ import java.util.UUID
 class RelationalDatabaseEventStoreTest : DescribeSpec({
     val db = PgTestConfig.db ?: Database.connect(url = "jdbc:h2:mem:test;MODE=MySQL;DB_CLOSE_DELAY=-1;", driver = "org.h2.Driver")
     val tableName = "eventStore"
-    val table = Events(tableName)
-    val tableH2 = H2DatabaseEventStore.eventsTable(tableName)
+    val table = if (PgTestConfig.db != null) Events(tableName) else H2DatabaseEventStore.eventsTable(tableName)
     val eventsSequenceStats = EventsSequenceStats()
     val store = RelationalDatabaseEventStore.create<StandardEventMetadata>(db, eventsTableName = "eventStore")
 
     beforeTest {
         transaction(db) {
-            SchemaUtils.create(if (PgTestConfig.db != null) table else tableH2)
+            SchemaUtils.create(table)
             SchemaUtils.create(eventsSequenceStats)
         }
     }
 
     afterTest {
         transaction(db) {
-            SchemaUtils.drop(if (PgTestConfig.db != null) table else tableH2)
+            SchemaUtils.drop(table)
             SchemaUtils.drop(eventsSequenceStats)
         }
     }
@@ -133,6 +133,31 @@ class RelationalDatabaseEventStoreTest : DescribeSpec({
             storeWithProjectors.sink(listOf(fooEvent, barEvent), UUID.randomUUID())
 
             count shouldBe 4
+        }
+
+        it("allows providing a custom event type resolver") {
+            val customEventTypeResolver = object : EventTypeResolver {
+                override fun serialize(domainEventClass: Class<out DomainEvent>) = "custom.${domainEventClass.canonicalName}"
+
+                override fun deserialize(eventType: String) = eventType.substringAfter("custom.").asClass<DomainEvent>()!!
+            }
+            val customStore = RelationalDatabaseEventStore.create<StandardEventMetadata>(db, eventsTableName = "eventStore", eventTypeResolver = customEventTypeResolver)
+            val aggregateId = UUID.randomUUID()
+            val pizzaCreatedDomainEvent = PizzaCreated(MARGHERITA, listOf(TOMATO_PASTE, BASIL, CHEESE))
+            val pizzaCreatedEvent = event(
+                pizzaCreatedDomainEvent,
+                aggregateId,
+                1,
+                StandardEventMetadata("alice", "123")
+            )
+
+            val events = listOf(pizzaCreatedEvent)
+            customStore.sink(events, aggregateId) shouldBe Right(Unit)
+            customStore.eventsFor(aggregateId) shouldBe events
+
+            transaction(db) {
+                table.selectAll().map { it[table.eventType] shouldBe "custom.com.cultureamp.eventsourcing.sample.PizzaCreated" }
+            }
         }
     }
 })
