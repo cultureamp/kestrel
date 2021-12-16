@@ -134,7 +134,7 @@ class RelationalDatabaseEventStore<M : EventMetadata> @PublishedApi internal con
     }
 
     private fun rowToSequencedEvent(row: ResultRow): SequencedEvent<M> = row.let {
-        val eventType = eventTypeResolver.deserialize(row[events.eventType])
+        val eventType = eventTypeResolver.deserialize(row[events.aggregateType], row[events.eventType])
         val domainEvent = objectMapper.readValue(row[events.body], eventType)
         val metadata = objectMapper.readValue(row[events.metadata], metadataClass)
 
@@ -284,11 +284,11 @@ fun Transaction.pgAdvisoryXactLock(): CommandError? {
 
 interface EventTypeResolver {
     fun serialize(domainEventClass: Class<out DomainEvent>): String
-    fun deserialize(eventType: String): Class<out DomainEvent>
+    fun deserialize(aggregateType: String, eventType: String): Class<out DomainEvent>
 }
 
 object CanonicalNameEventTypeResolver : EventTypeResolver {
     override fun serialize(domainEventClass: Class<out DomainEvent>) = domainEventClass.canonicalName
 
-    override fun deserialize(eventType: String) = eventType.asClass<DomainEvent>()!!
+    override fun deserialize(aggregateType: String, eventType: String) = eventType.asClass<DomainEvent>()!!
 }

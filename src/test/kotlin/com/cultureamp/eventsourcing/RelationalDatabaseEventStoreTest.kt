@@ -139,7 +139,7 @@ class RelationalDatabaseEventStoreTest : DescribeSpec({
             val customEventTypeResolver = object : EventTypeResolver {
                 override fun serialize(domainEventClass: Class<out DomainEvent>) = "custom.${domainEventClass.canonicalName}"
 
-                override fun deserialize(eventType: String) = eventType.substringAfter("custom.").asClass<DomainEvent>()!!
+                override fun deserialize(aggregateType: String, eventType: String) = eventType.substringAfter("custom.").asClass<DomainEvent>()!!
             }
             val customStore = RelationalDatabaseEventStore.create<StandardEventMetadata>(db, eventsTableName = "eventStore", eventTypeResolver = customEventTypeResolver)
             val aggregateId = UUID.randomUUID()
