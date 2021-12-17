@@ -51,6 +51,11 @@ artifacts {
 }
 
 uploadArchives {
+    signing {
+        useGpgCmd()
+        sign configurations.archives
+    }
+
     repositories {
         mavenDeployer {
             beforeDeployment { MavenDeployment deployment -> signing.signPom(deployment) }
@@ -93,11 +98,6 @@ uploadArchives {
             }
         }
     }
-}
-
-signing {
-    useGpgCmd()
-    sign configurations.archives
 }
 
 javadoc {
@@ -152,7 +152,6 @@ dependencies {
     implementation "org.jetbrains.exposed:exposed-jodatime:$exposed_version"
     implementation "io.github.microutils:kotlin-logging:2.0.11"
     implementation "org.postgresql:postgresql:42.2.23"
-    implementation "org.owasp:dependency-check-gradle:6.4.1.1"
 }
 
 
