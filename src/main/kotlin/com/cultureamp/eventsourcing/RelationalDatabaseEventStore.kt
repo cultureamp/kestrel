@@ -42,7 +42,7 @@ class RelationalDatabaseEventStore<M : EventMetadata> @PublishedApi internal con
     private val db: Database,
     private val events: Events,
     private val eventsSequenceStats: EventsSequenceStats,
-    private val synchronousEventProcessors: List<EventProcessor<M>>,
+    private val synchronousEventProcessors: List<EventProcessor<DomainEvent, M>>,
     private val metadataClass: Class<M>,
     private val objectMapper: ObjectMapper,
     private val eventTypeResolver: EventTypeResolver,
@@ -51,7 +51,7 @@ class RelationalDatabaseEventStore<M : EventMetadata> @PublishedApi internal con
 
     companion object {
         inline fun <reified M : EventMetadata> create(
-            synchronousEventProcessors: List<EventProcessor<M>>,
+            synchronousEventProcessors: List<EventProcessor<DomainEvent, M>>,
             db: Database,
             objectMapper: ObjectMapper = defaultObjectMapper,
             eventsTableName: String = defaultEventsTableName,
@@ -79,8 +79,7 @@ class RelationalDatabaseEventStore<M : EventMetadata> @PublishedApi internal con
             SchemaUtils.create(events, eventsSequenceStats)
         }
     }
-
-    override fun sink(newEvents: List<Event<M>>, aggregateId: UUID): Either<CommandError, Unit> {
+    override fun sink(newEvents: List<Event<out DomainEvent, M>>, aggregateId: UUID): Either<CommandError, Unit> {
         return try {
             return transaction(db) {
                 blockingLockUntilTransactionEnd()?.let { Left(it) } ?: run {
@@ -133,7 +132,7 @@ class RelationalDatabaseEventStore<M : EventMetadata> @PublishedApi internal con
         }
     }
 
-    private fun rowToSequencedEvent(row: ResultRow): SequencedEvent<M> = row.let {
+    private fun rowToSequencedEvent(row: ResultRow): SequencedEvent<DomainEvent, M> = row.let {
         val eventType = eventTypeResolver.deserialize(row[events.aggregateType], row[events.eventType])
         val domainEvent = objectMapper.readValue(row[events.body], eventType)
         val metadata = objectMapper.readValue(row[events.metadata], metadataClass)
@@ -152,7 +151,7 @@ class RelationalDatabaseEventStore<M : EventMetadata> @PublishedApi internal con
         )
     }
 
-    override fun getAfter(sequence: Long, eventClasses: List<KClass<out DomainEvent>>, batchSize: Int): List<SequencedEvent<M>> {
+    override fun getAfter(sequence: Long, eventClasses: List<KClass<out DomainEvent>>, batchSize: Int): List<SequencedEvent<DomainEvent, M>> {
         return transaction(db) {
             events
                 .select {
@@ -169,7 +168,7 @@ class RelationalDatabaseEventStore<M : EventMetadata> @PublishedApi internal con
         }
     }
 
-    override fun eventsFor(aggregateId: UUID): List<Event<M>> {
+    override fun eventsFor(aggregateId: UUID): List<Event<DomainEvent, M>> {
         return transaction(db) {
             events
                 .select { events.aggregateId eq aggregateId }
@@ -202,7 +201,7 @@ class EventMetadataSerializationException(e: Exception) : EventDataException(e)
 object PostgresDatabaseEventStore {
     @PublishedApi
     internal inline fun <reified M : EventMetadata> create(
-        synchronousEventProcessors: List<EventProcessor<M>>,
+        synchronousEventProcessors: List<EventProcessor<DomainEvent, M>>,
         db: Database,
         objectMapper: ObjectMapper,
         tableName: String,
@@ -217,7 +216,7 @@ object H2DatabaseEventStore {
     // need a `@PublishedApi` here to make it callable from `RelationalDatabaseEventStore.create()`
     @PublishedApi
     internal inline fun <reified M : EventMetadata> create(
-        synchronousEventProcessors: List<EventProcessor<M>>,
+        synchronousEventProcessors: List<EventProcessor<DomainEvent, M>>,
         db: Database,
         objectMapper: ObjectMapper,
         tableName: String,

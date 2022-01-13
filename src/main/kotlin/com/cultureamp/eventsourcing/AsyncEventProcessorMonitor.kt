@@ -1,7 +1,7 @@
 package com.cultureamp.eventsourcing
 
 class AsyncEventProcessorMonitor<M: EventMetadata>(
-    private val asyncEventProcessors: List<AsyncEventProcessor<M>>,
+    private val asyncEventProcessors: List<AsyncEventProcessor<out DomainEvent, M>>,
     private val metrics: (Lag) -> Unit
 ) {
     fun run() {

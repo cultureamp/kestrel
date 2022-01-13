@@ -112,9 +112,11 @@ class EventProcessorTest : DescribeSpec({
                 }
             }
 
-            val eventProcessor = EventProcessor.compose(
-                EventProcessor.from(Projector()::project),
-                EventProcessor.from(ProjectorWithMetadata()::project)
+            val first: CompositeDomainEventProcessor<FooEvent, EventMetadata> = EventProcessor.from(Projector()::project)
+            val second: CompositeDomainEventProcessor<BazEvent, SpecificMetadata> = EventProcessor.from(ProjectorWithMetadata()::project)
+            val eventProcessor = CompositeDomainEventProcessor.compose(
+                first,
+                second
             )
 
             eventProcessor.process(fooEvent)
@@ -136,12 +138,12 @@ class EventProcessorTest : DescribeSpec({
                 fun project(event: AnotherTestEvent, aggregateId: UUID) = Unit
             }
 
-            val eventProcessor = EventProcessor.compose(
+            val eventProcessor = CompositeDomainEventProcessor.compose(
                 EventProcessor.from(FirstProjector()::project),
                 EventProcessor.from(SecondProjector()::project)
             )
 
-            eventProcessor.eventClasses shouldBe listOf(FooEvent::class, BarEvent::class, BazEvent::class, QuuxEvent::class)
+            eventProcessor.domainEventClasses() shouldBe listOf(FooEvent::class, BarEvent::class, BazEvent::class, QuuxEvent::class)
         }
     }
 })

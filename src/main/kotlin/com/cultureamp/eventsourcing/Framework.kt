@@ -18,17 +18,17 @@ interface UpdateCommand : Command {
     override val aggregateId: UUID
 }
 
-data class Event<M: EventMetadata> (
+data class Event<E: DomainEvent, M: EventMetadata> (
     val id: UUID,
     val aggregateId: UUID,
     val aggregateSequence: Long,
     val aggregateType: String,
     val createdAt: DateTime,
     val metadata: M,
-    val domainEvent: DomainEvent
+    val domainEvent: E
 )
 
-data class SequencedEvent<M: EventMetadata>(val event: Event<M>, val sequence: Long)
+data class SequencedEvent<E: DomainEvent, M: EventMetadata>(val event: Event<E, M>, val sequence: Long)
 
 open class EventMetadata
 

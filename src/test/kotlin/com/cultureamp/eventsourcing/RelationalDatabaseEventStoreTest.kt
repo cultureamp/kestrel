@@ -162,6 +162,6 @@ class RelationalDatabaseEventStoreTest : DescribeSpec({
     }
 })
 
-fun <M : EventMetadata> event(domainEvent: DomainEvent, aggregateId: UUID, index: Int, metadata: M): Event<M> {
+fun <M : EventMetadata> event(domainEvent: DomainEvent, aggregateId: UUID, index: Int, metadata: M): Event<DomainEvent, M> {
     return Event(UUID.randomUUID(), aggregateId, index.toLong(), "pizza", DateTime.now(), metadata, domainEvent)
 }

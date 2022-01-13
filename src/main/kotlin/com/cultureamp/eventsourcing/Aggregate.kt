@@ -218,7 +218,7 @@ AggregateConstructor<CC, CE, Err, UC, UE, M, Aggregate<UC, UE, Err, M, *>>.creat
     metadata: M,
     eventStore: EventStore<M>
 ): Either<CommandError, Unit> {
-    return create(creationCommand, metadata).map { domainEvent ->
+    return create(creationCommand, metadata).map { domainEvent: CE ->
         created(domainEvent) // called to ensure the create event handler doesn't throw any exceptions
         val event = Event(
             id = UUID.randomUUID(),
@@ -237,14 +237,14 @@ internal fun <CC : CreationCommand, CE : CreationEvent, Err : DomainError, UC : 
 AggregateConstructor<CC, CE, Err, UC, UE, M, Aggregate<UC, UE, Err, M, *>>.update(
     updateCommand: UC,
     metadata: M,
-    events: List<Event<M>>,
+    events: Pair<Event<CE,M>, List<Event<UE, M>>>,
     eventStore: EventStore<M>
 ): Either<CommandError, Unit> {
     val aggregate = rehydrate(events)
     return aggregate.flatMap {
         it.update(updateCommand, metadata).flatMap { domainEvents ->
             it.updated(domainEvents) // called to ensure the update event handler doesn't throw any exceptions
-            val offset = events.last().aggregateSequence + 1
+            val offset = events.second.last().aggregateSequence + 1
             val createdAt = DateTime()
             val storableEvents = domainEvents.withIndex().map { (index, domainEvent) ->
                 Event(
@@ -265,16 +265,16 @@ AggregateConstructor<CC, CE, Err, UC, UE, M, Aggregate<UC, UE, Err, M, *>>.updat
 @Suppress("UNCHECKED_CAST")
 private fun <CC : CreationCommand, CE : CreationEvent, Err : DomainError, M : EventMetadata, UC : UpdateCommand, UE : UpdateEvent>
 AggregateConstructor<CC, CE, Err, UC, UE, M, Aggregate<UC, UE, Err, M, *>>.rehydrate(
-    events: List<Event<M>>
+    events: Pair<Event<CE,M>, List<Event<UE, M>>>,
 ): Either<ConstructorTypeMismatch, Aggregate<UC, UE, Err, M, *>> {
-    val creationEvent = events.first()
-    val creationDomainEvent = creationEvent.domainEvent as CE
+    val creationEvent = events.first
+    val creationDomainEvent = creationEvent.domainEvent
     val aggregate = if (creationEvent.aggregateType == aggregateType()) {
         Right(created(creationDomainEvent))
     } else {
         Left(ConstructorTypeMismatch(aggregateType(), creationDomainEvent::class))
     }
-    val updateEvents = events.drop(1).map { it.domainEvent as UE }
+    val updateEvents = events.second.map { it.domainEvent }
     return aggregate.map { it.updated(updateEvents) }
 }
 

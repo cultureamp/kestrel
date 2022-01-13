@@ -25,7 +25,11 @@ class EventStoreCommandGateway<M : EventMetadata>(private val eventStore: EventS
             is CreationCommand -> constructor.create(command, metadata, eventStore).map { Created }
             else -> Left(AggregateNotFound)
         } else when (command) {
-            is UpdateCommand -> constructor.update(command, metadata, events, eventStore).map { Updated }
+            is UpdateCommand -> {
+                val creationEvent = events.first() as Event<CreationEvent, M>
+                val updateEvents = events.drop(1) as List<Event<UpdateEvent, M>>
+                constructor.update(command, metadata, creationEvent to updateEvents, eventStore).map { Updated }
+            }
             else -> Left(AggregateAlreadyExists)
         }
     }
