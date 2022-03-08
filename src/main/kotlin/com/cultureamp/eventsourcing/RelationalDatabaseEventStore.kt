@@ -110,7 +110,7 @@ class RelationalDatabaseEventStore<M : EventMetadata> @PublishedApi internal con
                 }
             }
         } catch (e: ExposedSQLException) {
-            if (e.message.orEmpty().contains("violates unique constraint")) {
+            if (e.message.orEmpty().contains("violates unique constraint") || e.message.orEmpty().contains("Unique index or primary key violation")) {
                 Left(ConcurrencyError)
             } else {
                 throw e
