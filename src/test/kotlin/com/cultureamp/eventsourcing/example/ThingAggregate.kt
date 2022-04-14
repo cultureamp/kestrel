@@ -8,7 +8,6 @@ import com.cultureamp.eventsourcing.CreationEvent
 import com.cultureamp.eventsourcing.DomainError
 import com.cultureamp.eventsourcing.DomainEvent
 import com.cultureamp.eventsourcing.Either
-import com.cultureamp.eventsourcing.EventMetadata
 import com.cultureamp.eventsourcing.Left
 import com.cultureamp.eventsourcing.Right
 import com.cultureamp.eventsourcing.UpdateCommand
@@ -52,8 +51,8 @@ data class ThingAggregate(val tweaks: List<String> = emptyList(), val bops: List
             is ThingCreated -> ThingAggregate()
         }
 
-        override fun create(projection: ThingCommandProjection, command: ThingCreationCommand, metadata: StandardEventMetadata): Either<ThingError, ThingCreationEvent> = when(command){
-            is CreateThing -> Right(ThingCreated)
+        override fun create(projection: ThingCommandProjection, command: ThingCreationCommand, metadata: StandardEventMetadata): Either<ThingError, Pair<ThingCreationEvent, List<ThingUpdateEvent>>> = when (command) {
+            is CreateThing -> Right(ThingCreated to emptyList())
         }
 
         override fun aggregateType() = "thing"

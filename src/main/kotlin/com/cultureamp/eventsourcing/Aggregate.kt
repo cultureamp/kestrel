@@ -1,7 +1,7 @@
 package com.cultureamp.eventsourcing
 
 import org.joda.time.DateTime
-import java.util.*
+import java.util.UUID
 import kotlin.reflect.KClass
 
 interface SimpleAggregate<UC : UpdateCommand, UE : UpdateEvent> {
@@ -125,12 +125,24 @@ interface AggregateWithProjection<UC : UpdateCommand, UE : UpdateEvent, Err : Do
 
 interface AggregateConstructor<CC : CreationCommand, CE : CreationEvent, Err : DomainError, UC : UpdateCommand, UE : UpdateEvent, M : EventMetadata, Self : Aggregate<UC, UE, Err, M, Self>> {
     fun created(event: CE): Self
-    fun create(command: CC, metadata: M): Either<Err, CE>
+    fun create(command: CC, metadata: M): Either<Err, Pair<CE, List<UE>>>
     fun aggregateType(): String = this::class.companionClassName
 
     companion object {
         inline fun <CC : CreationCommand, CE : CreationEvent, Err : DomainError, UC : UpdateCommand, UE : UpdateEvent, M : EventMetadata, reified A : Any> from(
             noinline create: (CC, M) -> Either<Err, CE>,
+            noinline update: A.(UC, M) -> Either<Err, List<UE>>,
+            noinline created: (CE) -> A,
+            noinline updated: A.(UE) -> A = { _ -> this },
+            noinline aggregateType: () -> String = { A::class.simpleName!! }
+        ): AggregateConstructor<CC, CE, Err, UC, UE, M, Aggregate<UC, UE, Err, M, *>> {
+            val createReturningMultipleEvents: (CC, M) -> Either<Err, Pair<CE, List<UE>>> = { cc, m -> create(cc, m).map { it to emptyList() } }
+            return from(createReturningMultipleEvents, update, created, updated, aggregateType)
+        }
+
+        @JvmName("fromCreationCommandReturningMultipleEvents")
+        inline fun <CC : CreationCommand, CE : CreationEvent, Err : DomainError, UC : UpdateCommand, UE : UpdateEvent, M : EventMetadata, reified A : Any> from(
+            noinline create: (CC, M) -> Either<Err, Pair<CE, List<UE>>>,
             noinline update: A.(UC, M) -> Either<Err, List<UE>>,
             noinline created: (CE) -> A,
             noinline updated: A.(UE) -> A = { _ -> this },
@@ -142,7 +154,7 @@ interface AggregateConstructor<CC : CreationCommand, CE : CreationEvent, Err : D
                     return Aggregate.from(createdAggregate, update, updated)
                 }
 
-                override fun create(command: CC, metadata: M): Either<Err, CE> = create(command, metadata)
+                override fun create(command: CC, metadata: M): Either<Err, Pair<CE, List<UE>>> = create(command, metadata)
 
                 override fun aggregateType() = aggregateType()
             }
@@ -155,13 +167,25 @@ interface AggregateConstructor<CC : CreationCommand, CE : CreationEvent, Err : D
             noinline updated: A.(UE) -> A = { _ -> this },
             noinline aggregateType: () -> String = { A::class.simpleName!! }
         ): AggregateConstructor<CC, CE, Err, UC, UE, M, Aggregate<UC, UE, Err, M, *>> {
+            val createReturningMultipleEvents: (CC) -> Either<Err, Pair<CE, List<UE>>> = { cc -> create(cc).map { it to emptyList() } }
+            return from(createReturningMultipleEvents, update, created, updated, aggregateType)
+        }
+
+        @JvmName("fromCreationCommandReturningMultipleEvents")
+        inline fun <CC : CreationCommand, CE : CreationEvent, Err : DomainError, UC : UpdateCommand, UE : UpdateEvent, M : EventMetadata, reified A : Any> from(
+            noinline create: (CC) -> Either<Err, Pair<CE, List<UE>>>,
+            noinline update: A.(UC) -> Either<Err, List<UE>>,
+            noinline created: (CE) -> A,
+            noinline updated: A.(UE) -> A = { _ -> this },
+            noinline aggregateType: () -> String = { A::class.simpleName!! }
+        ): AggregateConstructor<CC, CE, Err, UC, UE, M, Aggregate<UC, UE, Err, M, *>> {
             return object : AggregateConstructor<CC, CE, Err, UC, UE, M, Aggregate<UC, UE, Err, M, *>> {
                 override fun created(event: CE): Aggregate<UC, UE, Err, M, *> {
                     val createdAggregate = created(event)
                     return Aggregate.from(createdAggregate, update, updated)
                 }
 
-                override fun create(command: CC, metadata: M): Either<Err, CE> = create(command)
+                override fun create(command: CC, metadata: M): Either<Err, Pair<CE, List<UE>>> = create(command)
 
                 override fun aggregateType() = aggregateType()
             }
@@ -176,7 +200,7 @@ interface AggregateConstructor<CC : CreationCommand, CE : CreationEvent, Err : D
                     return Aggregate.from<UC, UE, M, SimpleAggregate<UC, UE>>(createdAggregate)
                 }
 
-                override fun create(command: CC, metadata: M): Either<DomainError, CE> = simpleAggregateConstructor.create(command)
+                override fun create(command: CC, metadata: M): Either<DomainError, Pair<CE, List<UE>>> = simpleAggregateConstructor.create(command).map { it to emptyList() }
 
                 override fun aggregateType() = simpleAggregateConstructor.aggregateType()
             }
@@ -188,6 +212,17 @@ interface AggregateConstructor<CC : CreationCommand, CE : CreationEvent, Err : D
             instance: A,
             noinline aggregateType: () -> String = { A::class.simpleName!! }
         ): AggregateConstructor<CC, CE, Err, UC, UE, M, Aggregate<UC, UE, Err, M, *>> {
+            val createReturningMultipleEvents: (CC, M) -> Either<Err, Pair<CE, List<UE>>> = { cc, m -> create(cc, m).map { it to emptyList() } }
+            return fromStateless(createReturningMultipleEvents, update, instance, aggregateType)
+        }
+
+        @JvmName("fromStatelessCreationCommandReturningMultipleEvents")
+        inline fun <CC : CreationCommand, CE : CreationEvent, Err : DomainError, UC : UpdateCommand, UE : UpdateEvent, M : EventMetadata, reified A : Any> fromStateless(
+            noinline create: (CC, M) -> Either<Err, Pair<CE, List<UE>>>,
+            noinline update: (UC, M) -> Either<Err, List<UE>>,
+            instance: A,
+            noinline aggregateType: () -> String = { A::class.simpleName!! }
+        ): AggregateConstructor<CC, CE, Err, UC, UE, M, Aggregate<UC, UE, Err, M, *>> {
             return from(create, { uc: UC, m: M -> update(uc, m) }, { instance }, { instance }, aggregateType)
         }
     }
@@ -195,7 +230,7 @@ interface AggregateConstructor<CC : CreationCommand, CE : CreationEvent, Err : D
 
 interface AggregateConstructorWithProjection<CC : CreationCommand, CE : CreationEvent, Err : DomainError, UC : UpdateCommand, UE : UpdateEvent, P, M : EventMetadata, Self : AggregateWithProjection<UC, UE, Err, P, M, Self>> {
     fun created(event: CE): Self
-    fun create(projection: P, command: CC, metadata: M): Either<Err, CE>
+    fun create(projection: P, command: CC, metadata: M): Either<Err, Pair<CE, List<UE>>>
     fun aggregateType(): String = this::class.companionClassName
     fun partial(projection: P): AggregateConstructor<CC, CE, Err, UC, UE, M, Aggregate<UC, UE, Err, M, *>> {
         return object : AggregateConstructor<CC, CE, Err, UC, UE, M, Aggregate<UC, UE, Err, M, *>> {
@@ -203,7 +238,7 @@ interface AggregateConstructorWithProjection<CC : CreationCommand, CE : Creation
                 return this@AggregateConstructorWithProjection.created(event).partial(projection)
             }
 
-            override fun create(command: CC, metadata: M): Either<Err, CE> {
+            override fun create(command: CC, metadata: M): Either<Err, Pair<CE, List<UE>>> {
                 return create(projection, command, metadata)
             }
 
@@ -218,18 +253,21 @@ AggregateConstructor<CC, CE, Err, UC, UE, M, Aggregate<UC, UE, Err, M, *>>.creat
     metadata: M,
     eventStore: EventStore<M>
 ): Either<CommandError, Unit> {
-    return create(creationCommand, metadata).map { domainEvent ->
-        created(domainEvent) // called to ensure the create event handler doesn't throw any exceptions
-        val event = Event(
-            id = UUID.randomUUID(),
-            aggregateId = creationCommand.aggregateId,
-            aggregateSequence = 1,
-            aggregateType = aggregateType(),
-            createdAt = DateTime.now(),
-            metadata = metadata,
-            domainEvent = domainEvent
-        )
-        eventStore.sink(listOf(event), creationCommand.aggregateId)
+    return create(creationCommand, metadata).map { initialEvents ->
+        created(initialEvents.first).updated(initialEvents.second) // called to ensure the create event handler doesn't throw any exceptions
+        val domainEvents = listOf(initialEvents.first) + initialEvents.second
+        val events = domainEvents.mapIndexed { index, domainEvent ->
+            Event(
+                id = UUID.randomUUID(),
+                aggregateId = creationCommand.aggregateId,
+                aggregateSequence = index + 1L,
+                aggregateType = aggregateType(),
+                createdAt = DateTime.now(),
+                metadata = metadata,
+                domainEvent = domainEvent
+            )
+        }
+        eventStore.sink(events, creationCommand.aggregateId)
     }.flatten()
 }
 

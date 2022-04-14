@@ -98,6 +98,7 @@ class CommandGatewayIntegrationTest : DescribeSpec({
             ParticipantAggregate.Companion::created,
             ParticipantAggregate::updated
         )
+        // TODO add more scenarios
     )
 
     afterTest {
