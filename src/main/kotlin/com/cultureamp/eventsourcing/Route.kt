@@ -2,7 +2,7 @@ package com.cultureamp.eventsourcing
 
 import kotlin.reflect.KClass
 
-data class Route<CC : CreationCommand, UC : UpdateCommand, M: EventMetadata>(
+data class Route<CC : CreationCommand, UC : UpdateCommand, M : EventMetadata>(
     val creationCommandClass: KClass<CC>,
     val updateCommandClass: KClass<UC>,
     val executionContextClass: KClass<M>,
@@ -19,7 +19,16 @@ data class Route<CC : CreationCommand, UC : UpdateCommand, M: EventMetadata>(
             return from(AggregateConstructor.from<CC, CE, UC, UE, M, SimpleAggregate<UC, UE>>(simpleAggregateConstructor))
         }
 
-        inline fun <reified CC: CreationCommand, CE: CreationEvent, Err: DomainError, reified M: EventMetadata, reified UC: UpdateCommand, UE: UpdateEvent, reified A: Any> from(
+        @JvmName("fromCreationCommandReturningMultipleEvents")
+        inline fun <reified CC : CreationCommand, CE : CreationEvent, Err : DomainError, reified M : EventMetadata, reified UC : UpdateCommand, UE : UpdateEvent, reified A : Any> from(
+            noinline create: (CC, M) -> Either<Err, Pair<CE, List<UE>>>,
+            noinline update: A.(UC, M) -> Either<Err, List<UE>>,
+            noinline created: (CE) -> A,
+            noinline updated: A.(UE) -> A = { _ -> this },
+            noinline aggregateType: () -> String = { A::class.simpleName!! }
+        ): Route<CC, UC, M> = from(AggregateConstructor.from(create, update, created, updated, aggregateType))
+
+        inline fun <reified CC : CreationCommand, CE : CreationEvent, Err : DomainError, reified M : EventMetadata, reified UC : UpdateCommand, UE : UpdateEvent, reified A : Any> from(
             noinline create: (CC, M) -> Either<Err, CE>,
             noinline update: A.(UC, M) -> Either<Err, List<UE>>,
             noinline created: (CE) -> A,
@@ -27,7 +36,7 @@ data class Route<CC : CreationCommand, UC : UpdateCommand, M: EventMetadata>(
             noinline aggregateType: () -> String = { A::class.simpleName!! }
         ): Route<CC, UC, M> = from(AggregateConstructor.from(create, update, created, updated, aggregateType))
 
-        inline fun <reified CC: CreationCommand, CE: CreationEvent, Err: DomainError, reified M: EventMetadata, reified UC: UpdateCommand, UE: UpdateEvent, reified A: Any> from(
+        inline fun <reified CC : CreationCommand, CE : CreationEvent, Err : DomainError, reified M : EventMetadata, reified UC : UpdateCommand, UE : UpdateEvent, reified A : Any> from(
             noinline create: (CC) -> Either<Err, CE>,
             noinline update: A.(UC) -> Either<Err, List<UE>>,
             noinline created: (CE) -> A,

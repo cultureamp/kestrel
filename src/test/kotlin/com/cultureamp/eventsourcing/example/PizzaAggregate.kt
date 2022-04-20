@@ -13,15 +13,14 @@ import com.cultureamp.eventsourcing.UpdateCommand
 import com.cultureamp.eventsourcing.UpdateEvent
 import com.fasterxml.jackson.annotation.JsonInclude
 import com.fasterxml.jackson.annotation.JsonInclude.Include
-import java.util.*
+import java.util.UUID
 
-
-abstract class RequiredMetadata: EventMetadata() {
-    abstract val executorId: String
+abstract class RequiredMetadata : EventMetadata() {
+    abstract val accountId: UUID
 }
 
 @JsonInclude(Include.NON_NULL) // don't want to store optional fields we don't need on all classes
-data class StandardEventMetadata(override val executorId: String, val restaurantId: String? = null): RequiredMetadata()
+data class StandardEventMetadata(override val accountId: UUID, val executorId: UUID? = null) : RequiredMetadata()
 
 data class CreateClassicPizza(
     override val aggregateId: UUID,
