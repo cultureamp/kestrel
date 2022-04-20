@@ -5,6 +5,7 @@ import java.util.*
 import kotlin.reflect.KFunction2
 import kotlin.reflect.KFunction3
 import kotlin.reflect.KFunction4
+import kotlin.reflect.KFunction5
 
 interface Command {
     val aggregateId: UUID
@@ -104,6 +105,11 @@ fun <A, B, C, D> KFunction3<A, B, C, D>.partial(a: A): (B, C) -> D {
     return { b, c -> invoke(a, b, c) }
 }
 
+fun <A, B, C, D> ((A, B, C) -> D).partial(a: A): (B, C) -> D {
+    return { b, c -> invoke(a, b, c) }
+}
+
+
 fun <A, B, C, D> KFunction3<A, B, C, D>.partial2(b: B): (A, C) -> D {
     return { a, c -> invoke(a, b, c) }
 }
@@ -112,6 +118,18 @@ fun <A, B, C, D> ((A, B, C) -> D).partial2(b: B): (A, C) -> D {
     return { a, c -> invoke(a, b, c) }
 }
 
+fun <A, B, C, D, E> KFunction4<A, B, C, D, E>.partial(a: A): (B, C, D) -> E {
+    return { b, c, d -> invoke(a, b, c, d) }
+}
+
 fun <A, B, C, D, E> KFunction4<A, B, C, D, E>.partial2(b: B): (A, C, D) -> E {
     return { a, c, d -> invoke(a, b, c, d) }
+}
+
+fun <A, B, C, D, E> ((A, B, C, D) -> E).partial2(b: B): (A, C, D) -> E {
+    return { a, c, d -> invoke(a, b, c, d) }
+}
+
+fun <A, B, C, D, E, F> KFunction5<A, B, C, D, E, F>.partial2(b: B): (A, C, D, E) -> F {
+    return { a, c, d, e -> invoke(a, b, c, d, e) }
 }

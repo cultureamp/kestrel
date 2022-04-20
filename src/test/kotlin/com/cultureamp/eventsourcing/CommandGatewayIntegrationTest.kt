@@ -1,6 +1,7 @@
 package com.cultureamp.eventsourcing
 
 import com.cultureamp.eventsourcing.example.AddSection
+import com.cultureamp.eventsourcing.example.AlwaysAdminAdminProjection
 import com.cultureamp.eventsourcing.example.AlwaysBoppable
 import com.cultureamp.eventsourcing.example.Boop
 import com.cultureamp.eventsourcing.example.BoopWithProjection
@@ -11,6 +12,10 @@ import com.cultureamp.eventsourcing.example.CreateSimpleThingWithProjection
 import com.cultureamp.eventsourcing.example.CreateSurvey
 import com.cultureamp.eventsourcing.example.CreateThing
 import com.cultureamp.eventsourcing.example.Delete
+import com.cultureamp.eventsourcing.example.DraftAddSkill
+import com.cultureamp.eventsourcing.example.DraftDiscard
+import com.cultureamp.eventsourcing.example.DraftPublish
+import com.cultureamp.eventsourcing.example.DraftRemoveSkill
 import com.cultureamp.eventsourcing.example.Generate
 import com.cultureamp.eventsourcing.example.IntendedPurpose
 import com.cultureamp.eventsourcing.example.Invite
@@ -18,11 +23,15 @@ import com.cultureamp.eventsourcing.example.Locale
 import com.cultureamp.eventsourcing.example.LocalizedText
 import com.cultureamp.eventsourcing.example.ParticipantAggregate
 import com.cultureamp.eventsourcing.example.PositionQuestion
+import com.cultureamp.eventsourcing.example.PublishedSkillsProjection
 import com.cultureamp.eventsourcing.example.RandomNumberGenerator
 import com.cultureamp.eventsourcing.example.RemoveSection
 import com.cultureamp.eventsourcing.example.SectionNotFound
 import com.cultureamp.eventsourcing.example.SimpleThingAggregate
 import com.cultureamp.eventsourcing.example.SimpleThingWithProjectionAggregate
+import com.cultureamp.eventsourcing.example.Skill
+import com.cultureamp.eventsourcing.example.SkillNotPresentToRemove
+import com.cultureamp.eventsourcing.example.SkillsCustomisationDraftAggregate
 import com.cultureamp.eventsourcing.example.StartCreatingSurvey
 import com.cultureamp.eventsourcing.example.SurveyAggregate
 import com.cultureamp.eventsourcing.example.SurveyCaptureLayoutAggregate
@@ -49,15 +58,24 @@ import org.jetbrains.exposed.sql.SchemaUtils
 import org.jetbrains.exposed.sql.selectAll
 import org.jetbrains.exposed.sql.transactions.transaction
 import org.joda.time.DateTime
-import java.util.*
+import java.util.UUID
 import com.cultureamp.eventsourcing.example.Created as SurveyCreated
 
 class CommandGatewayIntegrationTest : DescribeSpec({
     val db = PgTestConfig.db ?: Database.connect(url = "jdbc:h2:mem:test;MODE=MySQL;DB_CLOSE_DELAY=-1;", driver = "org.h2.Driver")
     val table = Events()
     val tableH2 = H2DatabaseEventStore.eventsTable()
-    val eventsTable = if(PgTestConfig.db != null) table else tableH2
+    val eventsTable = if (PgTestConfig.db != null) table else tableH2
     val eventStore = RelationalDatabaseEventStore.create<StandardEventMetadata>(db)
+    val publishedSkillId = UUID.randomUUID()
+    val accountWithPublishedSkillsId = UUID.randomUUID()
+    val publishedSkillsProjection = object : PublishedSkillsProjection {
+        override fun publishedSkillsFor(accountId: UUID) = if (accountId == accountWithPublishedSkillsId) {
+            mapOf(publishedSkillId to Skill(publishedSkillId, "label", "description"))
+        } else {
+            emptyMap()
+        }
+    }
     val gateway = EventStoreCommandGateway(
         eventStore,
         Route.from(
@@ -97,6 +115,12 @@ class CommandGatewayIntegrationTest : DescribeSpec({
             ParticipantAggregate::update,
             ParticipantAggregate.Companion::created,
             ParticipantAggregate::updated
+        ),
+        Route.from(
+            SkillsCustomisationDraftAggregate.Companion::create.partial(publishedSkillsProjection).partial(AlwaysAdminAdminProjection),
+            SkillsCustomisationDraftAggregate::update.partial2(publishedSkillsProjection).partial2(AlwaysAdminAdminProjection),
+            SkillsCustomisationDraftAggregate.Companion::created,
+            SkillsCustomisationDraftAggregate::updated
         )
     )
 
@@ -110,8 +134,9 @@ class CommandGatewayIntegrationTest : DescribeSpec({
         eventStore.createSchemaIfNotExists()
     }
 
-
-    val metadata = StandardEventMetadata("alice", "123")
+    val accountId = UUID.randomUUID()
+    val executorId = UUID.randomUUID()
+    val metadata = StandardEventMetadata(accountId = accountId, executorId = executorId)
 
     describe("CommandGateway") {
         it("accepts a creation event") {
@@ -137,7 +162,7 @@ class CommandGatewayIntegrationTest : DescribeSpec({
             val aggregateId = UUID.randomUUID()
             val result = gateway.dispatch(CreateClassicPizza(aggregateId, PizzaStyle.MARGHERITA), metadata)
             result shouldBe Right(Created)
-            val result2 = gateway.dispatch(AddTopping(aggregateId, PizzaTopping.PINEAPPLE), StandardEventMetadata("alice"))
+            val result2 = gateway.dispatch(AddTopping(aggregateId, PizzaTopping.PINEAPPLE), StandardEventMetadata(accountId))
             result2 shouldBe Right(Updated)
             transaction(db) {
                 eventsTable.selectAll().count() shouldBe 2
@@ -148,7 +173,7 @@ class CommandGatewayIntegrationTest : DescribeSpec({
             val aggregateId = UUID.randomUUID()
             val result = gateway.dispatch(CreateClassicPizza(aggregateId, PizzaStyle.MARGHERITA), metadata)
             result shouldBe Right(Created)
-            val result2 = gateway.dispatch(EatPizza(aggregateId), StandardEventMetadata("alice"))
+            val result2 = gateway.dispatch(EatPizza(aggregateId), StandardEventMetadata(accountId))
             result2 shouldBe Right(Updated)
             val result3 = gateway.dispatch(AddTopping(aggregateId, PizzaTopping.PINEAPPLE), metadata)
             result3.shouldBeInstanceOf<Left<PizzaAlreadyEaten>>()
@@ -270,6 +295,23 @@ class CommandGatewayIntegrationTest : DescribeSpec({
 
             transaction(db) {
                 eventsTable.selectAll().count() shouldBe 4
+            }
+        }
+
+        it("can route to an aggregate which yields multiple events for a creation command") {
+            val draftId = UUID.randomUUID()
+            gateway.dispatch(DraftRemoveSkill(draftId, publishedSkillId), metadata) shouldBe Left(SkillNotPresentToRemove)
+            gateway.dispatch(DraftAddSkill(draftId, UUID.randomUUID(), "label", "description"), metadata) shouldBe Right(Created)
+            gateway.dispatch(DraftPublish(draftId), metadata) shouldBe Right(Updated)
+            transaction(db) {
+                eventsTable.selectAll().count() shouldBe 3
+            }
+            val secondDraftId = UUID.randomUUID()
+            val metadataForAccountWithPublishedSkills = StandardEventMetadata(accountWithPublishedSkillsId, executorId)
+            gateway.dispatch(DraftRemoveSkill(secondDraftId, publishedSkillId), metadataForAccountWithPublishedSkills) shouldBe Right(Created)
+            gateway.dispatch(DraftDiscard(secondDraftId), metadataForAccountWithPublishedSkills) shouldBe Right(Updated)
+            transaction(db) {
+                eventsTable.selectAll().count() shouldBe 5
             }
         }
 

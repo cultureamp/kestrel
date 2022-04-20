@@ -38,6 +38,11 @@ class RelationalDatabaseEventStoreTest : DescribeSpec({
         }
     }
 
+    val firstAccountId = UUID.randomUUID()
+    val secondAccountId = UUID.randomUUID()
+    val firstExecutorId = UUID.randomUUID()
+    val secondExecutorId = UUID.randomUUID()
+
     describe("RelationalDatabaseEventStore") {
         it("sets and retrieves multiple events") {
             val aggregateId = UUID.randomUUID()
@@ -47,19 +52,19 @@ class RelationalDatabaseEventStoreTest : DescribeSpec({
                 basicPizzaCreated,
                 aggregateId,
                 1,
-                StandardEventMetadata("alice", "123")
+                StandardEventMetadata(firstAccountId, firstExecutorId)
             )
             val firstPizzaEaten = event(
                 PizzaEaten(),
                 aggregateId,
                 2,
-                StandardEventMetadata("alice")
+                StandardEventMetadata(firstAccountId)
             )
             val secondPizzaCreated = event(
                 basicPizzaCreated,
                 otherAggregateId,
                 1,
-                StandardEventMetadata("bob", "321")
+                StandardEventMetadata(secondAccountId, secondExecutorId)
             )
 
             val events = listOf(firstPizzaCreated, firstPizzaEaten)
@@ -79,9 +84,9 @@ class RelationalDatabaseEventStoreTest : DescribeSpec({
         it("exposes the latest sequence value") {
             val aggregateId = UUID.randomUUID()
             val events = listOf(
-                event(PizzaCreated(MARGHERITA, listOf(TOMATO_PASTE)), aggregateId, 1, StandardEventMetadata("unused")),
-                event(PizzaEaten(), aggregateId, 3, StandardEventMetadata("unused")),
-                event(PizzaToppingAdded(CHEESE), aggregateId, 2, StandardEventMetadata("unused"))
+                event(PizzaCreated(MARGHERITA, listOf(TOMATO_PASTE)), aggregateId, 1, StandardEventMetadata(firstAccountId)),
+                event(PizzaEaten(), aggregateId, 3, StandardEventMetadata(firstAccountId)),
+                event(PizzaToppingAdded(CHEESE), aggregateId, 2, StandardEventMetadata(firstAccountId))
             )
 
             store.lastSequence() shouldBe 0
@@ -148,7 +153,7 @@ class RelationalDatabaseEventStoreTest : DescribeSpec({
                 pizzaCreatedDomainEvent,
                 aggregateId,
                 1,
-                StandardEventMetadata("alice", "123")
+                StandardEventMetadata(firstAccountId, firstExecutorId)
             )
 
             val events = listOf(pizzaCreatedEvent)

@@ -16,17 +16,18 @@ import org.jetbrains.exposed.sql.StdOutSqlLogger
 import org.jetbrains.exposed.sql.addLogger
 import org.jetbrains.exposed.sql.transactions.transaction
 import org.joda.time.DateTime
-import java.util.*
+import java.util.UUID
 
 class AsyncEventProcessorMonitorIntegrationTest : DescribeSpec({
     val db = PgTestConfig.db ?: Database.connect(url = "jdbc:h2:mem:test;MODE=MySQL;DB_CLOSE_DELAY=-1;", driver = "org.h2.Driver")
     val tableEvent = Events()
     val tableH2 = H2DatabaseEventStore.eventsTable()
-    val table = if(PgTestConfig.db != null) tableEvent else tableH2
+    val table = if (PgTestConfig.db != null) tableEvent else tableH2
     val eventsSequenceStatsTable = EventsSequenceStats()
-    val eventStore =  RelationalDatabaseEventStore.create<StandardEventMetadata>(db)
+    val eventStore = RelationalDatabaseEventStore.create<StandardEventMetadata>(db)
     val bookmarksTable = Bookmarks()
     val bookmarkStore = RelationalDatabaseBookmarkStore(db, bookmarksTable)
+    val accountId = UUID.randomUUID()
     val commandGateway = CommandGateway(
         eventStore,
         Route.from(
@@ -78,8 +79,8 @@ class AsyncEventProcessorMonitorIntegrationTest : DescribeSpec({
             )
 
             val surveyId = UUID.randomUUID()
-            commandGateway.dispatch(CreateSurvey(surveyId, UUID.randomUUID(), emptyMap(), UUID.randomUUID(), DateTime.now()), StandardEventMetadata("executorId"))
-            commandGateway.dispatch(Invite(UUID.randomUUID(), UUID.randomUUID(), UUID.randomUUID(), DateTime.now()), StandardEventMetadata("executorId"))
+            commandGateway.dispatch(CreateSurvey(surveyId, UUID.randomUUID(), emptyMap(), UUID.randomUUID(), DateTime.now()), StandardEventMetadata(accountId))
+            commandGateway.dispatch(Invite(UUID.randomUUID(), UUID.randomUUID(), UUID.randomUUID(), DateTime.now()), StandardEventMetadata(accountId))
 
             eventStore.lastSequence() shouldBe 2
             eventStore.lastSequence(listOf(Created::class)) shouldBe 1
