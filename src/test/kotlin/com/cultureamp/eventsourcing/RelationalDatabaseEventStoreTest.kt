@@ -97,6 +97,15 @@ class RelationalDatabaseEventStoreTest : DescribeSpec({
             store.lastSequence(listOf(PizzaCreated::class, PizzaEaten::class)) shouldBe 2
         }
 
+        it("gets the concurrency error from the sink") {
+            val aggregateId = UUID.randomUUID()
+            val events = listOf(
+                event(PizzaCreated(MARGHERITA, listOf(TOMATO_PASTE)), aggregateId, 1, StandardEventMetadata("unused")),
+                event(PizzaEaten(), aggregateId, 1, StandardEventMetadata("unused")),
+            )
+            store.sink(events, aggregateId) shouldBe Left(ConcurrencyError)
+        }
+
         it("sends each sunk event to passed synchronous event-processors") {
             var count = 0
             val firstProjector: DomainEventProcessor<TestEvent> = object : DomainEventProcessor<TestEvent> {
