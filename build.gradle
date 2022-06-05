@@ -156,7 +156,7 @@ dependencies {
     implementation "org.jetbrains.exposed:exposed-jdbc:$exposed_version"
     implementation "org.jetbrains.exposed:exposed-jodatime:$exposed_version"
     implementation "io.github.microutils:kotlin-logging:2.0.11"
-    implementation "org.postgresql:postgresql:42.2.23"
+    testImplementation "org.postgresql:postgresql:42.2.23"
 }
 
 
