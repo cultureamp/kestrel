@@ -94,4 +94,6 @@ class BatchedAsyncEventProcessor<M : EventMetadata>(
 
         return if (count >= batchSize) Action.Continue else Action.Wait
     }
+
+    fun processedSequence() = bookmarkStore.bookmarkFor(bookmarkName).sequence
 }
