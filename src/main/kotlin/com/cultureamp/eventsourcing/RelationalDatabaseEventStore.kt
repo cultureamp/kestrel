@@ -24,7 +24,7 @@ import org.jetbrains.exposed.sql.select
 import org.jetbrains.exposed.sql.transactions.transaction
 import org.jetbrains.exposed.sql.vendors.H2Dialect
 import org.jetbrains.exposed.sql.vendors.PostgreSQLDialect
-import org.postgresql.util.PSQLException
+import java.sql.SQLException
 import java.util.UUID
 import kotlin.reflect.KClass
 
@@ -272,7 +272,7 @@ fun Transaction.pgAdvisoryXactLock(): CommandError? {
     try {
         exec("SET LOCAL lock_timeout = '${lockTimeoutMilliseconds}ms';")
         exec("SELECT pg_advisory_xact_lock(-1)")
-    } catch (e: PSQLException) {
+    } catch (e: SQLException) {
         if (e.message.orEmpty().contains("canceling statement due to lock timeout")) {
             return LockingError
         } else {
