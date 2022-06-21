@@ -6,7 +6,6 @@ import org.jetbrains.exposed.sql.StringColumnType
 import org.jetbrains.exposed.sql.Table
 import org.jetbrains.exposed.sql.statements.api.PreparedStatementApi
 import org.postgresql.util.PGobject
-import java.sql.PreparedStatement
 
 /**
  * Modified from: https://gist.github.com/quangIO/a623b5caa53c703e252d858f7a806919

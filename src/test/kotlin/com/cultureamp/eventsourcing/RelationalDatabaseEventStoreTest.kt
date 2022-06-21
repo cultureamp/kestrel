@@ -100,8 +100,8 @@ class RelationalDatabaseEventStoreTest : DescribeSpec({
         it("gets the concurrency error from the sink") {
             val aggregateId = UUID.randomUUID()
             val events = listOf(
-                event(PizzaCreated(MARGHERITA, listOf(TOMATO_PASTE)), aggregateId, 1, StandardEventMetadata("unused")),
-                event(PizzaEaten(), aggregateId, 1, StandardEventMetadata("unused")),
+                event(PizzaCreated(MARGHERITA, listOf(TOMATO_PASTE)), aggregateId, 1, StandardEventMetadata(/* unused */UUID.randomUUID())),
+                event(PizzaEaten(), aggregateId, 1, StandardEventMetadata(/* unused */UUID.randomUUID())),
             )
             store.sink(events, aggregateId) shouldBe Left(ConcurrencyError)
         }
