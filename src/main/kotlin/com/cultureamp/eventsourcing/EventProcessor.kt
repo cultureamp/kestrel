@@ -15,7 +15,7 @@ interface EventProcessor<in M : EventMetadata> {
         inline fun <reified E : DomainEvent, reified M : EventMetadata> from(noinline process: (E, UUID, M, UUID) -> Any?) = CompositeDomainEventProcessor.from(process)
         inline fun <reified E : DomainEvent> from(domainEventProcessor: DomainEventProcessor<E>) = CompositeDomainEventProcessor.from(domainEventProcessor)
         inline fun <reified E : DomainEvent, reified M : EventMetadata> from(domainEventProcessor: DomainEventProcessorWithMetadata<E, M>) = CompositeDomainEventProcessor.from(domainEventProcessor)
-        fun <M : EventMetadata> compose(first: CompositeDomainEventProcessor<M>, second: CompositeDomainEventProcessor<M>) = CompositeDomainEventProcessor.compose(first, second)
+        fun <M : EventMetadata> compose(first: CompositeDomainEventProcessor<M>, vararg remainder: CompositeDomainEventProcessor<M>) = CompositeDomainEventProcessor.compose(first, *remainder)
     }
 
     fun process(event: Event<out M>)
@@ -53,8 +53,8 @@ class CompositeDomainEventProcessor<in M : EventMetadata> (private val domainEve
             return CompositeDomainEventProcessor(listOf(handler))
         }
 
-        fun <M : EventMetadata> compose(first: CompositeDomainEventProcessor<M>, second: CompositeDomainEventProcessor<M>): CompositeDomainEventProcessor<M> {
-            return CompositeDomainEventProcessor(first.domainEventProcessors + second.domainEventProcessors)
+        fun <M : EventMetadata> compose(first: CompositeDomainEventProcessor<M>, vararg remainder: CompositeDomainEventProcessor<M>): CompositeDomainEventProcessor<M> {
+            return CompositeDomainEventProcessor(first.domainEventProcessors + remainder.flatMap { it.domainEventProcessors })
         }
     }
 }
