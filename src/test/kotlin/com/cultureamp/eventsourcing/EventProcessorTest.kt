@@ -2,6 +2,7 @@ package com.cultureamp.eventsourcing
 
 import io.kotest.core.Tuple3
 import io.kotest.core.spec.style.DescribeSpec
+import io.kotest.matchers.iterator.shouldHaveNext
 import io.kotest.matchers.maps.shouldContain
 import io.kotest.matchers.shouldBe
 import org.joda.time.DateTime
@@ -98,30 +99,40 @@ class EventProcessorTest : DescribeSpec({
     }
 
     describe("EventListener#compose") {
-        it("can combine two EventListeners into one") {
-            val events = mutableMapOf<UUID, DomainEvent>()
-            class Projector {
+        it("can combine three EventListeners into one") {
+            val events = mutableListOf<Triple<UUID, DomainEvent, Any>>()
+            val projector = object {
                 fun project(event: FooEvent, aggregateId: UUID) {
-                    events[aggregateId] = event
+                    events.add(Triple(aggregateId, event, this))
                 }
             }
-            class ProjectorWithMetadata {
+            val projectorWithMetadata = object {
                 @Suppress("UNUSED_PARAMETER")
                 fun project(event: BazEvent, aggregateId: UUID, metadata: SpecificMetadata, eventId: UUID) {
-                    events[aggregateId] = event
+                    events.add(Triple(aggregateId, event, this))
+                }
+            }
+            val projectorWithOverlap = object {
+                fun project(event: FooEvent, aggregateId: UUID) {
+                    events.add(Triple(aggregateId, event, this))
                 }
             }
 
             val eventProcessor = EventProcessor.compose(
-                EventProcessor.from(Projector()::project),
-                EventProcessor.from(ProjectorWithMetadata()::project)
+                EventProcessor.from(projector::project),
+                EventProcessor.from(projectorWithMetadata::project),
+                EventProcessor.from(projectorWithOverlap::project)
             )
 
             eventProcessor.process(fooEvent)
             eventProcessor.process(bazEvent)
-
-            events shouldContain (fooEvent.aggregateId to fooDomainEvent)
-            events shouldContain (bazEvent.aggregateId to bazDomainEvent)
+            val it = events.iterator()
+            it.shouldHaveNext()
+            it.next() shouldBe Triple(fooEvent.aggregateId, fooDomainEvent, projector)
+            it.shouldHaveNext()
+            it.next() shouldBe Triple(fooEvent.aggregateId, fooDomainEvent, projectorWithOverlap)
+            it.shouldHaveNext()
+            it.next() shouldBe Triple(bazEvent.aggregateId, bazDomainEvent, projectorWithMetadata)
         }
     }
 
