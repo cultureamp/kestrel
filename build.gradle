@@ -18,6 +18,8 @@ apply plugin: "org.owasp.dependencycheck"
 group group_id
 version "$base_version$version_suffix"
 archivesBaseName = "kestrel"
+sourceCompatibility = project.targetJvmVersion
+targetCompatibility = project.targetJvmVersion
 
 sourceSets {
     main.kotlin.srcDirs = main.java.srcDirs = ["src/main/kotlin"]
@@ -116,12 +118,6 @@ repositories {
     mavenLocal()
 }
 
-compileKotlin {
-    kotlinOptions.jvmTarget = "1.8"
-}
-compileTestKotlin {
-    kotlinOptions.jvmTarget = "1.8"
-}
 
 test {
     useJUnitPlatform()
@@ -138,9 +134,13 @@ test {
 compileKotlin {
     kotlinOptions {
         freeCompilerArgs = ["-XXLanguage:+InlineClasses"]
+        jvmTarget = project.targetJvmVersion
     }
 }
 
+compileTestKotlin {
+    kotlinOptions.jvmTarget = project.targetJvmVersion
+}
 
 dependencies {
     implementation "com.fasterxml.jackson.module:jackson-module-kotlin:2.12.5"
