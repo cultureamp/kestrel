@@ -20,6 +20,7 @@ data class ParticipantAggregate(val state: State) {
         is Invited -> this.copy(state = INVITED)
         is Uninvited -> this.copy(state = UNINVITED)
         is Reinvited -> this.copy(state = INVITED)
+        else -> this
     }
 
     fun update(command: ParticipantUpdateCommand, metadata: StandardEventMetadata): Either<ParticipantError, List<ParticipantUpdateEvent>> =
@@ -33,6 +34,7 @@ data class ParticipantAggregate(val state: State) {
                 INVITED -> Right.list(Uninvited(command.uninvitedAt))
             }
             is Reinvite -> Right.list(Reinvited(command.reinvitedAt))
+            is Rereinvite -> Right.list(Rereinvited(command.reinvitedAt))
         }
 
 }
@@ -52,6 +54,7 @@ data class Invite(
 
 data class Uninvite(override val aggregateId: UUID, val uninvitedAt: DateTime) : ParticipantUpdateCommand()
 data class Reinvite(override val aggregateId: UUID, val reinvitedAt: DateTime) : ParticipantUpdateCommand()
+data class Rereinvite(override val aggregateId: UUID, val reinvitedAt: DateTime) : ParticipantUpdateCommand()
 
 sealed class ParticipantEvent : DomainEvent
 sealed class ParticipantUpdateEvent : ParticipantEvent(), UpdateEvent
@@ -60,6 +63,12 @@ data class Invited(val surveyPeriodId: UUID, val employeeId: UUID, val invitedAt
 
 data class Uninvited(val uninvitedAt: DateTime) : ParticipantUpdateEvent()
 data class Reinvited(val reinvitedAt: DateTime) : ParticipantUpdateEvent()
+
+@UpcastEvent(RereinvitedUpcast::class)
+data class Rereinvited(val reinvitedAt: DateTime) : ParticipantUpdateEvent()
+object RereinvitedUpcast : Upcast<StandardEventMetadata, Rereinvited, Reinvited>{
+    override fun upcast(event: Rereinvited, metadata: StandardEventMetadata) = Reinvited(event.reinvitedAt)
+}
 
 sealed class ParticipantError : DomainError
 object AlreadyInvitedException : ParticipantError(), AlreadyActionedCommandError
