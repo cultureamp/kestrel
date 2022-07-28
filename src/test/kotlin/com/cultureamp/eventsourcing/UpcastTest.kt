@@ -12,7 +12,7 @@ import org.joda.time.DateTime
 import java.util.*
 
 class UpcastTest : DescribeSpec({
-    val db = Database.connect(url = "jdbc:h2:mem:test;MODE=MySQL;DB_CLOSE_DELAY=-1;", driver = "org.h2.Driver")
+    val db = Database.connect(url = "jdbc:h2:mem:test;MODE=PostgreSQL;DB_CLOSE_DELAY=-1;", driver = "org.h2.Driver")
     val table = H2DatabaseEventStore.eventsTable()
     val eventsSequenceStatsTable = EventsSequenceStats()
     val eventStore = RelationalDatabaseEventStore.create<StandardEventMetadata>(db)
@@ -59,11 +59,11 @@ class UpcastTest : DescribeSpec({
             }
         }
 
-        it("BatchedAsyncEventProcessor is not upcasting by default") {
+        it("BatchedAsyncEventProcessor upcasting can be turned off") {
             val projector = ParticipantProjector(db)
             val bookmarkName = "ParticipantBookmark"
             val eventProcessor = EventProcessor.from(projector)
-            val asyncEventProcessor = BatchedAsyncEventProcessor(eventStore, bookmarkStore, bookmarkName, eventProcessor)
+            val asyncEventProcessor = BatchedAsyncEventProcessor(eventStore, bookmarkStore, bookmarkName, eventProcessor, upcasting = false)
 
             transaction(db) {
                 val participantId = UUID.randomUUID()
@@ -88,7 +88,7 @@ class UpcastTest : DescribeSpec({
             val projector = ParticipantProjector(db)
             val bookmarkName = "ParticipantBookmark"
             val eventProcessor = EventProcessor.from(projector)
-            val asyncEventProcessor = BatchedAsyncEventProcessor(eventStore, bookmarkStore, bookmarkName, eventProcessor = eventProcessor, upcasting = true)
+            val asyncEventProcessor = BatchedAsyncEventProcessor(eventStore, bookmarkStore, bookmarkName, eventProcessor = eventProcessor)
 
             transaction(db) {
                 val participantId = UUID.randomUUID()

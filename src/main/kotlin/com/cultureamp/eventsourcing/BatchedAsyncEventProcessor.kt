@@ -24,7 +24,7 @@ class BatchedAsyncEventProcessor<M : EventMetadata>(
             System.out.println("Finished processing batch for ${bookmark.name}, $count events up to sequence ${bookmark.sequence}")
         }
     },
-    private val upcasting: Boolean = false,
+    private val upcasting: Boolean = true,
 ) : AsyncEventProcessor<M> {
 
     constructor(
@@ -41,7 +41,7 @@ class BatchedAsyncEventProcessor<M : EventMetadata>(
                 System.out.println("Finished processing batch for ${bookmark.name}, $count events up to sequence ${bookmark.sequence}")
             }
         },
-        upcasting: Boolean = false,
+        upcasting: Boolean = true,
     ) : this(
         eventSource, bookmarkStore, bookmarkName,
         object : SequencedEventProcessor<M> {

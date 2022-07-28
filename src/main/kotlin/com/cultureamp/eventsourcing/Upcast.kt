@@ -13,7 +13,6 @@ annotation class UpcastEvent(val upcastType: KClass<out Upcast<*, *, *>>)
 
 fun UpcastEvent.upcasting(event: DomainEvent, metadata: EventMetadata): DomainEvent = this.upcastType
     .functions
-    .filterIndexed { index, _ -> index == 0 }
     .find {
             f ->
         f.name == "upcast" &&
