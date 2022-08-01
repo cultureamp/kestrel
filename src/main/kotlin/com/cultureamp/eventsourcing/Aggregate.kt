@@ -278,11 +278,21 @@ AggregateConstructor<CC, CE, Err, UC, UE, M, Aggregate<UC, UE, Err, M, *>>.updat
     events: List<Event<M>>,
     eventStore: EventStore<M>
 ): Either<CommandError, Unit> {
-    val aggregate = rehydrate(events)
+    val upcastedEvents = events.map {
+        val domainEvent = it.domainEvent
+        val upcastEvent = domainEvent::class.annotations.filterIsInstance<UpcastEvent>()
+        if(upcastEvent.size == 1) {
+            it.copy(domainEvent = upcastEvent.first().upcasting(domainEvent, metadata))
+        }else{
+            it
+        }
+    }
+
+    val aggregate = rehydrate(upcastedEvents)
     return aggregate.flatMap {
         it.update(updateCommand, metadata).flatMap { domainEvents ->
             it.updated(domainEvents) // called to ensure the update event handler doesn't throw any exceptions
-            val offset = events.last().aggregateSequence + 1
+            val offset = upcastedEvents.last().aggregateSequence + 1
             val createdAt = DateTime()
             val storableEvents = domainEvents.withIndex().map { (index, domainEvent) ->
                 Event(
