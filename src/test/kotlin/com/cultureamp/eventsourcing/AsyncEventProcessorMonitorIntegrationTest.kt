@@ -19,7 +19,7 @@ import org.joda.time.DateTime
 import java.util.UUID
 
 class AsyncEventProcessorMonitorIntegrationTest : DescribeSpec({
-    val db = PgTestConfig.db ?: Database.connect(url = "jdbc:h2:mem:test;MODE=MySQL;DB_CLOSE_DELAY=-1;", driver = "org.h2.Driver")
+    val db = PgTestConfig.db ?: Database.connect(url = "jdbc:h2:mem:test;MODE=PostgreSQL;DB_CLOSE_DELAY=-1;", driver = "org.h2.Driver")
     val tableEvent = Events()
     val tableH2 = H2DatabaseEventStore.eventsTable()
     val table = if (PgTestConfig.db != null) tableEvent else tableH2

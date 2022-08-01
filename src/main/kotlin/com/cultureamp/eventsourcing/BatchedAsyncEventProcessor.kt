@@ -23,7 +23,8 @@ class BatchedAsyncEventProcessor<M : EventMetadata>(
         if (count > 0 || Random.nextFloat() < 0.01) {
             System.out.println("Finished processing batch for ${bookmark.name}, $count events up to sequence ${bookmark.sequence}")
         }
-    }
+    },
+    private val upcasting: Boolean = true,
 ) : AsyncEventProcessor<M> {
 
     constructor(
@@ -39,14 +40,15 @@ class BatchedAsyncEventProcessor<M : EventMetadata>(
             if (count > 0 || Random.nextFloat() < 0.01) {
                 System.out.println("Finished processing batch for ${bookmark.name}, $count events up to sequence ${bookmark.sequence}")
             }
-        }
+        },
+        upcasting: Boolean = true,
     ) : this(
         eventSource, bookmarkStore, bookmarkName,
         object : SequencedEventProcessor<M> {
             override fun process(sequencedEvent: SequencedEvent<out M>) = eventProcessor.process(sequencedEvent.event)
             override fun domainEventClasses() = eventProcessor.domainEventClasses()
         },
-        batchSize, startLog, endLog
+        batchSize, startLog, endLog, upcasting
     )
 
     fun processOneBatch(): Action {
@@ -57,7 +59,32 @@ class BatchedAsyncEventProcessor<M : EventMetadata>(
         val (count, finalBookmark) = eventSource.getAfter(startBookmark.sequence, sequencedEventProcessor.domainEventClasses(), batchSize).foldIndexed(
             0 to startBookmark
         ) { index, _, sequencedEvent ->
-            sequencedEventProcessor.process(sequencedEvent)
+            when(upcasting){
+                true -> {
+                    val domainEvent = sequencedEvent.event.domainEvent
+                    val upcastEvent = domainEvent::class.annotations.filterIsInstance<UpcastEvent>()
+                    if(upcastEvent.size == 1) {
+                        sequencedEventProcessor.process(
+                            SequencedEvent(
+                                Event(
+                                    id = sequencedEvent.event.id,
+                                    aggregateId = sequencedEvent.event.aggregateId,
+                                    aggregateSequence = sequencedEvent.event.aggregateSequence,
+                                    aggregateType = sequencedEvent.event.aggregateType,
+                                    createdAt = sequencedEvent.event.createdAt,
+                                    metadata = sequencedEvent.event.metadata,
+                                    domainEvent = upcastEvent.first().upcasting(domainEvent, sequencedEvent.event.metadata)
+                                ),
+                                sequencedEvent.sequence
+                            )
+                        )
+                    }else{
+                        sequencedEventProcessor.process(sequencedEvent)
+                    }
+                }
+                false -> sequencedEventProcessor.process(sequencedEvent)
+            }
+
             val updatedBookmark = startBookmark.copy(sequence = sequencedEvent.sequence)
             bookmarkStore.save(updatedBookmark)
             index + 1 to updatedBookmark
