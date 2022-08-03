@@ -34,7 +34,19 @@ class RelationalDatabaseBookmarkStore(val db: Database, val table: Bookmarks = B
     }
 
     private fun rowsForBookmark(bookmarkName: String) = table.select { table.name eq bookmarkName }
-    private fun isExists(bookmarkName: String) = rowsForBookmark(bookmarkName).count() > 0
+    private fun isExists(bookmarkName: String) = !rowsForBookmark(bookmarkName).empty()
+}
+
+class CachingBookmarkStore(private val delegate: BookmarkStore) : BookmarkStore {
+    private val cache = HashMap<String, Bookmark>()
+    override fun bookmarkFor(bookmarkName: String): Bookmark {
+        return cache[bookmarkName] ?: delegate.bookmarkFor(bookmarkName).apply { cache[bookmarkName] = this }
+    }
+
+    override fun save(bookmark: Bookmark) {
+        cache[bookmark.name] = bookmark
+        delegate.save(bookmark)
+    }
 }
 
 class Bookmarks(tableName: String = "bookmarks") : Table(tableName) {
