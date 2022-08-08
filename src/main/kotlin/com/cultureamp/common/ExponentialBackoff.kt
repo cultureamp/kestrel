@@ -8,7 +8,7 @@ class ExponentialBackoff(
 	val failureBackoffMs: (attempt: Int) -> Long = exponentialBackoffAlgorithm(
 		600_000, 2
 	),
-	val sleeper: (millis: Long) -> Unit = { Thread.sleep(it) },
+	val sleeper: (millis: Long) -> Unit = defaultSleeper,
 	val onFailure: (error: Throwable, consecutiveFailures: Int) -> Unit
 ) {
 	companion object {
@@ -58,4 +58,13 @@ sealed class Action {
 	object Continue : Action()
 	object Stop : Action()
 	data class Error(val exception: Throwable) : Action()
+}
+
+val defaultSleeper : (millis: Long) -> Unit = { Thread.sleep(it) }
+val interruptibleSleeper : (millis: Long) -> Unit = { millis ->
+	try {
+		Thread.sleep(millis)
+	} catch (e: InterruptedException) {
+		Thread.currentThread().interrupt() // restore interrupted status
+	}
 }
