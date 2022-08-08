@@ -19,9 +19,9 @@ class BatchedAsyncEventProcessor<M : EventMetadata>(
     private val startLog: (Bookmark) -> Unit = { bookmark ->
         System.out.println("Polling for events for ${bookmark.name} from sequence ${bookmark.sequence}")
     },
-    private val endLog: (Int, Bookmark, Long, Long) -> Unit = { count, bookmark, minLatency, maxLatency ->
+    private val endLog: (Int, Bookmark) -> Unit = { count, bookmark ->
         if (count > 0 || Random.nextFloat() < 0.01) {
-            System.out.println("Finished processing batch for ${bookmark.name}, $count events up to sequence ${bookmark.sequence}, latency between $minLatency and $maxLatency")
+            System.out.println("Finished processing batch for ${bookmark.name}, $count events up to sequence ${bookmark.sequence}")
         }
     },
     private val upcasting: Boolean = true,
@@ -36,9 +36,9 @@ class BatchedAsyncEventProcessor<M : EventMetadata>(
         startLog: (Bookmark) -> Unit = { bookmark ->
             System.out.println("Polling for events for ${bookmark.name} from sequence ${bookmark.sequence}")
         },
-        endLog: (Int, Bookmark, Long, Long) -> Unit = { count, bookmark, minLatency, maxLatency ->
+        endLog: (Int, Bookmark) -> Unit = { count, bookmark ->
             if (count > 0 || Random.nextFloat() < 0.01) {
-                System.out.println("Finished processing batch for ${bookmark.name}, $count events up to sequence ${bookmark.sequence}, latency between $minLatency and $maxLatency")
+                System.out.println("Finished processing batch for ${bookmark.name}, $count events up to sequence ${bookmark.sequence}")
             }
         },
         upcasting: Boolean = true,
@@ -95,7 +95,7 @@ class BatchedAsyncEventProcessor<M : EventMetadata>(
             index + 1 to updatedBookmark
         }
 
-        endLog(count, finalBookmark, minLatency, maxLatency)
+        endLog(count, finalBookmark)
 
         return if (count >= batchSize) Action.Continue else Action.Wait
     }
