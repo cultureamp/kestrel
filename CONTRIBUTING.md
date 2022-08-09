@@ -89,7 +89,7 @@ To push from Sonatype to Maven Central, you need to do the following steps adapt
   - You can inspect them at the Activity panel.
   - You need to Drop this upload
   - Fix them in your local folder
-  - Run the `uploadArchives` task again.
+  - Run the `./gradlew clean build publish` task again.
   - Then Close then continue
 - If there are no errors:
   - Click Release button
