@@ -99,8 +99,10 @@ class BatchedAsyncEventProcessor<M : EventMetadata>(
     }
 
     private fun processEvent(event: SequencedEvent<out M>) {
-        val startTime = System.currentTimeMillis()
-        sequencedEventProcessor.process(event)
-        stats?.eventProcessed(this, event, System.currentTimeMillis() - startTime)
+        stats?.let {
+            val startTime = System.currentTimeMillis()
+            sequencedEventProcessor.process(event)
+            stats.eventProcessed(this, event, System.currentTimeMillis() - startTime)
+        } ?: sequencedEventProcessor.process(event)
     }
 }
