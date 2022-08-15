@@ -1,6 +1,8 @@
 package com.cultureamp.eventsourcing
 
 import com.cultureamp.common.Action
+import org.joda.time.DateTime
+import org.joda.time.Duration
 import kotlin.random.Random
 
 interface AsyncEventProcessor<M : EventMetadata> {
@@ -25,6 +27,7 @@ class BatchedAsyncEventProcessor<M : EventMetadata>(
         }
     },
     private val upcasting: Boolean = true,
+    private val stats: StatisticsCollector? = null,
 ) : AsyncEventProcessor<M> {
 
     constructor(
@@ -42,13 +45,14 @@ class BatchedAsyncEventProcessor<M : EventMetadata>(
             }
         },
         upcasting: Boolean = true,
+        stats: StatisticsCollector? = null,
     ) : this(
         eventSource, bookmarkStore, bookmarkName,
         object : SequencedEventProcessor<M> {
             override fun process(sequencedEvent: SequencedEvent<out M>) = eventProcessor.process(sequencedEvent.event)
             override fun domainEventClasses() = eventProcessor.domainEventClasses()
         },
-        batchSize, startLog, endLog, upcasting
+        batchSize, startLog, endLog, upcasting, stats
     )
 
     fun processOneBatch(): Action {
@@ -64,25 +68,24 @@ class BatchedAsyncEventProcessor<M : EventMetadata>(
                     val domainEvent = sequencedEvent.event.domainEvent
                     val upcastEvent = domainEvent::class.annotations.filterIsInstance<UpcastEvent>()
                     if(upcastEvent.size == 1) {
-                        sequencedEventProcessor.process(
-                            SequencedEvent(
-                                Event(
-                                    id = sequencedEvent.event.id,
-                                    aggregateId = sequencedEvent.event.aggregateId,
-                                    aggregateSequence = sequencedEvent.event.aggregateSequence,
-                                    aggregateType = sequencedEvent.event.aggregateType,
-                                    createdAt = sequencedEvent.event.createdAt,
-                                    metadata = sequencedEvent.event.metadata,
-                                    domainEvent = upcastEvent.first().upcasting(domainEvent, sequencedEvent.event.metadata)
-                                ),
-                                sequencedEvent.sequence
-                            )
+                        val newEvent = SequencedEvent(
+                            Event(
+                                id = sequencedEvent.event.id,
+                                aggregateId = sequencedEvent.event.aggregateId,
+                                aggregateSequence = sequencedEvent.event.aggregateSequence,
+                                aggregateType = sequencedEvent.event.aggregateType,
+                                createdAt = sequencedEvent.event.createdAt,
+                                metadata = sequencedEvent.event.metadata,
+                                domainEvent = upcastEvent.first().upcasting(domainEvent, sequencedEvent.event.metadata)
+                            ),
+                            sequencedEvent.sequence
                         )
+                        processEvent(newEvent)
                     }else{
-                        sequencedEventProcessor.process(sequencedEvent)
+                        processEvent(sequencedEvent)
                     }
                 }
-                false -> sequencedEventProcessor.process(sequencedEvent)
+                false -> processEvent(sequencedEvent)
             }
 
             val updatedBookmark = startBookmark.copy(sequence = sequencedEvent.sequence)
@@ -93,5 +96,13 @@ class BatchedAsyncEventProcessor<M : EventMetadata>(
         endLog(count, finalBookmark)
 
         return if (count >= batchSize) Action.Continue else Action.Wait
+    }
+
+    private fun processEvent(event: SequencedEvent<out M>) {
+        stats?.let {
+            val startTime = System.currentTimeMillis()
+            sequencedEventProcessor.process(event)
+            stats.eventProcessed(this, event, System.currentTimeMillis() - startTime)
+        } ?: sequencedEventProcessor.process(event)
     }
 }
