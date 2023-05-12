@@ -252,7 +252,7 @@ AggregateConstructor<CC, CE, Err, UC, UE, M, Aggregate<UC, UE, Err, M, *>>.creat
     creationCommand: CC,
     metadata: M,
     eventStore: EventStore<M>
-): Either<CommandError, Unit> {
+): Either<CommandError, Long> {
     return create(creationCommand, metadata).map { initialEvents ->
         created(initialEvents.first).updated(initialEvents.second) // called to ensure the create event handler doesn't throw any exceptions
         val domainEvents = listOf(initialEvents.first) + initialEvents.second
@@ -277,7 +277,7 @@ AggregateConstructor<CC, CE, Err, UC, UE, M, Aggregate<UC, UE, Err, M, *>>.updat
     metadata: M,
     events: List<Event<M>>,
     eventStore: EventStore<M>
-): Either<CommandError, Unit> {
+): Either<CommandError, Long> {
     val upcastedEvents = events.map {
         val domainEvent = it.domainEvent
         val upcastEvent = domainEvent::class.annotations.filterIsInstance<UpcastEvent>()
