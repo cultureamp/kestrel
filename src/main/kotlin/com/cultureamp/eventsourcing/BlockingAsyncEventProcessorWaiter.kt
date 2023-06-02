@@ -36,7 +36,7 @@ class BlockingAsyncEventProcessorWaiter<M : EventMetadata>(
         val diff = desired.map { it.key to it.value - (actual[it.key] ?: 0) }.toMap()
         val lagging = diff.filter { it.value > 0 }
         if (lagging.isNotEmpty()) {
-            logger("Waiting for eventProcessors to catch up. Lagging: $lagging")
+            logger("Waiting for eventProcessors to catch up. ${lagging.map { "${it.key}=${(actual[it.key] ?: 0)}/${desired[it.key]}" }}")
         }
         return lagging.isNotEmpty()
     }
