@@ -18,11 +18,11 @@ class RelationalDatabaseBookmarkStore(val db: Database, val table: Bookmarks = B
         Bookmark(bookmarkName, bookmarkVal)
     }
 
-    override fun bookmarksFor(bookmarkNames: Set<String>): Set<Bookmark> {
+    override fun bookmarksFor(bookmarkNames: Set<String>): Set<Bookmark> = transaction(db) {
         val matchingRows = rowsForBookmarks(bookmarkNames)
         val foundBookmarks = matchingRows.map { Bookmark(it[table.name], it[table.sequence]) }.toSet()
         val emptyBookmarks = (bookmarkNames - foundBookmarks.map { it.name }.toSet()).map { Bookmark(it, 0) }.toSet()
-        return foundBookmarks + emptyBookmarks
+        foundBookmarks + emptyBookmarks
     }
 
     override fun save(bookmark: Bookmark): Unit = transaction(db) {
@@ -52,9 +52,7 @@ class CachingBookmarkStore(private val delegate: BookmarkStore) : BookmarkStore 
         return cache[bookmarkName] ?: delegate.bookmarkFor(bookmarkName).apply { cache[bookmarkName] = this }
     }
 
-    override fun bookmarksFor(bookmarkNames: Set<String>): Set<Bookmark> {
-        TODO("Not yet implemented")
-    }
+    override fun bookmarksFor(bookmarkNames: Set<String>) = bookmarkNames.map { bookmarkFor(it) }.toSet()
 
     override fun save(bookmark: Bookmark) {
         cache[bookmark.name] = bookmark

@@ -39,6 +39,16 @@ class RelationalDatabaseBookmarkStoreTest : DescribeSpec({
             store.save(Bookmark("update-bookmark", 789L))
             store.bookmarkFor("update-bookmark") shouldBe Bookmark("update-bookmark", 789L)
         }
+
+        it("can fetch bookmarks in bulk") {
+            store.save(Bookmark("new-bookmark", 123L))
+            store.save(Bookmark("other-bookmark", 456L))
+            store.bookmarksFor(setOf("new-bookmark", "other-bookmark", "unknown-bookmark")) shouldBe setOf(
+                Bookmark("new-bookmark", 123L),
+                Bookmark("other-bookmark", 456L),
+                Bookmark("unknown-bookmark", 0L),
+            )
+        }
     }
 })
 
