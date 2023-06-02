@@ -46,7 +46,7 @@ class RelationalDatabaseEventStore<M : EventMetadata> @PublishedApi internal con
     private val objectMapper: ObjectMapper,
     private val eventTypeResolver: EventTypeResolver,
     private val blockingLockUntilTransactionEnd: Transaction.() -> CommandError? = { null },
-    private val afterSinkHook: (List<SequencedEvent<M>>) -> Unit = { Unit },
+    private val afterSinkHook: (List<SequencedEvent<M>>) -> Unit = { },
 ) : EventStore<M> {
 
     companion object {
@@ -56,7 +56,7 @@ class RelationalDatabaseEventStore<M : EventMetadata> @PublishedApi internal con
             eventsTableName: String = defaultEventsTableName,
             eventsSequenceStateTableName: String = defaultEventsSequenceStatsTableName,
             eventTypeResolver: EventTypeResolver = defaultEventTypeResolver,
-            noinline afterSinkHook: (List<SequencedEvent<M>>) -> Unit = { Unit },
+            noinline afterSinkHook: (List<SequencedEvent<M>>) -> Unit = { },
         ): RelationalDatabaseEventStore<M> =
             when (db.dialect) {
                 is H2Dialect -> H2DatabaseEventStore.create(db, objectMapper, eventsTableName, eventsSequenceStateTableName, eventTypeResolver, afterSinkHook)
