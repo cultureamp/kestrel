@@ -41,6 +41,12 @@ class RelationalDatabaseBookmarkStore(val db: Database, val table: Bookmarks = B
         }
     }
 
+    fun createSchemaIfNotExists() {
+        transaction(db) {
+            SchemaUtils.create(table)
+        }
+    }
+
     private fun rowsForBookmark(bookmarkName: String) = table.select { table.name eq bookmarkName }
     private fun rowsForBookmarks(bookmarkNames: Set<String>) = table.select { table.name.inList(bookmarkNames) }
     private fun isExists(bookmarkName: String) = !rowsForBookmark(bookmarkName).empty()

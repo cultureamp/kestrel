@@ -287,9 +287,3 @@ object CanonicalNameEventTypeResolver : EventTypeResolver {
 
     override fun deserialize(aggregateType: String, eventType: String) = eventType.asClass<DomainEvent>()!!
 }
-
-private fun RelationalDatabaseBookmarkStore.createSchemaIfNotExists() {
-    transaction(db) {
-        SchemaUtils.create(table)
-    }
-}

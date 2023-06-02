@@ -1,8 +1,8 @@
 package com.cultureamp.eventsourcing
 
 import io.kotest.core.spec.style.DescribeSpec
-import org.jetbrains.exposed.sql.Database
 import io.kotest.matchers.shouldBe
+import org.jetbrains.exposed.sql.Database
 import org.jetbrains.exposed.sql.SchemaUtils
 import org.jetbrains.exposed.sql.transactions.transaction
 
@@ -11,9 +11,7 @@ class RelationalDatabaseBookmarkStoreTest : DescribeSpec({
     val store = RelationalDatabaseBookmarkStore(db)
 
     beforeTest {
-        transaction(db) {
-            SchemaUtils.create(store.table)
-        }
+        store.createSchemaIfNotExists()
     }
 
     afterTest {
