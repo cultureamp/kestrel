@@ -8,6 +8,7 @@ import com.cultureamp.eventsourcing.sample.PizzaTopping.CHEESE
 import com.cultureamp.eventsourcing.sample.PizzaTopping.TOMATO_PASTE
 import com.cultureamp.eventsourcing.sample.PizzaToppingAdded
 import com.cultureamp.eventsourcing.sample.StandardEventMetadata
+import io.kotest.assertions.throwables.shouldThrow
 import io.kotest.core.spec.style.DescribeSpec
 import io.kotest.matchers.shouldBe
 import org.jetbrains.exposed.sql.Database
@@ -140,6 +141,28 @@ class RelationalDatabaseEventStoreTest : DescribeSpec({
                 SequencedEvent(fooEvent, 1L),
                 SequencedEvent(barEvent, 2L),
             )
+        }
+
+        it("sinks event even if the after-sink hook throws an exception") {
+            val fooDomainEvent = FooEvent("bar")
+            val fooEvent = Event(
+                id = UUID.randomUUID(),
+                aggregateId = UUID.randomUUID(),
+                aggregateSequence = 1,
+                aggregateType = "aggregateType",
+                createdAt = DateTime.now(),
+                metadata = SpecificMetadata("specialField"),
+                domainEvent = fooDomainEvent,
+            )
+            val alwaysFailsAfterSinkHook: (List<SequencedEvent<SpecificMetadata>>) -> Unit = {
+                throw IllegalStateException("expected")
+            }
+            val storeWithAfterSinkHook = RelationalDatabaseEventStore.create(db, eventsTableName = tableName, afterSinkHook = alwaysFailsAfterSinkHook)
+            val exception = shouldThrow<IllegalStateException> {
+                storeWithAfterSinkHook.sink(listOf(fooEvent), fooEvent.aggregateId)
+            }
+            exception.message shouldBe "expected"
+            storeWithAfterSinkHook.eventsFor(fooEvent.aggregateId) shouldBe listOf(fooEvent)
         }
 
         it("allows providing a custom event type resolver") {
