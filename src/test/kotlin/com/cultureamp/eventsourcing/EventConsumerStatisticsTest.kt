@@ -69,7 +69,7 @@ class EventConsumerStatisticsTest : DescribeSpec({
                 }
 
             }
-            val asyncEventProcessor = BatchedAsyncEventProcessor(eventStore, bookmarkStore, bookmarkName, eventProcessor, stats = statsCollector)
+            val asyncEventProcessor = BatchedAsyncEventProcessor(eventStore, BookmarkedEventProcessor(bookmarkStore, bookmarkName, eventProcessor), stats = statsCollector)
 
             val aggregateId = UUID.randomUUID()
             val surveyPeriodId = UUID.randomUUID()

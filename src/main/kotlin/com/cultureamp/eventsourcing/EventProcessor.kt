@@ -7,6 +7,13 @@ import kotlin.reflect.KClass
 interface SequencedEventProcessor<in M : EventMetadata> {
     fun process(sequencedEvent: SequencedEvent<out M>)
     fun domainEventClasses(): List<KClass<out DomainEvent>> = emptyList()
+
+    companion object {
+        fun <M : EventMetadata> from(eventProcessor: EventProcessor<M>) = object : SequencedEventProcessor<M> {
+            override fun process(sequencedEvent: SequencedEvent<out M>) = eventProcessor.process(sequencedEvent.event)
+            override fun domainEventClasses() = eventProcessor.domainEventClasses()
+        }
+    }
 }
 
 interface EventProcessor<in M : EventMetadata> {

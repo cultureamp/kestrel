@@ -1,22 +1,28 @@
 package com.cultureamp.eventsourcing
 
 import com.cultureamp.common.Action
-import org.joda.time.DateTime
-import org.joda.time.Duration
 import kotlin.random.Random
 
 interface AsyncEventProcessor<M : EventMetadata> {
     val eventSource: EventSource<M>
-    val bookmarkStore: BookmarkStore
-    val bookmarkName: String
-    val sequencedEventProcessor: SequencedEventProcessor<M>
+    val bookmarkedEventProcessor: BookmarkedEventProcessor<M>
+}
+
+data class BookmarkedEventProcessor<M : EventMetadata>(
+    val bookmarkStore: BookmarkStore,
+    val bookmarkName: String,
+    val sequencedEventProcessor: SequencedEventProcessor<M>,
+) {
+    constructor(bookmarkStore: BookmarkStore, bookmarkName: String, eventProcessor: EventProcessor<M>) : this(
+        bookmarkStore,
+        bookmarkName,
+        SequencedEventProcessor.from(eventProcessor),
+    )
 }
 
 class BatchedAsyncEventProcessor<M : EventMetadata>(
     override val eventSource: EventSource<M>,
-    override val bookmarkStore: BookmarkStore,
-    override val bookmarkName: String,
-    override val sequencedEventProcessor: SequencedEventProcessor<M>,
+    override val bookmarkedEventProcessor: BookmarkedEventProcessor<M>,
     private val batchSize: Int = 1000,
     private val startLog: (Bookmark) -> Unit = { bookmark ->
         System.out.println("Polling for events for ${bookmark.name} from sequence ${bookmark.sequence}")
@@ -29,31 +35,9 @@ class BatchedAsyncEventProcessor<M : EventMetadata>(
     private val upcasting: Boolean = true,
     private val stats: StatisticsCollector? = null,
 ) : AsyncEventProcessor<M> {
-
-    constructor(
-        eventSource: EventSource<M>,
-        bookmarkStore: BookmarkStore,
-        bookmarkName: String,
-        eventProcessor: EventProcessor<M>,
-        batchSize: Int = 1000,
-        startLog: (Bookmark) -> Unit = { bookmark ->
-            System.out.println("Polling for events for ${bookmark.name} from sequence ${bookmark.sequence}")
-        },
-        endLog: (Int, Bookmark) -> Unit = { count, bookmark ->
-            if (count > 0 || Random.nextFloat() < 0.01) {
-                System.out.println("Finished processing batch for ${bookmark.name}, $count events up to sequence ${bookmark.sequence}")
-            }
-        },
-        upcasting: Boolean = true,
-        stats: StatisticsCollector? = null,
-    ) : this(
-        eventSource, bookmarkStore, bookmarkName,
-        object : SequencedEventProcessor<M> {
-            override fun process(sequencedEvent: SequencedEvent<out M>) = eventProcessor.process(sequencedEvent.event)
-            override fun domainEventClasses() = eventProcessor.domainEventClasses()
-        },
-        batchSize, startLog, endLog, upcasting, stats
-    )
+    private val bookmarkStore = bookmarkedEventProcessor.bookmarkStore
+    private val bookmarkName = bookmarkedEventProcessor.bookmarkName
+    private val sequencedEventProcessor = bookmarkedEventProcessor.sequencedEventProcessor
 
     fun processOneBatch(): Action {
         val startBookmark = bookmarkStore.bookmarkFor(bookmarkName)
@@ -61,13 +45,13 @@ class BatchedAsyncEventProcessor<M : EventMetadata>(
         startLog(startBookmark)
 
         val (count, finalBookmark) = eventSource.getAfter(startBookmark.sequence, sequencedEventProcessor.domainEventClasses(), batchSize).foldIndexed(
-            0 to startBookmark
+            0 to startBookmark,
         ) { index, _, sequencedEvent ->
-            when(upcasting){
+            when (upcasting) {
                 true -> {
                     val domainEvent = sequencedEvent.event.domainEvent
                     val upcastEvent = domainEvent::class.annotations.filterIsInstance<UpcastEvent>()
-                    if(upcastEvent.size == 1) {
+                    if (upcastEvent.size == 1) {
                         val newEvent = SequencedEvent(
                             Event(
                                 id = sequencedEvent.event.id,
@@ -76,12 +60,12 @@ class BatchedAsyncEventProcessor<M : EventMetadata>(
                                 aggregateType = sequencedEvent.event.aggregateType,
                                 createdAt = sequencedEvent.event.createdAt,
                                 metadata = sequencedEvent.event.metadata,
-                                domainEvent = upcastEvent.first().upcasting(domainEvent, sequencedEvent.event.metadata)
+                                domainEvent = upcastEvent.first().upcasting(domainEvent, sequencedEvent.event.metadata),
                             ),
-                            sequencedEvent.sequence
+                            sequencedEvent.sequence,
                         )
                         processEvent(newEvent)
-                    }else{
+                    } else {
                         processEvent(sequencedEvent)
                     }
                 }

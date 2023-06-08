@@ -5,13 +5,13 @@ import kotlinx.coroutines.runBlocking
 import kotlinx.coroutines.withTimeout
 
 class BlockingAsyncEventProcessorWaiter<M : EventMetadata>(
-    private val eventProcessors: List<AsyncEventProcessor<M>>,
+    private val eventProcessors: List<BookmarkedEventProcessor<M>>,
     private val maxWaitMs: Long,
     private val pollWaitMs: Long,
     private val logger: (String) -> Unit = System.out::println,
 ) {
     fun waitUntilProcessed(events: List<SequencedEvent<M>>) {
-        val projectorToMaxRelevantSequence: Map<AsyncEventProcessor<M>, Long> = eventProcessors.associateWith { eventProcessor ->
+        val projectorToMaxRelevantSequence: Map<BookmarkedEventProcessor<M>, Long> = eventProcessors.associateWith { eventProcessor ->
             val eventProcessorEventTypes = eventProcessor.sequencedEventProcessor.domainEventClasses().toSet()
             val relevantSequencedEvents = events.filter { eventProcessorEventTypes.contains(it.event.domainEvent::class) }
             val maxRelevantSequence = relevantSequencedEvents.lastOrNull()?.let { it.sequence }
@@ -28,7 +28,7 @@ class BlockingAsyncEventProcessorWaiter<M : EventMetadata>(
         }
     }
 
-    private fun anyLaggingFrom(projectorToMaxRelevantSequence: Map<AsyncEventProcessor<M>, Long>): Boolean {
+    private fun anyLaggingFrom(projectorToMaxRelevantSequence: Map<BookmarkedEventProcessor<M>, Long>): Boolean {
         val bookmarkStoreToBookmarkNames = projectorToMaxRelevantSequence.keys.map { it.bookmarkStore to it.bookmarkName }.groupBy { it.first }.mapValues { it.value.map { it.second }.toSet() }
         val bookmarks = bookmarkStoreToBookmarkNames.flatMap { it.key.bookmarksFor(it.value) }.toSet()
         val desired = projectorToMaxRelevantSequence.mapKeys { it.key.bookmarkName }

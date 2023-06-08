@@ -73,15 +73,14 @@ fun bookmarkStoreCountingUpFrom(sequence: Long, allowedBookmarkNames: Set<String
     override fun save(bookmark: Bookmark) = fail("Should not be called")
 }
 
-fun eventProcessorFor(name: String, eventClasses: List<KClass<out DomainEvent>>, bookmarkStore: BookmarkStore) = object : AsyncEventProcessor<SpecificMetadata> {
-    override val eventSource = alwaysFailsEventSource
-    override val bookmarkStore = bookmarkStore
-    override val bookmarkName = name
-    override val sequencedEventProcessor = object : SequencedEventProcessor<SpecificMetadata> {
+fun eventProcessorFor(name: String, eventClasses: List<KClass<out DomainEvent>>, bookmarkStore: BookmarkStore) = BookmarkedEventProcessor(
+    bookmarkStore,
+    name,
+    object : SequencedEventProcessor<SpecificMetadata> {
         override fun process(sequencedEvent: SequencedEvent<out SpecificMetadata>) = fail("Should not be called")
         override fun domainEventClasses(): List<KClass<out DomainEvent>> = eventClasses
-    }
-}
+    },
+)
 
 fun sequencedEventFor(domainEvent: DomainEvent, sequence: Long) = SequencedEvent(
     Event(
