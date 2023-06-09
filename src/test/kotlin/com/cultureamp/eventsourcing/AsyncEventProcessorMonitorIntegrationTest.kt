@@ -67,7 +67,7 @@ class AsyncEventProcessorMonitorIntegrationTest : DescribeSpec({
             val projector = SurveyNamesCommandProjector(db)
             val bookmarkName = "SurveyNames"
             val eventProcessor = EventProcessor.from(projector)
-            val asyncEventProcessor = BatchedAsyncEventProcessor(eventStore, BookmarkedEventProcessor(bookmarkStore, bookmarkName, eventProcessor))
+            val asyncEventProcessor = BatchedAsyncEventProcessor(eventStore, bookmarkStore, bookmarkName, eventProcessor)
 
             var capturedLag: Lag? = null
             val metrics: (Lag) -> Unit = {
