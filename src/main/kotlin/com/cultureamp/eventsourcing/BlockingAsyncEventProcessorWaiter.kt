@@ -6,8 +6,8 @@ import kotlinx.coroutines.withTimeout
 
 class BlockingAsyncEventProcessorWaiter<M : EventMetadata>(
     private val eventProcessors: List<BookmarkedEventProcessor<M>>,
-    private val maxWaitMs: Long,
-    private val pollWaitMs: Long,
+    private val maxWaitMs: Long = 5000,
+    private val pollWaitMs: Long = 100,
     private val logger: (String) -> Unit = System.out::println,
 ) {
     fun waitUntilProcessed(events: List<SequencedEvent<M>>) {
