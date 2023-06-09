@@ -12,11 +12,7 @@ interface BookmarkStore {
 }
 
 class RelationalDatabaseBookmarkStore(val db: Database, val table: Bookmarks = Bookmarks()) : BookmarkStore {
-    override fun bookmarkFor(bookmarkName: String): Bookmark = transaction(db) {
-        val matchingRows = rowsForBookmark(bookmarkName)
-        val bookmarkVal = if (matchingRows.count() > 0) matchingRows.single()[table.sequence] else 0
-        Bookmark(bookmarkName, bookmarkVal)
-    }
+    override fun bookmarkFor(bookmarkName: String): Bookmark = bookmarksFor(setOf(bookmarkName)).first()
 
     override fun bookmarksFor(bookmarkNames: Set<String>): Set<Bookmark> = transaction(db) {
         val matchingRows = rowsForBookmarks(bookmarkNames)
@@ -47,9 +43,8 @@ class RelationalDatabaseBookmarkStore(val db: Database, val table: Bookmarks = B
         }
     }
 
-    private fun rowsForBookmark(bookmarkName: String) = table.select { table.name eq bookmarkName }
     private fun rowsForBookmarks(bookmarkNames: Set<String>) = table.select { table.name.inList(bookmarkNames) }
-    private fun isExists(bookmarkName: String) = !rowsForBookmark(bookmarkName).empty()
+    private fun isExists(bookmarkName: String) = !rowsForBookmarks(setOf(bookmarkName)).empty()
 }
 
 class CachingBookmarkStore(private val delegate: BookmarkStore) : BookmarkStore {
