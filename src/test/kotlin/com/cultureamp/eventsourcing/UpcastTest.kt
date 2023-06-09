@@ -88,7 +88,7 @@ class UpcastTest : DescribeSpec({
             val projector = ParticipantProjector(db)
             val bookmarkName = "ParticipantBookmark"
             val eventProcessor = EventProcessor.from(projector)
-            val asyncEventProcessor = BatchedAsyncEventProcessor(eventStore, bookmarkStore, bookmarkName, eventProcessor = eventProcessor)
+            val asyncEventProcessor = BatchedAsyncEventProcessor(eventStore, bookmarkStore, bookmarkName, eventProcessor)
 
             transaction(db) {
                 val participantId = UUID.randomUUID()

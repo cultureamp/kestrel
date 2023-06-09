@@ -8,6 +8,7 @@ import com.cultureamp.eventsourcing.sample.PizzaTopping.CHEESE
 import com.cultureamp.eventsourcing.sample.PizzaTopping.TOMATO_PASTE
 import com.cultureamp.eventsourcing.sample.PizzaToppingAdded
 import com.cultureamp.eventsourcing.sample.StandardEventMetadata
+import io.kotest.assertions.throwables.shouldThrow
 import io.kotest.core.spec.style.DescribeSpec
 import io.kotest.matchers.shouldBe
 import org.jetbrains.exposed.sql.Database
@@ -52,26 +53,26 @@ class RelationalDatabaseEventStoreTest : DescribeSpec({
                 basicPizzaCreated,
                 aggregateId,
                 1,
-                StandardEventMetadata(firstAccountId, firstExecutorId)
+                StandardEventMetadata(firstAccountId, firstExecutorId),
             )
             val firstPizzaEaten = event(
                 PizzaEaten(),
                 aggregateId,
                 2,
-                StandardEventMetadata(firstAccountId)
+                StandardEventMetadata(firstAccountId),
             )
             val secondPizzaCreated = event(
                 basicPizzaCreated,
                 otherAggregateId,
                 1,
-                StandardEventMetadata(secondAccountId, secondExecutorId)
+                StandardEventMetadata(secondAccountId, secondExecutorId),
             )
 
             val events = listOf(firstPizzaCreated, firstPizzaEaten)
             val otherEvents = listOf(secondPizzaCreated)
 
-            store.sink(events, aggregateId) shouldBe Right(Unit)
-            store.sink(otherEvents, otherAggregateId) shouldBe Right(Unit)
+            store.sink(events, aggregateId) shouldBe Right(2L)
+            store.sink(otherEvents, otherAggregateId) shouldBe Right(3L)
 
             store.eventsFor(aggregateId) shouldBe events
             store.eventsFor(otherAggregateId) shouldBe otherEvents
@@ -86,11 +87,11 @@ class RelationalDatabaseEventStoreTest : DescribeSpec({
             val events = listOf(
                 event(PizzaCreated(MARGHERITA, listOf(TOMATO_PASTE)), aggregateId, 1, StandardEventMetadata(firstAccountId)),
                 event(PizzaEaten(), aggregateId, 3, StandardEventMetadata(firstAccountId)),
-                event(PizzaToppingAdded(CHEESE), aggregateId, 2, StandardEventMetadata(firstAccountId))
+                event(PizzaToppingAdded(CHEESE), aggregateId, 2, StandardEventMetadata(firstAccountId)),
             )
 
             store.lastSequence() shouldBe 0
-            store.sink(events, aggregateId) shouldBe Right(Unit)
+            store.sink(events, aggregateId) shouldBe Right(3L)
             store.lastSequence() shouldBe 3
             store.lastSequence(listOf(PizzaCreated::class)) shouldBe 1
             store.lastSequence(listOf(PizzaEaten::class)) shouldBe 2
@@ -106,21 +107,7 @@ class RelationalDatabaseEventStoreTest : DescribeSpec({
             store.sink(events, aggregateId) shouldBe Left(ConcurrencyError)
         }
 
-        it("sends each sunk event to passed synchronous event-processors") {
-            var count = 0
-            val firstProjector: DomainEventProcessor<TestEvent> = object : DomainEventProcessor<TestEvent> {
-                override fun process(event: TestEvent, aggregateId: UUID) {
-                    count++
-                }
-            }
-            val secondProjector: DomainEventProcessorWithMetadata<TestEvent, SpecificMetadata> = object : DomainEventProcessorWithMetadata<TestEvent, SpecificMetadata> {
-                override fun process(event: TestEvent, aggregateId: UUID, metadata: SpecificMetadata, eventId: UUID) {
-                    count++
-                }
-            }
-            val firstEventProcessor = EventProcessor.from(firstProjector)
-            val secondEventProcessor = EventProcessor.from(secondProjector)
-            val synchronousEventProcessors = listOf(firstEventProcessor, secondEventProcessor)
+        it("sends each sunk event to after-sink hook") {
             val fooDomainEvent = FooEvent("bar")
             val fooEvent = Event(
                 id = UUID.randomUUID(),
@@ -129,7 +116,7 @@ class RelationalDatabaseEventStoreTest : DescribeSpec({
                 aggregateType = "aggregateType",
                 createdAt = DateTime.now(),
                 metadata = SpecificMetadata("specialField"),
-                domainEvent = fooDomainEvent
+                domainEvent = fooDomainEvent,
             )
             val barDomainEvent = BarEvent("quux")
             val barEvent = Event(
@@ -139,14 +126,43 @@ class RelationalDatabaseEventStoreTest : DescribeSpec({
                 aggregateType = "aggregateType",
                 createdAt = DateTime.now(),
                 metadata = SpecificMetadata("specialField"),
-                domainEvent = barDomainEvent
+                domainEvent = barDomainEvent,
             )
+            val capturedEvents = mutableListOf<SequencedEvent<SpecificMetadata>>()
+            val afterSinkHook: (List<SequencedEvent<SpecificMetadata>>) -> Unit = {
+                capturedEvents.addAll(it)
+            }
 
-            val storeWithProjectors = RelationalDatabaseEventStore.create(synchronousEventProcessors, db, eventsTableName = tableName)
+            val storeWithAfterSinkHook = RelationalDatabaseEventStore.create(db, eventsTableName = tableName, afterSinkHook = afterSinkHook)
 
-            storeWithProjectors.sink(listOf(fooEvent, barEvent), UUID.randomUUID())
+            storeWithAfterSinkHook.sink(listOf(fooEvent, barEvent), UUID.randomUUID())
 
-            count shouldBe 4
+            capturedEvents shouldBe listOf(
+                SequencedEvent(fooEvent, 1L),
+                SequencedEvent(barEvent, 2L),
+            )
+        }
+
+        it("sinks event even if the after-sink hook throws an exception") {
+            val fooDomainEvent = FooEvent("bar")
+            val fooEvent = Event(
+                id = UUID.randomUUID(),
+                aggregateId = UUID.randomUUID(),
+                aggregateSequence = 1,
+                aggregateType = "aggregateType",
+                createdAt = DateTime.now(),
+                metadata = SpecificMetadata("specialField"),
+                domainEvent = fooDomainEvent,
+            )
+            val alwaysFailsAfterSinkHook: (List<SequencedEvent<SpecificMetadata>>) -> Unit = {
+                throw IllegalStateException("expected")
+            }
+            val storeWithAfterSinkHook = RelationalDatabaseEventStore.create(db, eventsTableName = tableName, afterSinkHook = alwaysFailsAfterSinkHook)
+            val exception = shouldThrow<IllegalStateException> {
+                storeWithAfterSinkHook.sink(listOf(fooEvent), fooEvent.aggregateId)
+            }
+            exception.message shouldBe "expected"
+            storeWithAfterSinkHook.eventsFor(fooEvent.aggregateId) shouldBe listOf(fooEvent)
         }
 
         it("allows providing a custom event type resolver") {
@@ -162,11 +178,11 @@ class RelationalDatabaseEventStoreTest : DescribeSpec({
                 pizzaCreatedDomainEvent,
                 aggregateId,
                 1,
-                StandardEventMetadata(firstAccountId, firstExecutorId)
+                StandardEventMetadata(firstAccountId, firstExecutorId),
             )
 
             val events = listOf(pizzaCreatedEvent)
-            customStore.sink(events, aggregateId) shouldBe Right(Unit)
+            customStore.sink(events, aggregateId) shouldBe Right(1L)
             customStore.eventsFor(aggregateId) shouldBe events
 
             transaction(db) {

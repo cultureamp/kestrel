@@ -4,7 +4,7 @@ import java.util.UUID
 import kotlin.reflect.KClass
 
 interface EventSink<M: EventMetadata> {
-    fun sink(newEvents: List<Event<M>>, aggregateId: UUID): Either<CommandError, Unit>
+    fun sink(newEvents: List<Event<M>>, aggregateId: UUID): Either<CommandError, Long>
 }
 
 interface EventSource<out M: EventMetadata>  {

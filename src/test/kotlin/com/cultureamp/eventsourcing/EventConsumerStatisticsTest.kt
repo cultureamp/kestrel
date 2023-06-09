@@ -18,9 +18,9 @@ class EventConsumerStatisticsTest : DescribeSpec({
 
         var events = mutableListOf<Pair<Event<EventMetadata>, UUID>>()
         var seq = 0L
-        override fun sink(newEvents: List<Event<EventMetadata>>, aggregateId: UUID): Either<CommandError, Unit> {
+        override fun sink(newEvents: List<Event<EventMetadata>>, aggregateId: UUID): Either<CommandError, Long> {
             events += newEvents.map { it to aggregateId }
-            return Right(Unit)
+            return Right(events.size.toLong())
         }
 
         override fun getAfter(

@@ -1,15 +1,30 @@
 package com.cultureamp.eventsourcing
 
 import com.cultureamp.common.Action
-import org.joda.time.DateTime
-import org.joda.time.Duration
 import kotlin.random.Random
 
-interface AsyncEventProcessor<M : EventMetadata> {
-    val eventSource: EventSource<M>
+interface BookmarkedEventProcessor<M : EventMetadata> {
     val bookmarkStore: BookmarkStore
     val bookmarkName: String
     val sequencedEventProcessor: SequencedEventProcessor<M>
+
+    companion object {
+        fun <M : EventMetadata> from(bookmarkStore: BookmarkStore, bookmarkName: String, eventProcessor: EventProcessor<M>) = from(
+            bookmarkStore,
+            bookmarkName,
+            SequencedEventProcessor.from(eventProcessor),
+        )
+
+        fun <M : EventMetadata> from(bookmarkStore: BookmarkStore, bookmarkName: String, eventProcessor: SequencedEventProcessor<M>) = object : BookmarkedEventProcessor<M> {
+            override val bookmarkStore = bookmarkStore
+            override val bookmarkName = bookmarkName
+            override val sequencedEventProcessor = eventProcessor
+        }
+    }
+}
+
+interface AsyncEventProcessor<M : EventMetadata> : BookmarkedEventProcessor<M> {
+    val eventSource: EventSource<M>
 }
 
 class BatchedAsyncEventProcessor<M : EventMetadata>(
@@ -47,12 +62,7 @@ class BatchedAsyncEventProcessor<M : EventMetadata>(
         upcasting: Boolean = true,
         stats: StatisticsCollector? = null,
     ) : this(
-        eventSource, bookmarkStore, bookmarkName,
-        object : SequencedEventProcessor<M> {
-            override fun process(sequencedEvent: SequencedEvent<out M>) = eventProcessor.process(sequencedEvent.event)
-            override fun domainEventClasses() = eventProcessor.domainEventClasses()
-        },
-        batchSize, startLog, endLog, upcasting, stats
+        eventSource, bookmarkStore, bookmarkName, SequencedEventProcessor.from(eventProcessor), batchSize, startLog, endLog, upcasting, stats,
     )
 
     fun processOneBatch(): Action {
@@ -61,13 +71,13 @@ class BatchedAsyncEventProcessor<M : EventMetadata>(
         startLog(startBookmark)
 
         val (count, finalBookmark) = eventSource.getAfter(startBookmark.sequence, sequencedEventProcessor.domainEventClasses(), batchSize).foldIndexed(
-            0 to startBookmark
+            0 to startBookmark,
         ) { index, _, sequencedEvent ->
-            when(upcasting){
+            when (upcasting) {
                 true -> {
                     val domainEvent = sequencedEvent.event.domainEvent
                     val upcastEvent = domainEvent::class.annotations.filterIsInstance<UpcastEvent>()
-                    if(upcastEvent.size == 1) {
+                    if (upcastEvent.size == 1) {
                         val newEvent = SequencedEvent(
                             Event(
                                 id = sequencedEvent.event.id,
@@ -76,12 +86,12 @@ class BatchedAsyncEventProcessor<M : EventMetadata>(
                                 aggregateType = sequencedEvent.event.aggregateType,
                                 createdAt = sequencedEvent.event.createdAt,
                                 metadata = sequencedEvent.event.metadata,
-                                domainEvent = upcastEvent.first().upcasting(domainEvent, sequencedEvent.event.metadata)
+                                domainEvent = upcastEvent.first().upcasting(domainEvent, sequencedEvent.event.metadata),
                             ),
-                            sequencedEvent.sequence
+                            sequencedEvent.sequence,
                         )
                         processEvent(newEvent)
-                    }else{
+                    } else {
                         processEvent(sequencedEvent)
                     }
                 }

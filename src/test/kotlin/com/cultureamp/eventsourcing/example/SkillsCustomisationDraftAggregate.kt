@@ -1,6 +1,5 @@
 package com.cultureamp.eventsourcing.example
 
-import UUIDType5
 import com.cultureamp.eventsourcing.AlreadyActionedCommandError
 import com.cultureamp.eventsourcing.CreationCommand
 import com.cultureamp.eventsourcing.CreationEvent
@@ -88,6 +87,7 @@ data class SkillsCustomisationDraftAggregate(
         ): Either<DomainError, Pair<SkillsCustomizationDraftCreationEvent, List<SkillsCustomizationDraftUpdateEvent>>> {
             if (metadata.executorId != null && !adminProjection.isAdminOfAccount(userId = metadata.executorId, accountId = metadata.accountId)) return Left(OnlyAdminsCanCustomiseSkills)
             val publishedState = publishedSkillsProjection.publishedSkillsFor(metadata.accountId)
+
             val firstTimeSnapshotEvent: DraftSnapshottedCanonicalSkills? = if (publishedState.isNotEmpty()) null else {
                 val coreSkills = CoreSkill.values().map { CoreSkillSnapshot(it, it.label, it.description, it.deterministicSkillIdFor(accountId = metadata.accountId)) }
                 val coreLeadershipSkills = CoreLeadershipSkill.values().map { CoreLeadershipSkillSnapshot(it, it.label, it.description, it.deterministicSkillIdFor(accountId = metadata.accountId)) }
