@@ -35,6 +35,7 @@ val defaultObjectMapper = ObjectMapper()
     .setPropertyNamingStrategy(PropertyNamingStrategies.SNAKE_CASE)
 
 val defaultEventsTableName = "events"
+val defaultEventsSinkTableName = "events_dry_run_sink"
 val defaultEventsSequenceStatsTableName = "events_sequence_stats"
 val defaultEventTypeResolver = CanonicalNameEventTypeResolver
 
@@ -47,6 +48,7 @@ class RelationalDatabaseEventStore<M : EventMetadata> @PublishedApi internal con
     private val eventTypeResolver: EventTypeResolver,
     private val blockingLockUntilTransactionEnd: Transaction.() -> CommandError? = { null },
     private val afterSinkHook: (List<SequencedEvent<M>>) -> Unit = { },
+    private val eventsSinkTable: Events = events,
 ) : EventStore<M> {
 
     companion object {
@@ -57,17 +59,45 @@ class RelationalDatabaseEventStore<M : EventMetadata> @PublishedApi internal con
             eventsSequenceStateTableName: String = defaultEventsSequenceStatsTableName,
             eventTypeResolver: EventTypeResolver = defaultEventTypeResolver,
             noinline afterSinkHook: (List<SequencedEvent<M>>) -> Unit = { },
+            eventsSinkTableName: String = eventsTableName,
         ): RelationalDatabaseEventStore<M> =
             when (db.dialect) {
-                is H2Dialect -> H2DatabaseEventStore.create(db, objectMapper, eventsTableName, eventsSequenceStateTableName, eventTypeResolver, afterSinkHook)
-                is PostgreSQLDialect -> PostgresDatabaseEventStore.create(db, objectMapper, eventsTableName, eventsSequenceStateTableName, eventTypeResolver, afterSinkHook)
+                is H2Dialect -> H2DatabaseEventStore.create(
+                    db,
+                    objectMapper,
+                    eventsTableName,
+                    eventsSequenceStateTableName,
+                    eventTypeResolver,
+                    afterSinkHook,
+                    eventsSinkTableName
+                )
+
+                is PostgreSQLDialect -> PostgresDatabaseEventStore.create(
+                    db,
+                    objectMapper,
+                    eventsTableName,
+                    eventsSequenceStateTableName,
+                    eventTypeResolver,
+                    afterSinkHook,
+                    eventsSinkTableName
+                )
+
                 else -> throw UnsupportedOperationException("${db.dialect} not currently supported")
             }
+        inline fun <reified M : EventMetadata> createDryRun(
+            db: Database,
+            objectMapper: ObjectMapper = defaultObjectMapper,
+            eventsTableName: String = defaultEventsTableName,
+            eventsSinkTableName: String = defaultEventsSinkTableName,
+            eventsSequenceStateTableName: String = defaultEventsSequenceStatsTableName,
+            eventTypeResolver: EventTypeResolver = defaultEventTypeResolver
+        ) =
+            create<M>(db, objectMapper, eventsTableName, eventsSequenceStateTableName, eventTypeResolver, {}, eventsSinkTableName)
     }
 
     fun createSchemaIfNotExists() {
         transaction(db) {
-            SchemaUtils.create(events, eventsSequenceStats)
+            SchemaUtils.create(events, eventsSequenceStats, eventsSinkTable)
         }
     }
 
@@ -81,22 +111,27 @@ class RelationalDatabaseEventStore<M : EventMetadata> @PublishedApi internal con
                         val metadata = objectMapper.writeValueAsString(event.metadata)
                         validateSerialization(domainEventClass, body, metadata)
                         val eventType = eventTypeResolver.serialize(domainEventClass)
-                        val insertResult = events.insert { row ->
-                            row[events.aggregateSequence] = event.aggregateSequence
-                            row[events.eventId] = event.id
-                            row[events.aggregateId] = aggregateId
-                            row[events.aggregateType] = event.aggregateType
-                            row[events.eventType] = eventType
-                            row[events.createdAt] = event.createdAt
-                            row[events.body] = body
-                            row[events.metadata] = metadata
+                        val insertResult = eventsSinkTable.insert { row ->
+                            row[eventsSinkTable.aggregateSequence] = event.aggregateSequence
+                            row[eventsSinkTable.eventId] = event.id
+                            row[eventsSinkTable.aggregateId] = aggregateId
+                            row[eventsSinkTable.aggregateType] = event.aggregateType
+                            row[eventsSinkTable.eventType] = eventType
+                            row[eventsSinkTable.createdAt] = event.createdAt
+                            row[eventsSinkTable.body] = body
+                            row[eventsSinkTable.metadata] = metadata
                         }
-                        val insertedSequence = insertResult[events.sequence]
-                        eventsSequenceStats.replace {
-                            it[eventsSequenceStats.eventType] = eventType
-                            it[eventsSequenceStats.sequence] = insertedSequence
+                        val dryRunMode = (events != eventsSinkTable)
+                        if (dryRunMode) {
+                            SequencedEvent(event, -1)
+                        } else {
+                            val insertedSequence = insertResult[eventsSinkTable.sequence]
+                            eventsSequenceStats.replace {
+                                it[eventsSequenceStats.eventType] = eventType
+                                it[eventsSequenceStats.sequence] = insertedSequence
+                            }
+                            SequencedEvent(event, insertedSequence)
                         }
-                        SequencedEvent(event, insertedSequence)
                     }.let { Right(it) }
                 }
             }
@@ -203,8 +238,9 @@ object PostgresDatabaseEventStore {
         eventsSequenceStateTableName: String,
         eventTypeResolver: EventTypeResolver,
         noinline afterSinkHook: (List<SequencedEvent<M>>) -> Unit,
+        eventsSinkTableName: String,
     ): RelationalDatabaseEventStore<M> {
-        return RelationalDatabaseEventStore(db, Events(tableName, Table::jsonb), EventsSequenceStats(eventsSequenceStateTableName), M::class.java, objectMapper, eventTypeResolver, Transaction::pgAdvisoryXactLock, afterSinkHook)
+        return RelationalDatabaseEventStore(db, Events(tableName, Table::jsonb), EventsSequenceStats(eventsSequenceStateTableName), M::class.java, objectMapper, eventTypeResolver, Transaction::pgAdvisoryXactLock, afterSinkHook, Events(eventsSinkTableName, Table::jsonb), )
     }
 }
 
@@ -218,8 +254,9 @@ object H2DatabaseEventStore {
         eventsSequenceStateTableName: String,
         eventTypeResolver: EventTypeResolver,
         noinline afterSinkHook: (List<SequencedEvent<M>>) -> Unit,
+        eventsSinkTableName: String,
     ): RelationalDatabaseEventStore<M> {
-        return RelationalDatabaseEventStore(db, eventsTable(tableName), EventsSequenceStats(eventsSequenceStateTableName), M::class.java, objectMapper, eventTypeResolver, afterSinkHook = afterSinkHook)
+        return RelationalDatabaseEventStore(db, eventsTable(tableName), EventsSequenceStats(eventsSequenceStateTableName), M::class.java, objectMapper, eventTypeResolver, afterSinkHook = afterSinkHook, eventsSinkTable = Events(eventsSinkTableName, Table::jsonb), )
     }
 
     @PublishedApi
