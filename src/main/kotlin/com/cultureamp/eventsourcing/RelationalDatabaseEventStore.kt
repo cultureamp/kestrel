@@ -97,7 +97,7 @@ class RelationalDatabaseEventStore<M : EventMetadata> @PublishedApi internal con
 
     fun createSchemaIfNotExists() {
         transaction(db) {
-            SchemaUtils.create(events, eventsSequenceStats)
+            SchemaUtils.create(events, eventsSequenceStats, eventsSinkTable)
         }
     }
 
