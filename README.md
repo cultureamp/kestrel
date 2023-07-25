@@ -441,4 +441,5 @@ thread(start = true, isDaemon = false, name = "eventProcessorMonitor") {
 
 - [CQRS article by Martin Fowler](https://trello.com/c/71yvoeq9/81-cqrs-pattern-martin-fowler)
 - [Event-sourcing talk by Sebastian von Conrad](https://www.youtube.com/watch?v=iGt0DBOWDTs)
-- [CQRS and event-sourcing FAQ](https://cqrs.nu/Faq) 
+- [CQRS and event-sourcing FAQ](https://cqrs.nu/Faq)
+- [Event-sourcing basic concepts](https://dev.to/cultureamp/event-sourcing-basic-concepts-52ik)
