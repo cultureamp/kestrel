@@ -22,6 +22,6 @@ class AsyncEventProcessorMonitor<M: EventMetadata>(
     }
 }
 
-data class Lag(val name: String, val bookmarkSequence: Long, val lastSequence: Long) {
+data class Lag(val name: BookmarkName, val bookmarkSequence: Long, val lastSequence: Long) {
     val lag: Long = lastSequence - bookmarkSequence
 }

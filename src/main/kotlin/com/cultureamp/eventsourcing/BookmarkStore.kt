@@ -6,17 +6,17 @@ import org.jetbrains.exposed.sql.transactions.transaction
 import org.joda.time.DateTime
 
 interface BookmarkStore {
-    fun bookmarkFor(bookmarkName: String): Bookmark
-    fun bookmarksFor(bookmarkNames: Set<String>): Set<Bookmark>
+    fun bookmarkFor(bookmarkName: BookmarkName): Bookmark
+    fun bookmarksFor(bookmarkNames: Set<BookmarkName>): Set<Bookmark>
     fun save(bookmark: Bookmark)
 }
 
 class RelationalDatabaseBookmarkStore(val db: Database, val table: Bookmarks = Bookmarks()) : BookmarkStore {
-    override fun bookmarkFor(bookmarkName: String): Bookmark = bookmarksFor(setOf(bookmarkName)).first()
+    override fun bookmarkFor(bookmarkName: BookmarkName): Bookmark = bookmarksFor(setOf(bookmarkName)).first()
 
-    override fun bookmarksFor(bookmarkNames: Set<String>): Set<Bookmark> = transaction(db) {
+    override fun bookmarksFor(bookmarkNames: Set<BookmarkName>): Set<Bookmark> = transaction(db) {
         val matchingRows = rowsForBookmarks(bookmarkNames)
-        val foundBookmarks = matchingRows.map { Bookmark(it[table.name], it[table.sequence]) }.toSet()
+        val foundBookmarks = matchingRows.map { Bookmark(BookmarkName(it[table.name]), it[table.sequence]) }.toSet()
         val emptyBookmarks = (bookmarkNames - foundBookmarks.map { it.name }.toSet()).map { Bookmark(it, 0) }.toSet()
         foundBookmarks + emptyBookmarks
     }
@@ -24,13 +24,13 @@ class RelationalDatabaseBookmarkStore(val db: Database, val table: Bookmarks = B
     override fun save(bookmark: Bookmark): Unit = transaction(db) {
         if (!isExists(bookmark.name)) {
             table.insert {
-                it[name] = bookmark.name
+                it[name] = bookmark.name.toString()
                 it[sequence] = bookmark.sequence
                 it[createdAt] = DateTime.now()
                 it[updatedAt] = DateTime.now()
             }
         } else {
-            table.update({ table.name eq bookmark.name }) {
+            table.update({ table.name eq bookmark.name.toString() }) {
                 it[sequence] = bookmark.sequence
                 it[updatedAt] = DateTime.now()
             }
@@ -43,17 +43,20 @@ class RelationalDatabaseBookmarkStore(val db: Database, val table: Bookmarks = B
         }
     }
 
-    private fun rowsForBookmarks(bookmarkNames: Set<String>) = table.select { table.name.inList(bookmarkNames) }
-    private fun isExists(bookmarkName: String) = !rowsForBookmarks(setOf(bookmarkName)).empty()
+    private fun rowsForBookmarks(bookmarkNames: Set<BookmarkName>) =
+        table.select { table.name.inList(bookmarkNames.map(BookmarkName::toString)) }
+
+    private fun isExists(bookmarkName: BookmarkName) = !rowsForBookmarks(setOf(bookmarkName)).empty()
 }
 
 class CachingBookmarkStore(private val delegate: BookmarkStore) : BookmarkStore {
-    private val cache = HashMap<String, Bookmark>()
-    override fun bookmarkFor(bookmarkName: String): Bookmark {
+    private val cache = HashMap<BookmarkName, Bookmark>()
+
+    override fun bookmarkFor(bookmarkName: BookmarkName): Bookmark {
         return cache[bookmarkName] ?: delegate.bookmarkFor(bookmarkName).apply { cache[bookmarkName] = this }
     }
 
-    override fun bookmarksFor(bookmarkNames: Set<String>) = bookmarkNames.map { bookmarkFor(it) }.toSet()
+    override fun bookmarksFor(bookmarkNames: Set<BookmarkName>) = bookmarkNames.map { bookmarkFor(it) }.toSet()
 
     override fun save(bookmark: Bookmark) {
         cache[bookmark.name] = bookmark
@@ -69,5 +72,4 @@ class Bookmarks(tableName: String = "bookmarks") : Table(tableName) {
     override val primaryKey = PrimaryKey(name)
 }
 
-data class Bookmark(val name: String, val sequence: Long)
-
+data class Bookmark(val name: BookmarkName, val sequence: Long)

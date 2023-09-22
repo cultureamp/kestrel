@@ -61,7 +61,7 @@ class UpcastTest : DescribeSpec({
 
         it("BatchedAsyncEventProcessor upcasting can be turned off") {
             val projector = ParticipantProjector(db)
-            val bookmarkName = "ParticipantBookmark"
+            val bookmarkName = BookmarkName("ParticipantBookmark")
             val eventProcessor = EventProcessor.from(projector)
             val asyncEventProcessor = BatchedAsyncEventProcessor(eventStore, bookmarkStore, bookmarkName, eventProcessor, upcasting = false)
 
@@ -86,7 +86,7 @@ class UpcastTest : DescribeSpec({
 
         it("BatchedAsyncEventProcessor is upcasting") {
             val projector = ParticipantProjector(db)
-            val bookmarkName = "ParticipantBookmark"
+            val bookmarkName = BookmarkName("ParticipantBookmark")
             val eventProcessor = EventProcessor.from(projector)
             val asyncEventProcessor = BatchedAsyncEventProcessor(eventStore, bookmarkStore, bookmarkName, eventProcessor)
 

@@ -17,14 +17,42 @@ class BlockingAsyncEventProcessorWaiterTest : DescribeSpec({
 
     describe("BlockingAsyncEventProcessorWaiter") {
         it("loops until all bookmarks are up to date") {
-            val firstBookmarkStore = bookmarkStoreCountingUpFrom(95, setOf("FooProjector", "FooBarProjector"))
-            val secondBookmarkStore = bookmarkStoreCountingUpFrom(110, setOf("BarProjector", "AlreadyCaughtUpProjector"))
-            val fooEventProcessor = eventProcessorFor("FooProjector", listOf(FooEvent::class), firstBookmarkStore)
-            val barEventProcessor = eventProcessorFor("BarProjector", listOf(BarEvent::class), secondBookmarkStore)
-            val fooBarEventProcessor = eventProcessorFor("FooBarProjector", listOf(FooEvent::class, BarEvent::class), firstBookmarkStore)
-            val bazEventProcessor = eventProcessorFor("AlreadyCaughtUpProjector", listOf(BazEvent::class), secondBookmarkStore)
-            val quuxEventProcessor = eventProcessorFor("IrrelevantEventTypeProjector", listOf(QuuxEvent::class), firstBookmarkStore)
-            val eventProcessors = listOf(fooEventProcessor, barEventProcessor, fooBarEventProcessor, bazEventProcessor, quuxEventProcessor)
+            val firstBookmarkStore =
+                bookmarkStoreCountingUpFrom(95, setOf(BookmarkName("FooProjector"), BookmarkName("FooBarProjector")))
+            val secondBookmarkStore =
+                bookmarkStoreCountingUpFrom(
+                    110,
+                    setOf(BookmarkName("BarProjector"), BookmarkName("AlreadyCaughtUpProjector"))
+                )
+            val fooEventProcessor =
+                eventProcessorFor(BookmarkName("FooProjector"), listOf(FooEvent::class), firstBookmarkStore)
+            val barEventProcessor =
+                eventProcessorFor(BookmarkName("BarProjector"), listOf(BarEvent::class), secondBookmarkStore)
+            val fooBarEventProcessor =
+                eventProcessorFor(
+                    BookmarkName("FooBarProjector"),
+                    listOf(FooEvent::class, BarEvent::class),
+                    firstBookmarkStore
+                )
+            val bazEventProcessor =
+                eventProcessorFor(
+                    BookmarkName("AlreadyCaughtUpProjector"),
+                    listOf(BazEvent::class),
+                    secondBookmarkStore
+                )
+            val quuxEventProcessor =
+                eventProcessorFor(
+                    BookmarkName("IrrelevantEventTypeProjector"),
+                    listOf(QuuxEvent::class),
+                    firstBookmarkStore
+                )
+            val eventProcessors = listOf(
+                fooEventProcessor,
+                barEventProcessor,
+                fooBarEventProcessor,
+                bazEventProcessor,
+                quuxEventProcessor
+            )
 
             val captured = mutableListOf<String>()
             val waiter = BlockingAsyncEventProcessorWaiter(eventProcessors, maxWaitMs = 5000L, pollWaitMs = 0L, logger = { captured.add(it) })
@@ -44,8 +72,8 @@ class BlockingAsyncEventProcessorWaiterTest : DescribeSpec({
         }
 
         it("throws an exception when looping exceeds timeout") {
-            val bookmarkStore = bookmarkStoreCountingUpFrom(0, setOf("Arbitrary"))
-            val eventProcessor = eventProcessorFor("Arbitrary", listOf(FooEvent::class), bookmarkStore)
+            val bookmarkStore = bookmarkStoreCountingUpFrom(0, setOf(BookmarkName("Arbitrary")))
+            val eventProcessor = eventProcessorFor(BookmarkName("Arbitrary"), listOf(FooEvent::class), bookmarkStore)
 
             val waiter = BlockingAsyncEventProcessorWaiter(listOf(eventProcessor), maxWaitMs = 1L, pollWaitMs = 1000L)
             val exception = shouldThrow<TimeoutCancellationException> {
@@ -61,19 +89,19 @@ val alwaysFailsEventSource = object : EventSource<SpecificMetadata> {
     override fun lastSequence(eventClasses: List<KClass<out DomainEvent>>) = fail("Should not be called")
 }
 
-fun bookmarkStoreCountingUpFrom(sequence: Long, allowedBookmarkNames: Set<String>) = object : BookmarkStore {
-    val latest = mutableMapOf<String, Long>().withDefault { sequence }
-    override fun bookmarkFor(bookmarkName: String): Bookmark {
+fun bookmarkStoreCountingUpFrom(sequence: Long, allowedBookmarkNames: Set<BookmarkName>) = object : BookmarkStore {
+    val latest = mutableMapOf<BookmarkName, Long>().withDefault { sequence }
+    override fun bookmarkFor(bookmarkName: BookmarkName): Bookmark {
         if (!allowedBookmarkNames.contains(bookmarkName)) {
             fail("Bookmark store called with wrong bookmark name $bookmarkName")
         }
         return Bookmark(bookmarkName, latest.getValue(bookmarkName)).also { bookmark -> latest.put(bookmark.name, bookmark.sequence + 1) }
     }
-    override fun bookmarksFor(bookmarkNames: Set<String>) = bookmarkNames.map { bookmarkFor(it) }.toSet()
+    override fun bookmarksFor(bookmarkNames: Set<BookmarkName>) = bookmarkNames.map { bookmarkFor(it) }.toSet()
     override fun save(bookmark: Bookmark) = fail("Should not be called")
 }
 
-fun eventProcessorFor(name: String, eventClasses: List<KClass<out DomainEvent>>, bookmarkStore: BookmarkStore) = BookmarkedEventProcessor.from(
+fun eventProcessorFor(name: BookmarkName, eventClasses: List<KClass<out DomainEvent>>, bookmarkStore: BookmarkStore) = BookmarkedEventProcessor.from(
     bookmarkStore,
     name,
     object : SequencedEventProcessor<SpecificMetadata> {

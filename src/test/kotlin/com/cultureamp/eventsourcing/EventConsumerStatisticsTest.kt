@@ -56,7 +56,7 @@ class EventConsumerStatisticsTest : DescribeSpec({
 
         it("Statistics collector is called with correct params") {
             val projector = ParticipantProjector(db)
-            val bookmarkName = "ParticipantBookmark"
+            val bookmarkName = BookmarkName("ParticipantBookmark")
             val eventProcessor = EventProcessor.from(projector)
             val statsCollector = object : StatisticsCollector {
                 val records = mutableListOf<Triple<AsyncEventProcessor<*>, SequencedEvent<*>, Long>>()
@@ -65,11 +65,17 @@ class EventConsumerStatisticsTest : DescribeSpec({
                     event: SequencedEvent<*>,
                     durationMs: Long
                 ) {
-                    records += Triple(processor, event,  durationMs)
+                    records += Triple(processor, event, durationMs)
                 }
 
             }
-            val asyncEventProcessor = BatchedAsyncEventProcessor(eventStore, bookmarkStore, bookmarkName, eventProcessor, stats = statsCollector)
+            val asyncEventProcessor = BatchedAsyncEventProcessor(
+                eventStore,
+                bookmarkStore,
+                bookmarkName,
+                eventProcessor,
+                stats = statsCollector
+            )
 
             val aggregateId = UUID.randomUUID()
             val surveyPeriodId = UUID.randomUUID()

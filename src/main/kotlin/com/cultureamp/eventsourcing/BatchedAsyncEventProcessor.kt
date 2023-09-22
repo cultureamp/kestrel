@@ -3,19 +3,32 @@ package com.cultureamp.eventsourcing
 import com.cultureamp.common.Action
 import kotlin.random.Random
 
+@JvmInline
+value class BookmarkName(private val name: String) {
+    override fun toString(): String = name
+}
+
 interface BookmarkedEventProcessor<M : EventMetadata> {
     val bookmarkStore: BookmarkStore
-    val bookmarkName: String
+    val bookmarkName: BookmarkName
     val sequencedEventProcessor: SequencedEventProcessor<M>
 
     companion object {
-        fun <M : EventMetadata> from(bookmarkStore: BookmarkStore, bookmarkName: String, eventProcessor: EventProcessor<M>) = from(
+        fun <M : EventMetadata> from(
+            bookmarkStore: BookmarkStore,
+            bookmarkName: BookmarkName,
+            eventProcessor: EventProcessor<M>
+        ) = from(
             bookmarkStore,
             bookmarkName,
             SequencedEventProcessor.from(eventProcessor),
         )
 
-        fun <M : EventMetadata> from(bookmarkStore: BookmarkStore, bookmarkName: String, eventProcessor: SequencedEventProcessor<M>) = object : BookmarkedEventProcessor<M> {
+        fun <M : EventMetadata> from(
+            bookmarkStore: BookmarkStore,
+            bookmarkName: BookmarkName,
+            eventProcessor: SequencedEventProcessor<M>
+        ) = object : BookmarkedEventProcessor<M> {
             override val bookmarkStore = bookmarkStore
             override val bookmarkName = bookmarkName
             override val sequencedEventProcessor = eventProcessor
@@ -30,7 +43,7 @@ interface AsyncEventProcessor<M : EventMetadata> : BookmarkedEventProcessor<M> {
 class BatchedAsyncEventProcessor<M : EventMetadata>(
     override val eventSource: EventSource<M>,
     override val bookmarkStore: BookmarkStore,
-    override val bookmarkName: String,
+    override val bookmarkName: BookmarkName,
     override val sequencedEventProcessor: SequencedEventProcessor<M>,
     private val batchSize: Int = 1000,
     private val startLog: (Bookmark) -> Unit = { bookmark ->
@@ -48,7 +61,7 @@ class BatchedAsyncEventProcessor<M : EventMetadata>(
     constructor(
         eventSource: EventSource<M>,
         bookmarkStore: BookmarkStore,
-        bookmarkName: String,
+        bookmarkName: BookmarkName,
         eventProcessor: EventProcessor<M>,
         batchSize: Int = 1000,
         startLog: (Bookmark) -> Unit = { bookmark ->

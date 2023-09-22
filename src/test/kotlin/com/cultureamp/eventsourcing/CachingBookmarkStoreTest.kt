@@ -25,29 +25,41 @@ class CachingBookmarkStoreTest : DescribeSpec({
 
     describe("RelationalDatabaseBookmarkStore") {
         it("sets and retrieves a bookmark") {
-            cachedStore.save(Bookmark("new-bookmark", 123L))
-            cachedStore.save(Bookmark("other-bookmark", 456L))
-            cachedStore.bookmarkFor("new-bookmark") shouldBe Bookmark("new-bookmark", 123L)
+            cachedStore.save(Bookmark(BookmarkName("new-bookmark"), 123L))
+            cachedStore.save(Bookmark(BookmarkName("other-bookmark"), 456L))
+            cachedStore.bookmarkFor(BookmarkName("new-bookmark")) shouldBe Bookmark(BookmarkName("new-bookmark"), 123L)
         }
 
         it("returns zero for an unknown bookmark") {
-            cachedStore.bookmarkFor("other-new-bookmark") shouldBe Bookmark("other-new-bookmark", 0L)
+            cachedStore.bookmarkFor(BookmarkName("other-new-bookmark")) shouldBe Bookmark(
+                BookmarkName("other-new-bookmark"),
+                0L
+            )
         }
 
         it("updates the value if the bookmark already exists") {
-            cachedStore.save(Bookmark("update-bookmark", 123L))
-            cachedStore.save(Bookmark("other-bookmark", 456L))
-            cachedStore.save(Bookmark("update-bookmark", 789L))
-            cachedStore.bookmarkFor("update-bookmark") shouldBe Bookmark("update-bookmark", 789L)
+            cachedStore.save(Bookmark(BookmarkName("update-bookmark"), 123L))
+            cachedStore.save(Bookmark(BookmarkName("other-bookmark"), 456L))
+            cachedStore.save(Bookmark(BookmarkName("update-bookmark"), 789L))
+            cachedStore.bookmarkFor(BookmarkName("update-bookmark")) shouldBe Bookmark(
+                BookmarkName("update-bookmark"),
+                789L
+            )
         }
 
         it("can fetch bookmarks in bulk") {
-            store.save(Bookmark("new-bookmark", 123L))
-            store.save(Bookmark("other-bookmark", 456L))
-            store.bookmarksFor(setOf("new-bookmark", "other-bookmark", "unknown-bookmark")) shouldBe setOf(
-                Bookmark("new-bookmark", 123L),
-                Bookmark("other-bookmark", 456L),
-                Bookmark("unknown-bookmark", 0L),
+            store.save(Bookmark(BookmarkName("new-bookmark"), 123L))
+            store.save(Bookmark(BookmarkName("other-bookmark"), 456L))
+            store.bookmarksFor(
+                setOf(
+                    BookmarkName("new-bookmark"),
+                    BookmarkName("other-bookmark"),
+                    BookmarkName("unknown-bookmark")
+                )
+            ) shouldBe setOf(
+                Bookmark(BookmarkName("new-bookmark"), 123L),
+                Bookmark(BookmarkName("other-bookmark"), 456L),
+                Bookmark(BookmarkName("unknown-bookmark"), 0L),
             )
         }
     }
