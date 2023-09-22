@@ -1,5 +1,8 @@
 package com.cultureamp.eventsourcing
 
+import arrow.core.Either
+import arrow.core.left
+
 interface CommandGateway<M : EventMetadata> {
     companion object {
         operator fun <M : EventMetadata> invoke(eventStore: EventStore<M>, vararg routes: Route<*, *, M>) = EventStoreCommandGateway(eventStore, *routes)
@@ -10,7 +13,7 @@ interface CommandGateway<M : EventMetadata> {
 class EventStoreCommandGateway<M : EventMetadata>(private val eventStore: EventStore<M>, private vararg val routes: Route<*, *, M>) : CommandGateway<M> {
     override tailrec fun dispatch(command: Command, metadata: M, retries: Int): Either<CommandError, SuccessStatus> {
         val result = createOrUpdate(command, metadata)
-        return if (result is Left && result.error is RetriableError && retries > 0) {
+        return if (result is Either.Left && result.value is RetriableError && retries > 0) {
             Thread.sleep(500L)
             dispatch(command, metadata, retries - 1)
         } else {
@@ -19,14 +22,14 @@ class EventStoreCommandGateway<M : EventMetadata>(private val eventStore: EventS
     }
 
     private fun createOrUpdate(command: Command, metadata: M): Either<CommandError, SuccessStatus> {
-        val constructor = constructorFor(command) ?: return Left(NoConstructorForCommand)
+        val constructor = constructorFor(command) ?: return NoConstructorForCommand.left()
         val events = eventStore.eventsFor(command.aggregateId)
         return if (events.isEmpty()) when (command) {
             is CreationCommand -> constructor.create(command, metadata, eventStore).map { Created }
-            else -> Left(AggregateNotFound)
+            else -> AggregateNotFound.left()
         } else when (command) {
             is UpdateCommand -> constructor.update(command, metadata, events, eventStore).map { Updated }
-            else -> Left(AggregateAlreadyExists)
+            else -> AggregateAlreadyExists.left()
         }
     }
 

@@ -1,5 +1,6 @@
 package com.cultureamp.eventsourcing
 
+import arrow.core.NonEmptySet
 import io.kotest.assertions.fail
 import io.kotest.assertions.throwables.shouldThrow
 import io.kotest.core.spec.style.DescribeSpec
@@ -97,7 +98,7 @@ fun bookmarkStoreCountingUpFrom(sequence: Long, allowedBookmarkNames: Set<Bookma
         }
         return Bookmark(bookmarkName, latest.getValue(bookmarkName)).also { bookmark -> latest.put(bookmark.name, bookmark.sequence + 1) }
     }
-    override fun bookmarksFor(bookmarkNames: Set<BookmarkName>) = bookmarkNames.map { bookmarkFor(it) }.toSet()
+    override fun bookmarksFor(bookmarkNames: NonEmptySet<BookmarkName>) = bookmarkNames.map { bookmarkFor(it) }.toSet()
     override fun save(bookmark: Bookmark) = fail("Should not be called")
 }
 

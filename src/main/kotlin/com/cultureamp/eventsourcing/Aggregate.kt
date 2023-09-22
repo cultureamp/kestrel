@@ -1,5 +1,6 @@
 package com.cultureamp.eventsourcing
 
+import arrow.core.*
 import org.joda.time.DateTime
 import java.util.UUID
 import kotlin.reflect.KClass
@@ -318,9 +319,9 @@ AggregateConstructor<CC, CE, Err, UC, UE, M, Aggregate<UC, UE, Err, M, *>>.rehyd
     val creationEvent = events.first()
     val creationDomainEvent = creationEvent.domainEvent as CE
     val aggregate = if (creationEvent.aggregateType == aggregateType()) {
-        Right(created(creationDomainEvent))
+        created(creationDomainEvent).right()
     } else {
-        Left(ConstructorTypeMismatch(aggregateType(), creationDomainEvent::class))
+        ConstructorTypeMismatch(aggregateType(), creationDomainEvent::class).left()
     }
     val updateEvents = events.drop(1).map { it.domainEvent as UE }
     return aggregate.map { it.updated(updateEvents) }

@@ -1,5 +1,6 @@
 package com.cultureamp.eventsourcing
 
+import arrow.core.*
 import com.cultureamp.eventsourcing.example.AddSection
 import com.cultureamp.eventsourcing.example.AlwaysAdminAdminProjection
 import com.cultureamp.eventsourcing.example.AlwaysBoppable
@@ -100,8 +101,8 @@ class CommandGatewayIntegrationTest : DescribeSpec({
             SurveyCaptureLayoutAggregate::updated
         ),
         Route.from(
-            SurveyAggregate.Companion::create.partial(SurveyNameAlwaysAvailable),
-            SurveyAggregate::update.partial2(SurveyNameAlwaysAvailable),
+            SurveyAggregate.Companion::create.partially1(SurveyNameAlwaysAvailable),
+            SurveyAggregate::update.partially2(SurveyNameAlwaysAvailable),
             ::SurveyAggregate,
             SurveyAggregate::updated
         ),
@@ -117,8 +118,8 @@ class CommandGatewayIntegrationTest : DescribeSpec({
             ParticipantAggregate::updated
         ),
         Route.from(
-            SkillsCustomisationDraftAggregate.Companion::create.partial(publishedSkillsProjection).partial(AlwaysAdminAdminProjection),
-            SkillsCustomisationDraftAggregate::update.partial2(publishedSkillsProjection).partial2(AlwaysAdminAdminProjection),
+            SkillsCustomisationDraftAggregate.Companion::create.partially1(publishedSkillsProjection).partially1(AlwaysAdminAdminProjection),
+            SkillsCustomisationDraftAggregate::update.partially2(publishedSkillsProjection).partially2(AlwaysAdminAdminProjection),
             SkillsCustomisationDraftAggregate.Companion::created,
             SkillsCustomisationDraftAggregate::updated
         )
@@ -141,7 +142,7 @@ class CommandGatewayIntegrationTest : DescribeSpec({
     describe("CommandGateway") {
         it("accepts a creation event") {
             val result = gateway.dispatch(CreateClassicPizza(UUID.randomUUID(), PizzaStyle.MARGHERITA), metadata)
-            result shouldBe Right(Created)
+            result shouldBe Created.right()
             transaction(db) {
                 eventsTable.selectAll().count() shouldBe 1
             }
@@ -150,9 +151,9 @@ class CommandGatewayIntegrationTest : DescribeSpec({
         it("fails on creation with duplicate UUIDs") {
             val aggregateId = UUID.randomUUID()
             val result = gateway.dispatch(CreateClassicPizza(aggregateId, PizzaStyle.MARGHERITA), metadata)
-            result shouldBe Right(Created)
+            result shouldBe Created.right()
             val result2 = gateway.dispatch(CreateClassicPizza(aggregateId, PizzaStyle.HAWAIIAN), metadata)
-            result2 shouldBe Left(AggregateAlreadyExists)
+            result2 shouldBe AggregateAlreadyExists.left()
             transaction(db) {
                 eventsTable.selectAll().count() shouldBe 1
             }
@@ -161,9 +162,9 @@ class CommandGatewayIntegrationTest : DescribeSpec({
         it("accepts a creation then update event") {
             val aggregateId = UUID.randomUUID()
             val result = gateway.dispatch(CreateClassicPizza(aggregateId, PizzaStyle.MARGHERITA), metadata)
-            result shouldBe Right(Created)
+            result shouldBe Created.right()
             val result2 = gateway.dispatch(AddTopping(aggregateId, PizzaTopping.PINEAPPLE), StandardEventMetadata(accountId))
-            result2 shouldBe Right(Updated)
+            result2 shouldBe Updated.right()
             transaction(db) {
                 eventsTable.selectAll().count() shouldBe 2
             }
@@ -172,11 +173,11 @@ class CommandGatewayIntegrationTest : DescribeSpec({
         it("rejects command when invalid event sequence is provided") {
             val aggregateId = UUID.randomUUID()
             val result = gateway.dispatch(CreateClassicPizza(aggregateId, PizzaStyle.MARGHERITA), metadata)
-            result shouldBe Right(Created)
+            result shouldBe Created.right()
             val result2 = gateway.dispatch(EatPizza(aggregateId), StandardEventMetadata(accountId))
-            result2 shouldBe Right(Updated)
+            result2 shouldBe Updated.right()
             val result3 = gateway.dispatch(AddTopping(aggregateId, PizzaTopping.PINEAPPLE), metadata)
-            result3.shouldBeInstanceOf<Left<PizzaAlreadyEaten>>()
+            result3.shouldBeInstanceOf<Either.Left<PizzaAlreadyEaten>>()
             transaction(db) {
                 eventsTable.selectAll().count() shouldBe 2
             }
@@ -185,7 +186,7 @@ class CommandGatewayIntegrationTest : DescribeSpec({
         it("fails on updating with unknown UUID") {
             val aggregateId = UUID.randomUUID()
             val result1 = gateway.dispatch(AddTopping(aggregateId, PizzaTopping.PINEAPPLE), metadata)
-            result1 shouldBe Left(AggregateNotFound)
+            result1 shouldBe AggregateNotFound.left()
             transaction(db) {
                 eventsTable.selectAll().count() shouldBe 0
             }
@@ -193,8 +194,8 @@ class CommandGatewayIntegrationTest : DescribeSpec({
 
         it("can route to an aggregate created with function handles with metadata") {
             val pizzaId = UUID.randomUUID()
-            gateway.dispatch(CreateClassicPizza(pizzaId, PizzaStyle.MARGHERITA), metadata) shouldBe Right(Created)
-            gateway.dispatch(AddTopping(pizzaId, PizzaTopping.PINEAPPLE), metadata) shouldBe Right(Updated)
+            gateway.dispatch(CreateClassicPizza(pizzaId, PizzaStyle.MARGHERITA), metadata) shouldBe Created.right()
+            gateway.dispatch(AddTopping(pizzaId, PizzaTopping.PINEAPPLE), metadata) shouldBe Updated.right()
 
             transaction(db) {
                 eventsTable.selectAll().count() shouldBe 2
@@ -203,8 +204,8 @@ class CommandGatewayIntegrationTest : DescribeSpec({
 
         it("can route to an aggregate created with function handles without metadata") {
             val surveyCaptureLayoutId = UUID.randomUUID()
-            gateway.dispatch(Generate(surveyCaptureLayoutId, UUID.randomUUID(), DateTime.now()), metadata) shouldBe Right(Created)
-            gateway.dispatch(AddSection(surveyCaptureLayoutId, UUID.randomUUID(), listOf(LocalizedText("hello", Locale.en)), emptyList(), emptyList(), IntendedPurpose.standard, "code", null, DateTime.now()), metadata) shouldBe Right(Updated)
+            gateway.dispatch(Generate(surveyCaptureLayoutId, UUID.randomUUID(), DateTime.now()), metadata) shouldBe Created.right()
+            gateway.dispatch(AddSection(surveyCaptureLayoutId, UUID.randomUUID(), listOf(LocalizedText("hello", Locale.en)), emptyList(), emptyList(), IntendedPurpose.standard, "code", null, DateTime.now()), metadata) shouldBe Updated.right()
 
             transaction(db) {
                 eventsTable.selectAll().count() shouldBe 2
@@ -213,8 +214,8 @@ class CommandGatewayIntegrationTest : DescribeSpec({
 
         it("can route to a simple aggregate") {
             val simpleThingId = UUID.randomUUID()
-            gateway.dispatch(CreateSimpleThing(simpleThingId), metadata) shouldBe Right(Created)
-            gateway.dispatch(Twerk(simpleThingId, "dink"), metadata) shouldBe Right(Updated)
+            gateway.dispatch(CreateSimpleThing(simpleThingId), metadata) shouldBe Created.right()
+            gateway.dispatch(Twerk(simpleThingId, "dink"), metadata) shouldBe Updated.right()
 
             transaction(db) {
                 eventsTable.selectAll().count() shouldBe 2
@@ -223,9 +224,9 @@ class CommandGatewayIntegrationTest : DescribeSpec({
 
         it("can route to a simple aggregate with a projection") {
             val simpleThingId = UUID.randomUUID()
-            gateway.dispatch(CreateSimpleThingWithProjection(simpleThingId), metadata) shouldBe Right(Created)
-            gateway.dispatch(BoopWithProjection(simpleThingId), metadata) shouldBe Right(Updated)
-            gateway.dispatch(TwerkWithProjection(simpleThingId, "dink"), metadata) shouldBe Right(Updated)
+            gateway.dispatch(CreateSimpleThingWithProjection(simpleThingId), metadata) shouldBe Created.right()
+            gateway.dispatch(BoopWithProjection(simpleThingId), metadata) shouldBe Updated.right()
+            gateway.dispatch(TwerkWithProjection(simpleThingId, "dink"), metadata) shouldBe Updated.right()
 
             transaction(db) {
                 eventsTable.selectAll().count() shouldBe 3
@@ -234,9 +235,9 @@ class CommandGatewayIntegrationTest : DescribeSpec({
 
         it("can route to an aggregate with a projection wired into it") {
             val thingId = UUID.randomUUID()
-            gateway.dispatch(CreateThing(thingId), metadata) shouldBe Right(Created)
-            gateway.dispatch(Bop(thingId), metadata) shouldBe Right(Updated)
-            gateway.dispatch(Tweak(thingId, "donk"), metadata) shouldBe Right(Updated)
+            gateway.dispatch(CreateThing(thingId), metadata) shouldBe Created.right()
+            gateway.dispatch(Bop(thingId), metadata) shouldBe Updated.right()
+            gateway.dispatch(Tweak(thingId, "donk"), metadata) shouldBe Updated.right()
 
             transaction(db) {
                 eventsTable.selectAll().count() shouldBe 3
@@ -245,8 +246,8 @@ class CommandGatewayIntegrationTest : DescribeSpec({
 
         it("can route to a stateless aggregate") {
             val paymentSagaId = UUID.randomUUID()
-            gateway.dispatch(StartPaymentSaga(paymentSagaId, UUID.randomUUID(), "bank details", 42), metadata) shouldBe Right(Created)
-            gateway.dispatch(StartThirdPartyPayment(paymentSagaId, DateTime.now()), metadata) shouldBe Right(Updated)
+            gateway.dispatch(StartPaymentSaga(paymentSagaId, UUID.randomUUID(), "bank details", 42), metadata) shouldBe Created.right()
+            gateway.dispatch(StartThirdPartyPayment(paymentSagaId, DateTime.now()), metadata) shouldBe Updated.right()
 
             transaction(db) {
                 eventsTable.selectAll().count() shouldBe 2
@@ -255,9 +256,9 @@ class CommandGatewayIntegrationTest : DescribeSpec({
 
         it("can route to an aggregate with a command that is both create and update") {
             val participantId = UUID.randomUUID()
-            gateway.dispatch(Invite(participantId, UUID.randomUUID(), UUID.randomUUID(), DateTime.now()), metadata) shouldBe Right(Created)
-            gateway.dispatch(Uninvite(participantId, DateTime.now()), metadata) shouldBe Right(Updated)
-            gateway.dispatch(Invite(participantId, UUID.randomUUID(), UUID.randomUUID(), DateTime.now()), metadata) shouldBe Right(Updated)
+            gateway.dispatch(Invite(participantId, UUID.randomUUID(), UUID.randomUUID(), DateTime.now()), metadata) shouldBe Created.right()
+            gateway.dispatch(Uninvite(participantId, DateTime.now()), metadata) shouldBe Updated.right()
+            gateway.dispatch(Invite(participantId, UUID.randomUUID(), UUID.randomUUID(), DateTime.now()), metadata) shouldBe Updated.right()
 
             transaction(db) {
                 eventsTable.selectAll().count() shouldBe 3
@@ -266,8 +267,8 @@ class CommandGatewayIntegrationTest : DescribeSpec({
 
         it("can route to an aggregate created with function handles and a projection wired into it") {
             val surveyId = UUID.randomUUID()
-            gateway.dispatch(CreateSurvey(surveyId, UUID.randomUUID(), mapOf(Locale.en to "name"), UUID.randomUUID(), DateTime.now()), metadata) shouldBe Right(Created)
-            gateway.dispatch(Delete(surveyId, DateTime.now()), metadata) shouldBe Right(Updated)
+            gateway.dispatch(CreateSurvey(surveyId, UUID.randomUUID(), mapOf(Locale.en to "name"), UUID.randomUUID(), DateTime.now()), metadata) shouldBe Created.right()
+            gateway.dispatch(Delete(surveyId, DateTime.now()), metadata) shouldBe Updated.right()
 
             transaction(db) {
                 eventsTable.selectAll().count() shouldBe 2
@@ -276,8 +277,8 @@ class CommandGatewayIntegrationTest : DescribeSpec({
 
         it("can route to an aggregate created with function handles which is stateless for updates") {
             val surveySagaId = UUID.randomUUID()
-            gateway.dispatch(Create(surveySagaId, UUID.randomUUID(), UUID.randomUUID(), mapOf(Locale.en to "name"), UUID.randomUUID(), DateTime.now()), metadata) shouldBe Right(Created)
-            gateway.dispatch(StartCreatingSurvey(surveySagaId, DateTime.now()), metadata) shouldBe Right(Updated)
+            gateway.dispatch(Create(surveySagaId, UUID.randomUUID(), UUID.randomUUID(), mapOf(Locale.en to "name"), UUID.randomUUID(), DateTime.now()), metadata) shouldBe Created.right()
+            gateway.dispatch(StartCreatingSurvey(surveySagaId, DateTime.now()), metadata) shouldBe Updated.right()
 
             transaction(db) {
                 eventsTable.selectAll().count() shouldBe 2
@@ -286,12 +287,12 @@ class CommandGatewayIntegrationTest : DescribeSpec({
 
         it("can route to an aggregate with which can fail commands based on reasonably complicated internal logic") {
             val surveyCaptureLayoutId = UUID.randomUUID()
-            gateway.dispatch(Generate(surveyCaptureLayoutId, UUID.randomUUID(), DateTime.now()), metadata) shouldBe Right(Created)
+            gateway.dispatch(Generate(surveyCaptureLayoutId, UUID.randomUUID(), DateTime.now()), metadata) shouldBe Created.right()
             val sectionId = UUID.randomUUID()
-            gateway.dispatch(RemoveSection(surveyCaptureLayoutId, sectionId, DateTime.now()), metadata) shouldBe Left(SectionNotFound)
-            gateway.dispatch(AddSection(surveyCaptureLayoutId, sectionId, listOf(LocalizedText("text", Locale.en)), emptyList(), emptyList(), IntendedPurpose.standard, "code", null, DateTime.now()), metadata) shouldBe Right(Updated)
-            gateway.dispatch(PositionQuestion(surveyCaptureLayoutId, UUID.randomUUID(), null, sectionId, DateTime.now()), metadata) shouldBe Right(Updated)
-            gateway.dispatch(RemoveSection(surveyCaptureLayoutId, sectionId, DateTime.now()), metadata) shouldBe Right(Updated)
+            gateway.dispatch(RemoveSection(surveyCaptureLayoutId, sectionId, DateTime.now()), metadata) shouldBe SectionNotFound.left()
+            gateway.dispatch(AddSection(surveyCaptureLayoutId, sectionId, listOf(LocalizedText("text", Locale.en)), emptyList(), emptyList(), IntendedPurpose.standard, "code", null, DateTime.now()), metadata) shouldBe Updated.right()
+            gateway.dispatch(PositionQuestion(surveyCaptureLayoutId, UUID.randomUUID(), null, sectionId, DateTime.now()), metadata) shouldBe Updated.right()
+            gateway.dispatch(RemoveSection(surveyCaptureLayoutId, sectionId, DateTime.now()), metadata) shouldBe Updated.right()
 
             transaction(db) {
                 eventsTable.selectAll().count() shouldBe 4
@@ -300,16 +301,16 @@ class CommandGatewayIntegrationTest : DescribeSpec({
 
         it("can route to an aggregate which yields multiple events for a creation command") {
             val draftId = UUID.randomUUID()
-            gateway.dispatch(DraftRemoveSkill(draftId, publishedSkillId), metadata) shouldBe Left(SkillNotPresentToRemove)
-            gateway.dispatch(DraftAddSkill(draftId, UUID.randomUUID(), "label", "description"), metadata) shouldBe Right(Created)
-            gateway.dispatch(DraftPublish(draftId), metadata) shouldBe Right(Updated)
+            gateway.dispatch(DraftRemoveSkill(draftId, publishedSkillId), metadata) shouldBe SkillNotPresentToRemove.left()
+            gateway.dispatch(DraftAddSkill(draftId, UUID.randomUUID(), "label", "description"), metadata) shouldBe Created.right()
+            gateway.dispatch(DraftPublish(draftId), metadata) shouldBe Updated.right()
             transaction(db) {
                 eventsTable.selectAll().count() shouldBe 3
             }
             val secondDraftId = UUID.randomUUID()
             val metadataForAccountWithPublishedSkills = StandardEventMetadata(accountWithPublishedSkillsId, executorId)
-            gateway.dispatch(DraftRemoveSkill(secondDraftId, publishedSkillId), metadataForAccountWithPublishedSkills) shouldBe Right(Created)
-            gateway.dispatch(DraftDiscard(secondDraftId), metadataForAccountWithPublishedSkills) shouldBe Right(Updated)
+            gateway.dispatch(DraftRemoveSkill(secondDraftId, publishedSkillId), metadataForAccountWithPublishedSkills) shouldBe Created.right()
+            gateway.dispatch(DraftDiscard(secondDraftId), metadataForAccountWithPublishedSkills) shouldBe Updated.right()
             transaction(db) {
                 eventsTable.selectAll().count() shouldBe 5
             }
@@ -317,16 +318,16 @@ class CommandGatewayIntegrationTest : DescribeSpec({
 
         it("fails with a useful message when a command of a different type is used on an existing aggregate") {
             val surveyId = UUID.randomUUID()
-            gateway.dispatch(CreateSurvey(surveyId, UUID.randomUUID(), mapOf(Locale.en to "name"), UUID.randomUUID(), DateTime.now()), metadata) shouldBe Right(Created)
+            gateway.dispatch(CreateSurvey(surveyId, UUID.randomUUID(), mapOf(Locale.en to "name"), UUID.randomUUID(), DateTime.now()), metadata) shouldBe Created.right()
             gateway.dispatch(Invite(surveyId, UUID.randomUUID(), UUID.randomUUID(), DateTime.now()), metadata) shouldBe
-                Left(ConstructorTypeMismatch("ParticipantAggregate", SurveyCreated::class))
+                ConstructorTypeMismatch("ParticipantAggregate", SurveyCreated::class).left()
         }
 
         it("supports singleton/object events") {
             val simpleThingId = UUID.randomUUID()
-            gateway.dispatch(CreateSimpleThing(simpleThingId), metadata) shouldBe Right(Created)
-            gateway.dispatch(Boop(simpleThingId), metadata) shouldBe Right(Updated) // singleton event
-            gateway.dispatch(Twerk(simpleThingId, "booped"), metadata) shouldBe Right(Updated)
+            gateway.dispatch(CreateSimpleThing(simpleThingId), metadata) shouldBe Created.right()
+            gateway.dispatch(Boop(simpleThingId), metadata) shouldBe Updated.right() // singleton event
+            gateway.dispatch(Twerk(simpleThingId, "booped"), metadata) shouldBe Updated.right()
 
             transaction(db) {
                 eventsTable.selectAll().count() shouldBe 3

@@ -1,5 +1,6 @@
 package com.cultureamp.eventsourcing
 
+import arrow.core.toNonEmptySetOrNull
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.runBlocking
 import kotlinx.coroutines.withTimeout
@@ -29,7 +30,10 @@ class BlockingAsyncEventProcessorWaiter<M : EventMetadata>(
     }
 
     private fun anyLaggingFrom(projectorToMaxRelevantSequence: Map<BookmarkedEventProcessor<M>, Long>): Boolean {
-        val bookmarkStoreToBookmarkNames = projectorToMaxRelevantSequence.keys.map { it.bookmarkStore to it.bookmarkName }.groupBy { it.first }.mapValues { it.value.map { it.second }.toSet() }
+        val bookmarkStoreToBookmarkNames = projectorToMaxRelevantSequence.keys
+            .map { it.bookmarkStore to it.bookmarkName }
+            .groupBy { it.first }
+            .mapValues { it.value.map { it.second }.toNonEmptySetOrNull()!! }
         val bookmarks = bookmarkStoreToBookmarkNames.flatMap { it.key.bookmarksFor(it.value) }.toSet()
         val desired = projectorToMaxRelevantSequence.mapKeys { it.key.bookmarkName }
         val actual = bookmarks.associate { it.name to it.sequence }

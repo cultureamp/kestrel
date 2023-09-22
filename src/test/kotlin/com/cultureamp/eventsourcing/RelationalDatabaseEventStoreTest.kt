@@ -1,5 +1,6 @@
 package com.cultureamp.eventsourcing
 
+import arrow.core.Either
 import com.cultureamp.eventsourcing.sample.PizzaCreated
 import com.cultureamp.eventsourcing.sample.PizzaEaten
 import com.cultureamp.eventsourcing.sample.PizzaStyle.MARGHERITA
@@ -76,8 +77,8 @@ class RelationalDatabaseEventStoreTest : DescribeSpec({
             val events = listOf(firstPizzaCreated, firstPizzaEaten)
             val otherEvents = listOf(secondPizzaCreated)
 
-            store.sink(events, aggregateId) shouldBe Right(2L)
-            store.sink(otherEvents, otherAggregateId) shouldBe Right(3L)
+            store.sink(events, aggregateId) shouldBe Either.Right(2L)
+            store.sink(otherEvents, otherAggregateId) shouldBe Either.Right(3L)
 
             store.eventsFor(aggregateId) shouldBe events
             store.eventsFor(otherAggregateId) shouldBe otherEvents
@@ -96,7 +97,7 @@ class RelationalDatabaseEventStoreTest : DescribeSpec({
             )
 
             store.lastSequence() shouldBe 0
-            store.sink(events, aggregateId) shouldBe Right(3L)
+            store.sink(events, aggregateId) shouldBe Either.Right(3L)
             store.lastSequence() shouldBe 3
             store.lastSequence(listOf(PizzaCreated::class)) shouldBe 1
             store.lastSequence(listOf(PizzaEaten::class)) shouldBe 2
@@ -112,7 +113,7 @@ class RelationalDatabaseEventStoreTest : DescribeSpec({
             )
 
             dryRunStore.lastSequence() shouldBe 0
-            dryRunStore.sink(events, aggregateId) shouldBe Right(-1L)
+            dryRunStore.sink(events, aggregateId) shouldBe Either.Right(-1L)
             dryRunStore.lastSequence() shouldBe 0
             dryRunStore.getAfter(0) shouldBe emptyList()
         }
@@ -123,7 +124,7 @@ class RelationalDatabaseEventStoreTest : DescribeSpec({
                 event(PizzaCreated(MARGHERITA, listOf(TOMATO_PASTE)), aggregateId, 1, StandardEventMetadata(/* unused */UUID.randomUUID())),
                 event(PizzaEaten(), aggregateId, 1, StandardEventMetadata(/* unused */UUID.randomUUID())),
             )
-            store.sink(events, aggregateId) shouldBe Left(ConcurrencyError)
+            store.sink(events, aggregateId) shouldBe Either.Left(ConcurrencyError)
         }
 
         it("sends each sunk event to after-sink hook") {
@@ -201,7 +202,7 @@ class RelationalDatabaseEventStoreTest : DescribeSpec({
             )
 
             val events = listOf(pizzaCreatedEvent)
-            customStore.sink(events, aggregateId) shouldBe Right(1L)
+            customStore.sink(events, aggregateId) shouldBe Either.Right(1L)
             customStore.eventsFor(aggregateId) shouldBe events
 
             transaction(db) {

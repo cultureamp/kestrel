@@ -1,5 +1,6 @@
 package com.cultureamp.eventsourcing
 
+import arrow.core.Either
 import kotlin.reflect.KClass
 
 data class Route<CC : CreationCommand, UC : UpdateCommand, M : EventMetadata>(

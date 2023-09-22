@@ -1,5 +1,8 @@
 package com.cultureamp.eventsourcing
 
+import arrow.core.nonEmptyListOf
+import arrow.core.partially1
+import arrow.core.partially2
 import com.cultureamp.eventsourcing.example.CreateSurvey
 import com.cultureamp.eventsourcing.example.Created
 import com.cultureamp.eventsourcing.example.Invite
@@ -31,8 +34,8 @@ class AsyncEventProcessorMonitorIntegrationTest : DescribeSpec({
     val commandGateway = CommandGateway(
         eventStore,
         Route.from(
-            SurveyAggregate.Companion::create.partial(SurveyNameAlwaysAvailable),
-            SurveyAggregate::update.partial2(SurveyNameAlwaysAvailable),
+            SurveyAggregate.Companion::create.partially1(SurveyNameAlwaysAvailable),
+            SurveyAggregate::update.partially2(SurveyNameAlwaysAvailable),
             ::SurveyAggregate,
             SurveyAggregate::updated
         ),
@@ -74,7 +77,7 @@ class AsyncEventProcessorMonitorIntegrationTest : DescribeSpec({
                 capturedLag = it
             }
             val asyncEventProcessorMonitor = AsyncEventProcessorMonitor(
-                listOf(asyncEventProcessor),
+                nonEmptyListOf(asyncEventProcessor),
                 metrics
             )
 

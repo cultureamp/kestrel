@@ -1,16 +1,15 @@
 package com.cultureamp.script
 
+import arrow.core.Either
+import arrow.core.right
 import com.cultureamp.eventsourcing.Command
 import com.cultureamp.eventsourcing.CommandGateway
 import com.cultureamp.eventsourcing.CreationCommand
 import com.cultureamp.eventsourcing.CreationEvent
 import com.cultureamp.eventsourcing.DomainError
 import com.cultureamp.eventsourcing.DomainEvent
-import com.cultureamp.eventsourcing.Either
 import com.cultureamp.eventsourcing.EventMetadata
-import com.cultureamp.eventsourcing.Left
 import com.cultureamp.eventsourcing.RelationalDatabaseEventStore
-import com.cultureamp.eventsourcing.Right
 import com.cultureamp.eventsourcing.Route
 import com.cultureamp.eventsourcing.SimpleAggregate
 import com.cultureamp.eventsourcing.SimpleAggregateConstructor
@@ -136,7 +135,8 @@ fun main(args: Array<String>) {
             while (!stop.get()) {
                 val result = commandGateway.dispatch(CreateSimpleThing(UUID.randomUUID()), EventMetadata())
                 when (result) {
-                    is Left -> throw RuntimeException(result.error.toString())
+                    is Either.Left -> throw RuntimeException(result.value.toString())
+                    else -> println("Thread $it done")
                 }
             }
         }
@@ -200,7 +200,7 @@ data class SimpleThingAggregate(val tweaks: List<String> = emptyList()) : Simple
     companion object : SimpleAggregateConstructor<CreateSimpleThing, SimpleThingCreated, SimpleThingUpdateCommand, SimpleThingUpdateEvent> {
         override fun created(event: SimpleThingCreated) = SimpleThingAggregate()
 
-        override fun create(command: CreateSimpleThing): Either<DomainError, SimpleThingCreated> = Right(SimpleThingCreated)
+        override fun create(command: CreateSimpleThing): Either<DomainError, SimpleThingCreated> = SimpleThingCreated.right()
     }
 
     override fun updated(event: SimpleThingUpdateEvent) = when (event) {
@@ -208,6 +208,6 @@ data class SimpleThingAggregate(val tweaks: List<String> = emptyList()) : Simple
     }
 
     override fun update(command: SimpleThingUpdateCommand) = when (command) {
-        is Twerk -> Right.list(Twerked(command.tweak))
+        is Twerk -> listOf(Twerked(command.tweak)).right()
     }
 }

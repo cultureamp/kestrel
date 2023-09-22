@@ -1,12 +1,12 @@
 package com.cultureamp.eventsourcing.example
 
+import arrow.core.Either
+import arrow.core.right
 import com.cultureamp.eventsourcing.Command
 import com.cultureamp.eventsourcing.CreationCommand
 import com.cultureamp.eventsourcing.CreationEvent
 import com.cultureamp.eventsourcing.DomainError
 import com.cultureamp.eventsourcing.DomainEvent
-import com.cultureamp.eventsourcing.Either
-import com.cultureamp.eventsourcing.Right
 import com.cultureamp.eventsourcing.UpdateCommand
 import com.cultureamp.eventsourcing.UpdateEvent
 import com.cultureamp.eventsourcing.sample.StandardEventMetadata
@@ -37,12 +37,12 @@ data class SurveySagaAggregate(val surveyAggregateId: UUID,
                     createdAt = createdAt,
                     startedAt = DateTime()
                 )
-                Right(startEvent)
+                startEvent.right()
             }
         }
     }
 
-    fun update(command: SurveySagaUpdateCommand, metadata: StandardEventMetadata): Either<DomainError, List<SurveySagaUpdateEvent>> = Right.list(
+    fun update(command: SurveySagaUpdateCommand, metadata: StandardEventMetadata): Either<DomainError, List<SurveySagaUpdateEvent>> = listOf(
         when (command) {
             is StartCreatingSurvey -> StartedCreatingSurvey(
                 CreateSurvey(
@@ -64,7 +64,7 @@ data class SurveySagaAggregate(val surveyAggregateId: UUID,
             is FinishSurveySagaSuccessfully -> SurveySagaFinishedSuccessfully(command.finishedAt)
             is FinishSurveySagaUnsuccessfully -> SurveySagaFinishedUnsuccessfully(command.finishedAt)
         }
-    )
+    ).right()
 }
 
 sealed class SurveySagaCommand : Command

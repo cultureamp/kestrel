@@ -1,18 +1,16 @@
 package com.cultureamp.eventsourcing.example
 
+import arrow.core.left
+import arrow.core.right
 import com.cultureamp.eventsourcing.Command
 import com.cultureamp.eventsourcing.CreationCommand
 import com.cultureamp.eventsourcing.CreationEvent
 import com.cultureamp.eventsourcing.DomainError
 import com.cultureamp.eventsourcing.DomainEvent
-import com.cultureamp.eventsourcing.EventMetadata
-import com.cultureamp.eventsourcing.Left
-import com.cultureamp.eventsourcing.Right
 import com.cultureamp.eventsourcing.SimpleAggregate
 import com.cultureamp.eventsourcing.SimpleAggregateConstructor
 import com.cultureamp.eventsourcing.UpdateCommand
 import com.cultureamp.eventsourcing.UpdateEvent
-import com.cultureamp.eventsourcing.sample.StandardEventMetadata
 import java.util.*
 
 sealed class SimpleThingCommand : Command
@@ -39,7 +37,7 @@ data class SimpleThingAggregate(val tweaks: List<String> = emptyList(), val boop
     companion object : SimpleAggregateConstructor<CreateSimpleThing, SimpleThingCreated, SimpleThingUpdateCommand, SimpleThingUpdateEvent> {
         override fun created(event: SimpleThingCreated) = SimpleThingAggregate()
 
-        override fun create(command: CreateSimpleThing) = Right(SimpleThingCreated)
+        override fun create(command: CreateSimpleThing) = SimpleThingCreated.right()
     }
 
     override fun updated(event: SimpleThingUpdateEvent) = when(event){
@@ -48,8 +46,8 @@ data class SimpleThingAggregate(val tweaks: List<String> = emptyList(), val boop
     }
 
     override fun update(command: SimpleThingUpdateCommand) = when(command) {
-        is Twerk -> Right.list(Twerked(command.tweak))
-        is Boop -> Right.list(Booped)
-        is Bang -> Left(Banged)
+        is Twerk -> listOf(Twerked(command.tweak)).right()
+        is Boop -> listOf(Booped).right()
+        is Bang -> Banged.left()
     }
 }

@@ -1,5 +1,8 @@
 package com.cultureamp.eventsourcing.example
 
+import arrow.core.Either
+import arrow.core.left
+import arrow.core.right
 import com.cultureamp.eventsourcing.AggregateConstructorWithProjection
 import com.cultureamp.eventsourcing.AggregateWithProjection
 import com.cultureamp.eventsourcing.Command
@@ -7,9 +10,6 @@ import com.cultureamp.eventsourcing.CreationCommand
 import com.cultureamp.eventsourcing.CreationEvent
 import com.cultureamp.eventsourcing.DomainError
 import com.cultureamp.eventsourcing.DomainEvent
-import com.cultureamp.eventsourcing.Either
-import com.cultureamp.eventsourcing.Left
-import com.cultureamp.eventsourcing.Right
 import com.cultureamp.eventsourcing.UpdateCommand
 import com.cultureamp.eventsourcing.UpdateEvent
 import com.cultureamp.eventsourcing.sample.StandardEventMetadata
@@ -52,7 +52,7 @@ data class ThingAggregate(val tweaks: List<String> = emptyList(), val bops: List
         }
 
         override fun create(projection: ThingCommandProjection, command: ThingCreationCommand, metadata: StandardEventMetadata): Either<ThingError, Pair<ThingCreationEvent, List<ThingUpdateEvent>>> = when (command) {
-            is CreateThing -> Right(ThingCreated to emptyList())
+            is CreateThing -> Either.Right(ThingCreated to emptyList())
         }
 
         override fun aggregateType() = "thing"
@@ -64,11 +64,11 @@ data class ThingAggregate(val tweaks: List<String> = emptyList(), val bops: List
     }
 
     override fun update(projection: ThingCommandProjection, command: ThingUpdateCommand, metadata: StandardEventMetadata): Either<ThingError, List<ThingUpdateEvent>> = when(command) {
-        is Tweak -> Right.list(Tweaked(command.tweak))
+        is Tweak -> listOf(Tweaked(command.tweak)).right()
         is Bop -> when(projection.isBoppable()) {
-            false -> Left(Unboppable)
-            true -> Right.list(Bopped)
+            false -> Unboppable.left()
+            true -> listOf(Bopped).right()
         }
-        is Explode -> Left(Expoded)
+        is Explode -> Expoded.left()
     }
 }

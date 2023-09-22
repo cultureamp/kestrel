@@ -1,5 +1,8 @@
 package com.cultureamp.eventsourcing.example
 
+import arrow.core.Either
+import arrow.core.left
+import arrow.core.right
 import com.cultureamp.eventsourcing.*
 import org.joda.time.DateTime
 import com.cultureamp.eventsourcing.example.State.*
@@ -12,7 +15,7 @@ data class ParticipantAggregate(val state: State) {
         fun created(event: Invited): ParticipantAggregate = ParticipantAggregate(INVITED)
 
         fun create(command: Invite, metadata: StandardEventMetadata): Either<ParticipantError, Invited> = with(command) {
-            Right(Invited(surveyPeriodId, employeeId, invitedAt))
+            Invited(surveyPeriodId, employeeId, invitedAt).right()
         }
     }
 
@@ -26,15 +29,15 @@ data class ParticipantAggregate(val state: State) {
     fun update(command: ParticipantUpdateCommand, metadata: StandardEventMetadata): Either<ParticipantError, List<ParticipantUpdateEvent>> =
         when (command) {
             is Invite -> when (state) {
-                INVITED -> Left(AlreadyInvitedException)
-                UNINVITED -> with(command) { Right.list(Reinvited(invitedAt)) }
+                INVITED -> AlreadyInvitedException.left()
+                UNINVITED -> with(command) { listOf(Reinvited(invitedAt)).right() }
             }
             is Uninvite -> when (state) {
-                UNINVITED -> Left(AlreadyUninvitedException)
-                INVITED -> Right.list(Uninvited(command.uninvitedAt))
+                UNINVITED -> AlreadyUninvitedException.left()
+                INVITED -> listOf(Uninvited(command.uninvitedAt)).right()
             }
-            is Reinvite -> Right.list(Reinvited(command.reinvitedAt))
-            is Rereinvite -> Right.list(Rereinvited(command.reinvitedAt))
+            is Reinvite -> listOf(Reinvited(command.reinvitedAt)).right()
+            is Rereinvite -> listOf(Rereinvited(command.reinvitedAt)).right()
         }
 
 }

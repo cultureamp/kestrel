@@ -1,5 +1,9 @@
 package com.cultureamp.eventsourcing
 
+import arrow.core.Either
+import arrow.core.NonEmptyList
+import arrow.core.left
+import arrow.core.right
 import com.fasterxml.jackson.core.JsonProcessingException
 import com.fasterxml.jackson.databind.ObjectMapper
 import com.fasterxml.jackson.databind.PropertyNamingStrategies
@@ -104,7 +108,7 @@ class RelationalDatabaseEventStore<M : EventMetadata> @PublishedApi internal con
     override fun sink(newEvents: List<Event<M>>, aggregateId: UUID): Either<CommandError, Long> {
         val sunkSequencedEvents = try {
             transaction(db) {
-                blockingLockUntilTransactionEnd()?.let { Left(it) } ?: run {
+                blockingLockUntilTransactionEnd()?.left() ?: run {
                     newEvents.map { event ->
                         val body = objectMapper.writeValueAsString(event.domainEvent)
                         val domainEventClass = event.domainEvent.javaClass
@@ -132,12 +136,12 @@ class RelationalDatabaseEventStore<M : EventMetadata> @PublishedApi internal con
                             }
                             SequencedEvent(event, insertedSequence)
                         }
-                    }.let { Right(it) }
+                    }.let { it.right() }
                 }
             }
         } catch (e: ExposedSQLException) {
             if (e.message.orEmpty().contains("violates unique constraint") || e.message.orEmpty().contains("Unique index or primary key violation")) {
-                Left(ConcurrencyError)
+                ConcurrencyError.left()
             } else {
                 throw e
             }

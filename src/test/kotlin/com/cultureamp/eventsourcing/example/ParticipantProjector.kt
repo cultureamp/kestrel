@@ -22,14 +22,16 @@ class ParticipantProjector(private val database: Database): DomainEventProcessor
             is Uninvited -> ParticipantTable.update({ invitationId eq aggregateId }) {
                 it[invitedAt] = null
             }
+            // Rereinvited will be upcast to Reinvited
             is Reinvited -> ParticipantTable.update({ invitationId eq aggregateId }) {
                 it[invitedAt] = event.reinvitedAt
             }
+            else -> Unit // no idea what to do with this kind of event, don't do anything
         }
     }
 
     fun isInvited(invitationId: UUID): Boolean = transaction(database) {
-        ParticipantTable.select { (ParticipantTable.invitationId eq invitationId) and (ParticipantTable.invitedAt neq null) }.firstOrNull() != null
+        ParticipantTable.select { (ParticipantTable.invitationId eq invitationId) and (invitedAt neq null) }.firstOrNull() != null
     }
 
     init {

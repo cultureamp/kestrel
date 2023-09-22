@@ -1,5 +1,7 @@
 package com.cultureamp.eventsourcing
 
+import arrow.core.NonEmptySet
+import arrow.core.nonEmptySetOf
 import org.jetbrains.exposed.sql.*
 import org.jetbrains.exposed.sql.jodatime.datetime
 import org.jetbrains.exposed.sql.transactions.transaction
@@ -7,14 +9,14 @@ import org.joda.time.DateTime
 
 interface BookmarkStore {
     fun bookmarkFor(bookmarkName: BookmarkName): Bookmark
-    fun bookmarksFor(bookmarkNames: Set<BookmarkName>): Set<Bookmark>
+    fun bookmarksFor(bookmarkNames: NonEmptySet<BookmarkName>): Set<Bookmark>
     fun save(bookmark: Bookmark)
 }
 
 class RelationalDatabaseBookmarkStore(val db: Database, val table: Bookmarks = Bookmarks()) : BookmarkStore {
-    override fun bookmarkFor(bookmarkName: BookmarkName): Bookmark = bookmarksFor(setOf(bookmarkName)).first()
+    override fun bookmarkFor(bookmarkName: BookmarkName): Bookmark = bookmarksFor(nonEmptySetOf(bookmarkName)).first()
 
-    override fun bookmarksFor(bookmarkNames: Set<BookmarkName>): Set<Bookmark> = transaction(db) {
+    override fun bookmarksFor(bookmarkNames: NonEmptySet<BookmarkName>): Set<Bookmark> = transaction(db) {
         val matchingRows = rowsForBookmarks(bookmarkNames)
         val foundBookmarks = matchingRows.map { Bookmark(BookmarkName(it[table.name]), it[table.sequence]) }.toSet()
         val emptyBookmarks = (bookmarkNames - foundBookmarks.map { it.name }.toSet()).map { Bookmark(it, 0) }.toSet()
@@ -43,10 +45,10 @@ class RelationalDatabaseBookmarkStore(val db: Database, val table: Bookmarks = B
         }
     }
 
-    private fun rowsForBookmarks(bookmarkNames: Set<BookmarkName>) =
+    private fun rowsForBookmarks(bookmarkNames: NonEmptySet<BookmarkName>) =
         table.select { table.name.inList(bookmarkNames.map(BookmarkName::toString)) }
 
-    private fun isExists(bookmarkName: BookmarkName) = !rowsForBookmarks(setOf(bookmarkName)).empty()
+    private fun isExists(bookmarkName: BookmarkName) = !rowsForBookmarks(nonEmptySetOf(bookmarkName)).empty()
 }
 
 class CachingBookmarkStore(private val delegate: BookmarkStore) : BookmarkStore {
@@ -56,7 +58,7 @@ class CachingBookmarkStore(private val delegate: BookmarkStore) : BookmarkStore 
         return cache[bookmarkName] ?: delegate.bookmarkFor(bookmarkName).apply { cache[bookmarkName] = this }
     }
 
-    override fun bookmarksFor(bookmarkNames: Set<BookmarkName>) = bookmarkNames.map { bookmarkFor(it) }.toSet()
+    override fun bookmarksFor(bookmarkNames: NonEmptySet<BookmarkName>) = bookmarkNames.map { bookmarkFor(it) }.toSet()
 
     override fun save(bookmark: Bookmark) {
         cache[bookmark.name] = bookmark

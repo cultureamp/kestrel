@@ -1,7 +1,9 @@
 package com.cultureamp.eventsourcing
 
+import arrow.core.NonEmptyList
+
 class AsyncEventProcessorMonitor<M: EventMetadata>(
-    private val asyncEventProcessors: List<AsyncEventProcessor<M>>,
+    private val asyncEventProcessors: NonEmptyList<AsyncEventProcessor<M>>,
     private val metrics: (Lag) -> Unit
 ) {
     fun run() {

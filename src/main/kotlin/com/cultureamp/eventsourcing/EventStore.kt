@@ -1,5 +1,7 @@
 package com.cultureamp.eventsourcing
 
+import arrow.core.Either
+import arrow.core.NonEmptyList
 import java.util.UUID
 import kotlin.reflect.KClass
 
@@ -10,6 +12,7 @@ interface EventSink<M: EventMetadata> {
 interface EventSource<out M: EventMetadata>  {
     fun getAfter(sequence: Long, eventClasses: List<KClass<out DomainEvent>> = emptyList(), batchSize: Int = 100) : List<SequencedEvent<out M>>
 
+    // NOTE: find out what `eventClasses = emptyList()` means in this context
     fun lastSequence(eventClasses: List<KClass<out DomainEvent>> = emptyList()): Long
 }
 

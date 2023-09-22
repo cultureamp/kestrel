@@ -1,5 +1,8 @@
 package com.cultureamp.eventsourcing
 
+import arrow.core.NonEmptyList
+import arrow.core.nonEmptyListOf
+import arrow.core.toNonEmptyListOrNull
 import com.cultureamp.common.asNestedSealedConcreteClasses
 import java.util.UUID
 import kotlin.reflect.KClass
@@ -29,8 +32,8 @@ interface EventProcessor<in M : EventMetadata> {
     fun domainEventClasses(): List<KClass<out DomainEvent>> = emptyList()
 }
 
-class CompositeDomainEventProcessor<in M : EventMetadata> (private val domainEventProcessors: List<Pair<KClass<DomainEvent>, (DomainEvent, UUID, M, UUID) -> Any?>>) : EventProcessor<M> {
-    val eventClasses = domainEventProcessors.flatMap { it.first.asNestedSealedConcreteClasses() }
+class CompositeDomainEventProcessor<in M : EventMetadata> (private val domainEventProcessors: NonEmptyList<Pair<KClass<DomainEvent>, (DomainEvent, UUID, M, UUID) -> Any?>>) : EventProcessor<M> {
+    val eventClasses = domainEventProcessors.flatMap { it.first.asNestedSealedConcreteClasses().toNonEmptyListOrNull() ?: throw IllegalArgumentException("Domain events not final nor sealed class") }
 
     override fun domainEventClasses() = eventClasses
 
@@ -51,13 +54,13 @@ class CompositeDomainEventProcessor<in M : EventMetadata> (private val domainEve
         inline fun <reified E : DomainEvent> from(domainEventProcessor: DomainEventProcessor<E>): CompositeDomainEventProcessor<EventMetadata> {
             val ignoreMetadataHandle = { domainEvent: E, aggregateId: UUID, _: EventMetadata, _: UUID -> domainEventProcessor.process(domainEvent, aggregateId) }
             val handler = (E::class to ignoreMetadataHandle) as Pair<KClass<DomainEvent>, (DomainEvent, UUID, EventMetadata, UUID) -> Any?>
-            return CompositeDomainEventProcessor(listOf(handler))
+            return CompositeDomainEventProcessor(nonEmptyListOf(handler))
         }
 
         inline fun <reified E : DomainEvent, reified M : EventMetadata> from(domainEventProcessor: DomainEventProcessorWithMetadata<E, M>): CompositeDomainEventProcessor<M> {
             val handle = { domainEvent: E, aggregateId: UUID, metadata: M, eventId: UUID -> domainEventProcessor.process(domainEvent, aggregateId, metadata, eventId) }
             val handler = (E::class to handle) as Pair<KClass<DomainEvent>, (DomainEvent, UUID, EventMetadata, UUID) -> Any?>
-            return CompositeDomainEventProcessor(listOf(handler))
+            return CompositeDomainEventProcessor(nonEmptyListOf(handler))
         }
 
         fun <M : EventMetadata> compose(first: CompositeDomainEventProcessor<M>, vararg remainder: CompositeDomainEventProcessor<M>): CompositeDomainEventProcessor<M> {

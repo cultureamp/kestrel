@@ -1,19 +1,18 @@
 package com.cultureamp.eventsourcing.example
 
+import arrow.core.Either
+import arrow.core.left
+import arrow.core.right
 import com.cultureamp.eventsourcing.AlreadyActionedCommandError
 import com.cultureamp.eventsourcing.CreationCommand
 import com.cultureamp.eventsourcing.CreationEvent
 import com.cultureamp.eventsourcing.DomainError
 import com.cultureamp.eventsourcing.DomainEvent
-import com.cultureamp.eventsourcing.Either
-import com.cultureamp.eventsourcing.Left
-import com.cultureamp.eventsourcing.Right
 import com.cultureamp.eventsourcing.UpdateCommand
 import com.cultureamp.eventsourcing.UpdateEvent
 import com.cultureamp.eventsourcing.example.DraftStatus.Discarded
 import com.cultureamp.eventsourcing.example.DraftStatus.Open
 import com.cultureamp.eventsourcing.example.DraftStatus.Published
-import com.cultureamp.eventsourcing.map
 import com.cultureamp.eventsourcing.sample.StandardEventMetadata
 import org.joda.time.DateTime
 import java.util.UUID
@@ -85,7 +84,7 @@ data class SkillsCustomisationDraftAggregate(
             command: SkillsCustomizationDraftCreationCommand,
             metadata: StandardEventMetadata
         ): Either<DomainError, Pair<SkillsCustomizationDraftCreationEvent, List<SkillsCustomizationDraftUpdateEvent>>> {
-            if (metadata.executorId != null && !adminProjection.isAdminOfAccount(userId = metadata.executorId, accountId = metadata.accountId)) return Left(OnlyAdminsCanCustomiseSkills)
+            if (metadata.executorId != null && !adminProjection.isAdminOfAccount(userId = metadata.executorId, accountId = metadata.accountId)) return OnlyAdminsCanCustomiseSkills.left()
             val publishedState = publishedSkillsProjection.publishedSkillsFor(metadata.accountId)
 
             val firstTimeSnapshotEvent: DraftSnapshottedCanonicalSkills? = if (publishedState.isNotEmpty()) null else {
@@ -123,27 +122,27 @@ data class SkillsCustomisationDraftAggregate(
         command: SkillsCustomizationDraftUpdateCommand,
         metadata: StandardEventMetadata
     ): Either<DomainError, List<SkillsCustomizationDraftUpdateEvent>> {
-        if (metadata.executorId != null && !adminProjection.isAdminOfAccount(userId = metadata.executorId, accountId = metadata.accountId)) return Left(OnlyAdminsCanCustomiseSkills)
-        if (status != Open) return Left(OnlyOpenDraftsMayBeEditted)
+        if (metadata.executorId != null && !adminProjection.isAdminOfAccount(userId = metadata.executorId, accountId = metadata.accountId)) return OnlyAdminsCanCustomiseSkills.left()
+        if (status != Open) return OnlyOpenDraftsMayBeEditted.left()
         val currentState = currentState(publishedSkillsProjection.publishedSkillsFor(metadata.accountId))
         return when (command) {
             is DraftAddSkill -> addSkill(command, currentState, metadata.accountId).map { listOf(it) }
             is DraftRemoveSkill -> removeSkill(command, currentState, metadata.accountId).map { listOf(it) }
-            is DraftDiscard -> if (status == Discarded) Left(AlreadyDiscarded) else Right.list(DraftDiscarded(DateTime.now()))
-            is DraftPublish -> if (status == Published) Left(AlreadyPublished) else Right.list(DraftPublished(DateTime.now()))
+            is DraftDiscard -> if (status == Discarded) AlreadyDiscarded.left() else listOf(DraftDiscarded(DateTime.now())).right()
+            is DraftPublish -> if (status == Published) AlreadyPublished.left() else listOf(DraftPublished(DateTime.now())).right()
         }
     }
 
     private fun addSkill(command: DraftAddSkill, currentState: Map<UUID, Skill>, accountId: UUID): Either<DomainError, DraftSkillAdded> = if (currentState.containsKey(command.skillId)) {
-        Left(SkillAlreadyAdded)
+        SkillAlreadyAdded.left()
     } else {
-        Right(DraftSkillAdded(skillId = command.skillId, label = command.label, description = command.description, accountId = accountId, addedAt = DateTime.now()))
+        DraftSkillAdded(skillId = command.skillId, label = command.label, description = command.description, accountId = accountId, addedAt = DateTime.now()).right()
     }
 
     private fun removeSkill(command: DraftRemoveSkill, currentState: Map<UUID, Skill>, accountId: UUID): Either<DomainError, DraftSkillRemoved> = if (currentState.containsKey(command.skillId)) {
-        Right(DraftSkillRemoved(skillId = command.skillId, accountId = accountId, removedAt = DateTime.now()))
+        DraftSkillRemoved(skillId = command.skillId, accountId = accountId, removedAt = DateTime.now()).right()
     } else {
-        Left(SkillNotPresentToRemove)
+        SkillNotPresentToRemove.left()
     }
 
     private fun currentState(publishedSkills: Map<UUID, Skill>): Map<UUID, Skill> {

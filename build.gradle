@@ -151,6 +151,7 @@ dependencies {
     testImplementation "com.h2database:h2:1.4.200"
     implementation "org.jetbrains.kotlinx:kotlinx-coroutines-core:1.5.2"
     implementation "joda-time:joda-time:2.10.10"
+    implementation 'io.arrow-kt:arrow-core:1.2.0'
     implementation "org.jetbrains.kotlin:kotlin-reflect:$kotlin_version"
     implementation "org.jetbrains.exposed:exposed-core:$exposed_version"
     implementation "org.jetbrains.exposed:exposed-jdbc:$exposed_version"

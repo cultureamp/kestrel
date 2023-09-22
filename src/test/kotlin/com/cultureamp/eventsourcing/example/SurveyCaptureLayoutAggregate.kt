@@ -1,5 +1,8 @@
 package com.cultureamp.eventsourcing.example
 
+import arrow.core.Either
+import arrow.core.left
+import arrow.core.right
 import com.cultureamp.eventsourcing.*
 import org.joda.time.DateTime
 import com.cultureamp.eventsourcing.example.DemographicSectionPosition.bottom
@@ -20,7 +23,7 @@ data class SurveyCaptureLayoutAggregate(
         }
 
         fun create(command: SurveyCaptureLayoutCreationCommand): Either<SurveyCaptureLayoutCommandError, Generated> = when (command) {
-            is Generate -> with(command) { Right(Generated(surveyId, generatedAt)) }
+            is Generate -> with(command) { Generated(surveyId, generatedAt).right() }
         }
     }
 
@@ -84,71 +87,71 @@ data class SurveyCaptureLayoutAggregate(
 
     fun update(command: SurveyCaptureLayoutUpdateCommand): Either<SurveyCaptureLayoutCommandError, List<SurveyCaptureLayoutUpdateEvent>> = when (command) {
         is AddSection -> when {
-            hasSection(command.sectionId) -> Left(SectionAlreadyAdded)
-            hasSectionCode(command.code) -> Left(SectionCodeNotUnique)
-            command.positionedAfterSectionId != null && sectionFor(command.positionedAfterSectionId).intendedPurpose != command.intendedPurpose -> Left(SectionHasDifferentIntendedPurpose)
-            else -> with(command) { Right.list(SectionAdded(sectionId, name, shortDescription, longDescription, intendedPurpose, code, positionedAfterSectionId, addedAt)) }
+            hasSection(command.sectionId) -> SectionAlreadyAdded.left()
+            hasSectionCode(command.code) -> SectionCodeNotUnique.left()
+            command.positionedAfterSectionId != null && sectionFor(command.positionedAfterSectionId).intendedPurpose != command.intendedPurpose -> SectionHasDifferentIntendedPurpose.left()
+            else -> with(command) { listOf(SectionAdded(sectionId, name, shortDescription, longDescription, intendedPurpose, code, positionedAfterSectionId, addedAt)).right() }
         }
         is MoveSection -> if (command.positionedAfterSectionId != null) when {
-            !hasSection(command.sectionId) || !hasSection(command.positionedAfterSectionId) -> Left(SectionNotFound)
-            indexOf(command.sectionId) == indexOf(command.positionedAfterSectionId) + 1 -> Left(SectionAlreadyMoved)
-            sectionFor(command.sectionId).intendedPurpose != sectionFor(command.positionedAfterSectionId).intendedPurpose -> Left(SectionHasDifferentIntendedPurpose)
-            else -> with(command) { Right.list(SectionMoved(sectionId, positionedAfterSectionId, movedAt)) }
+            !hasSection(command.sectionId) || !hasSection(command.positionedAfterSectionId) -> SectionNotFound.left()
+            indexOf(command.sectionId) == indexOf(command.positionedAfterSectionId) + 1 -> SectionAlreadyMoved.left()
+            sectionFor(command.sectionId).intendedPurpose != sectionFor(command.positionedAfterSectionId).intendedPurpose -> SectionHasDifferentIntendedPurpose.left()
+            else -> with(command) { listOf(SectionMoved(sectionId, positionedAfterSectionId, movedAt)).right() }
         } else when {
-            !hasSection(command.sectionId) -> Left(SectionNotFound)
-            indexOf(command.sectionId) == 0 -> Left(SectionAlreadyMoved)
-            else -> with(command) { Right.list(SectionMoved(sectionId, positionedAfterSectionId, movedAt)) }
+            !hasSection(command.sectionId) -> SectionNotFound.left()
+            indexOf(command.sectionId) == 0 -> SectionAlreadyMoved.left()
+            else -> with(command) { listOf(SectionMoved(sectionId, positionedAfterSectionId, movedAt)).right() }
         }
         is RemoveSection -> when {
-            !hasSection(command.sectionId) -> Left(SectionNotFound)
-            sectionFor(command.sectionId).status == Status.removed -> Left(SectionAlreadyRemoved)
-            else -> with(command) { Right.list(SectionRemoved(sectionId, removedAt)) }
+            !hasSection(command.sectionId) -> SectionNotFound.left()
+            sectionFor(command.sectionId).status == Status.removed -> SectionAlreadyRemoved.left()
+            else -> with(command) { listOf(SectionRemoved(sectionId, removedAt)).right() }
         }
         is RestoreSection -> when {
-            !hasSection(command.sectionId) -> Left(SectionNotFound)
-            sectionFor(command.sectionId).status == Status.active -> Left(SectionAlreadyRestored)
-            else -> with(command) { Right.list(SectionRestored(sectionId, restoredAt)) }
+            !hasSection(command.sectionId) -> SectionNotFound.left()
+            sectionFor(command.sectionId).status == Status.active -> SectionAlreadyRestored.left()
+            else -> with(command) { listOf(SectionRestored(sectionId, restoredAt)).right() }
         }
         is RenameSection -> when {
-            !hasSection(command.sectionId) -> Left(SectionNotFound)
-            sectionFor(command.sectionId).name[command.locale] == command.name -> Left(RenameAlreadyActioned)
-            else -> with(command) { Right.list(SectionRenamed(sectionId, name, locale, renamedAt)) }
+            !hasSection(command.sectionId) -> SectionNotFound.left()
+            sectionFor(command.sectionId).name[command.locale] == command.name -> RenameAlreadyActioned.left()
+            else -> with(command) { listOf(SectionRenamed(sectionId, name, locale, renamedAt)).right() }
         }
         is ChangeSectionShortDescription -> when {
-            !hasSection(command.sectionId) -> Left(SectionNotFound)
-            sectionFor(command.sectionId).shortDescription[command.locale] == command.text -> Left(ShortDescriptionAlreadyChanged)
-            else -> with(command) { Right.list(SectionShortDescriptionChanged(sectionId, text, locale, changedAt)) }
+            !hasSection(command.sectionId) -> SectionNotFound.left()
+            sectionFor(command.sectionId).shortDescription[command.locale] == command.text -> ShortDescriptionAlreadyChanged.left()
+            else -> with(command) { listOf(SectionShortDescriptionChanged(sectionId, text, locale, changedAt)).right() }
         }
         is ChangeSectionLongDescription -> when {
-            !hasSection(command.sectionId) -> Left(SectionNotFound)
-            sectionFor(command.sectionId).longDescription[command.locale] == command.text -> Left(LongDescriptionAlreadyChanged)
-            else -> with(command) { Right.list(SectionLongDescriptionChanged(sectionId, text, locale, changedAt)) }
+            !hasSection(command.sectionId) -> SectionNotFound.left()
+            sectionFor(command.sectionId).longDescription[command.locale] == command.text -> LongDescriptionAlreadyChanged.left()
+            else -> with(command) { listOf(SectionLongDescriptionChanged(sectionId, text, locale, changedAt)).right() }
         }
         is RemoveSectionDescriptions -> when {
-            !hasSection(command.sectionId) -> Left(SectionNotFound)
-            sectionFor(command.sectionId).let { it.shortDescription.isEmpty() || it.longDescription.isEmpty()} -> Left(SectionDescriptionsAlreadyRemoved)
-            else -> with(command) { Right.list(SectionDescriptionsRemoved(sectionId, removedAt)) }
+            !hasSection(command.sectionId) -> SectionNotFound.left()
+            sectionFor(command.sectionId).let { it.shortDescription.isEmpty() || it.longDescription.isEmpty()} -> SectionDescriptionsAlreadyRemoved.left()
+            else -> with(command) { listOf(SectionDescriptionsRemoved(sectionId, removedAt)).right() }
         }
         is PositionQuestion -> if (command.positionedAfterQuestionId != null) when {
-            !hasSection(command.sectionId) -> Left(SectionNotFound)
-            !questionExistsInSection(command.positionedAfterQuestionId) -> Left(QuestionNotFound)
-            sectionFor(command.sectionId) != sectionForQuestionId(command.positionedAfterQuestionId) -> Left(PositionedAfterQuestionInWrongSection)
-            sectionFor(command.sectionId).questions.let { it.indexOf(command.questionId) == it.indexOf(command.positionedAfterQuestionId) + 1 } -> Left(QuestionAlreadyInPosition)
-            else -> with(command) { Right.list(QuestionPositioned(questionId, positionedAfterQuestionId, sectionId, positionedAt)) }
+            !hasSection(command.sectionId) -> SectionNotFound.left()
+            !questionExistsInSection(command.positionedAfterQuestionId) -> QuestionNotFound.left()
+            sectionFor(command.sectionId) != sectionForQuestionId(command.positionedAfterQuestionId) -> PositionedAfterQuestionInWrongSection.left()
+            sectionFor(command.sectionId).questions.let { it.indexOf(command.questionId) == it.indexOf(command.positionedAfterQuestionId) + 1 } -> QuestionAlreadyInPosition.left()
+            else -> with(command) { listOf(QuestionPositioned(questionId, positionedAfterQuestionId, sectionId, positionedAt)).right() }
         } else when {
-            !hasSection(command.sectionId) -> Left(SectionNotFound)
-            sectionFor(command.sectionId).questions.firstOrNull() == command.questionId -> Left(QuestionAlreadyInPosition)
-            else -> with(command) { Right.list(QuestionPositioned(questionId, positionedAfterQuestionId, sectionId, positionedAt)) }
+            !hasSection(command.sectionId) -> SectionNotFound.left()
+            sectionFor(command.sectionId).questions.firstOrNull() == command.questionId -> QuestionAlreadyInPosition.left()
+            else -> with(command) { listOf(QuestionPositioned(questionId, positionedAfterQuestionId, sectionId, positionedAt)).right() }
         }
         is PositionDemographicSections -> when(command.placement) {
-            demographicSectionsPlacement -> Left(DemographicSectionsAlreadyPositioned)
-            top -> with(command) { Right.list(DemographicSectionsPositionedAtTop(positionedAt)) }
-            bottom -> with(command) { Right.list(DemographicSectionsPositionedAtTop(positionedAt)) }
+            demographicSectionsPlacement -> DemographicSectionsAlreadyPositioned.left()
+            top -> with(command) { listOf(DemographicSectionsPositionedAtTop(positionedAt)).right() }
+            bottom -> with(command) { listOf(DemographicSectionsPositionedAtTop(positionedAt)).right() }
         }
         is HideQuestionFromCapture -> when {
-            !questions.contains(command.questionId) -> Left(QuestionNotFound)
-            !questionExistsInSection(command.questionId) -> Left(QuestionAlreadyRemovedFromSection)
-            else -> with(command) { Right.list(QuestionHiddenFromCapture(questionId, hiddenAt)) }
+            !questions.contains(command.questionId) -> QuestionNotFound.left()
+            !questionExistsInSection(command.questionId) -> QuestionAlreadyRemovedFromSection.left()
+            else -> with(command) { listOf(QuestionHiddenFromCapture(questionId, hiddenAt)).right() }
         }
     }
 

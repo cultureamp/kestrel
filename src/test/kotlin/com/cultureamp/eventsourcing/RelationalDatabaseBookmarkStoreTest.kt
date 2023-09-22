@@ -1,5 +1,6 @@
 package com.cultureamp.eventsourcing
 
+import arrow.core.nonEmptySetOf
 import io.kotest.core.spec.style.DescribeSpec
 import io.kotest.matchers.shouldBe
 import org.jetbrains.exposed.sql.Database
@@ -45,7 +46,7 @@ class RelationalDatabaseBookmarkStoreTest : DescribeSpec({
             store.save(Bookmark(BookmarkName("new-bookmark"), 123L))
             store.save(Bookmark(BookmarkName("other-bookmark"), 456L))
             store.bookmarksFor(
-                setOf(
+                nonEmptySetOf(
                     BookmarkName("new-bookmark"),
                     BookmarkName("other-bookmark"),
                     BookmarkName("unknown-bookmark")

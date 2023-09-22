@@ -1,19 +1,12 @@
 package com.cultureamp.eventsourcing.sample
 
-import com.cultureamp.eventsourcing.Command
-import com.cultureamp.eventsourcing.CreationCommand
-import com.cultureamp.eventsourcing.CreationEvent
-import com.cultureamp.eventsourcing.DomainError
-import com.cultureamp.eventsourcing.DomainEvent
-import com.cultureamp.eventsourcing.Either
-import com.cultureamp.eventsourcing.EventMetadata
-import com.cultureamp.eventsourcing.Left
-import com.cultureamp.eventsourcing.Right
-import com.cultureamp.eventsourcing.UpdateCommand
-import com.cultureamp.eventsourcing.UpdateEvent
+import arrow.core.Either
+import arrow.core.left
+import arrow.core.right
+import com.cultureamp.eventsourcing.*
 import com.fasterxml.jackson.annotation.JsonInclude
 import com.fasterxml.jackson.annotation.JsonInclude.Include
-import java.util.UUID
+import java.util.*
 
 abstract class RequiredMetadata : EventMetadata() {
     abstract val accountId: UUID
@@ -93,12 +86,10 @@ data class PizzaAggregate(val baseStyle: PizzaStyle, val toppings: List<PizzaTop
         fun create(command: PizzaCreationCommand, metadata: StandardEventMetadata): Either<PizzaError, PizzaCreated> = when (command) {
             is CreateClassicPizza -> {
                 val initialToppings = classicToppings(command.baseStyle)
-                Right(
-                    PizzaCreated(
+                PizzaCreated(
                         command.baseStyle,
                         initialToppings
-                    )
-                )
+                ).right()
             }
         }
 
@@ -107,13 +98,14 @@ data class PizzaAggregate(val baseStyle: PizzaStyle, val toppings: List<PizzaTop
 
     fun update(command: PizzaUpdateCommand, metadata: StandardEventMetadata): Either<PizzaError, List<PizzaUpdateEvent>> {
         return when (isEaten) {
-            true -> Left(PizzaAlreadyEaten())
+            true -> PizzaAlreadyEaten().left()
             false -> when (command) {
                 is AddTopping -> when (toppings.contains(command.topping)) {
-                    true -> Left(ToppingAlreadyPresent())
-                    false -> Right(listOf(PizzaToppingAdded(command.topping)))
+                    true -> ToppingAlreadyPresent().left()
+                    false -> listOf(PizzaToppingAdded(command.topping)).right()
                 }
-                is EatPizza -> Right(listOf(PizzaEaten()))
+
+                is EatPizza -> listOf(PizzaEaten()).right()
             }
         }
     }

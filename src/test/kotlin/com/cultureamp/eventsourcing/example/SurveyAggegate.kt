@@ -1,5 +1,8 @@
 package com.cultureamp.eventsourcing.example
 
+import arrow.core.Either
+import arrow.core.left
+import arrow.core.right
 import com.cultureamp.eventsourcing.*
 import com.cultureamp.eventsourcing.sample.StandardEventMetadata
 import org.joda.time.DateTime
@@ -11,8 +14,8 @@ data class SurveyAggregate(val name: Map<Locale, String>, val accountId: UUID, v
     companion object {
         fun create(query: SurveyNamesQuery, command: SurveyCreationCommand, metadata: StandardEventMetadata): Either<SurveyError, Created> = when (command) {
             is CreateSurvey -> when {
-                command.name.any { (locale, name) -> query.nameExistsFor(command.accountId, name, locale)} -> Left(SurveyNameNotUnique)
-                else -> Right(Created(command.name, command.accountId, command.createdAt))
+                command.name.any { (locale, name) -> query.nameExistsFor(command.accountId, name, locale)} -> SurveyNameNotUnique.left()
+                else -> Created(command.name, command.accountId, command.createdAt).right()
             }
         }
     }
@@ -25,17 +28,17 @@ data class SurveyAggregate(val name: Map<Locale, String>, val accountId: UUID, v
 
     fun update(query: SurveyNamesQuery, command: SurveyUpdateCommand, metadata: StandardEventMetadata): Either<SurveyError, List<SurveyUpdateEvent>> = when (command) {
         is Rename -> when {
-            name.get(command.locale) == command.newName -> Left(AlreadyRenamed)
-            query.nameExistsFor(accountId, command.newName, command.locale) -> Left(SurveyNameNotUnique)
-            else -> Right.list(Renamed(command.newName, command.locale, command.renamedAt))
+            name.get(command.locale) == command.newName -> AlreadyRenamed.left()
+            query.nameExistsFor(accountId, command.newName, command.locale) -> SurveyNameNotUnique.left()
+            else -> listOf(Renamed(command.newName, command.locale, command.renamedAt)).right()
         }
         is Delete -> when (deleted) {
-            true -> Left(AlreadyDeleted)
-            false -> Right.list(Deleted(command.deletedAt))
+            true -> AlreadyDeleted.left()
+            false -> listOf(Deleted(command.deletedAt)).right()
         }
         is Restore -> when (deleted) {
-            true -> Right.list(Restored(command.restoredAt))
-            false -> Left(NotDeleted)
+            true -> listOf(Restored(command.restoredAt)).right()
+            false -> NotDeleted.left()
         }
     }
 }

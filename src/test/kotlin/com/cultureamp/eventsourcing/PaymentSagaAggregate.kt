@@ -1,19 +1,21 @@
 package com.cultureamp.eventsourcing
 
+import arrow.core.Either
+import arrow.core.right
 import com.cultureamp.eventsourcing.sample.StandardEventMetadata
 import org.joda.time.DateTime
 import java.util.*
 
 object PaymentSagaAggregate {
     fun create(command: StartPaymentSaga, metadata: StandardEventMetadata): Either<DomainError, PaymentSagaStarted> = with(command) {
-        Right(PaymentSagaStarted(fromUserId, toUserBankDetails, dollarAmount, DateTime()))
+        PaymentSagaStarted(fromUserId, toUserBankDetails, dollarAmount, DateTime()).right()
     }
 
     fun update(command: PaymentSagaUpdateCommand, metadata: StandardEventMetadata): Either<DomainError, List<PaymentSagaUpdateEvent>> = when (command) {
-        is StartThirdPartyPayment -> Right.list(StartedThirdPartyPayment(command.startedAt))
-        is RegisterThirdPartySuccess -> Right.list(FinishedThirdPartyPayment(DateTime()))
-        is RegisterThirdPartyFailure -> Right.list(FailedThirdPartyPayment(DateTime()))
-        is StartThirdPartyEmailNotification -> Right.list(StartedThirdPartyEmailNotification(command.message, command.startedAt))
+        is StartThirdPartyPayment -> listOf(StartedThirdPartyPayment(command.startedAt)).right()
+        is RegisterThirdPartySuccess -> listOf(FinishedThirdPartyPayment(DateTime())).right()
+        is RegisterThirdPartyFailure -> listOf(FailedThirdPartyPayment(DateTime())).right()
+        is StartThirdPartyEmailNotification -> listOf(StartedThirdPartyEmailNotification(command.message, command.startedAt)).right()
     }
 }
 

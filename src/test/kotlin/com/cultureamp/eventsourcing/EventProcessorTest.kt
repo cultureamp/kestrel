@@ -2,6 +2,8 @@ package com.cultureamp.eventsourcing
 
 import io.kotest.core.Tuple3
 import io.kotest.core.spec.style.DescribeSpec
+import io.kotest.matchers.collections.shouldContainExactly
+import io.kotest.matchers.collections.shouldContainExactlyInAnyOrder
 import io.kotest.matchers.iterator.shouldHaveNext
 import io.kotest.matchers.maps.shouldContain
 import io.kotest.matchers.shouldBe
@@ -152,7 +154,7 @@ class EventProcessorTest : DescribeSpec({
                 EventProcessor.from(SecondProjector()::project)
             )
 
-            eventProcessor.eventClasses shouldBe listOf(FooEvent::class, BarEvent::class, BazEvent::class, QuuxEvent::class)
+            eventProcessor.eventClasses shouldContainExactlyInAnyOrder listOf(FooEvent::class, BarEvent::class, BazEvent::class, QuuxEvent::class)
         }
     }
 })

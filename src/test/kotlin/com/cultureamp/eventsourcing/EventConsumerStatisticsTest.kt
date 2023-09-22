@@ -1,3 +1,5 @@
+import arrow.core.Either
+import arrow.core.right
 import com.cultureamp.eventsourcing.*
 import com.cultureamp.eventsourcing.example.*
 import com.cultureamp.eventsourcing.sample.StandardEventMetadata
@@ -20,7 +22,7 @@ class EventConsumerStatisticsTest : DescribeSpec({
         var seq = 0L
         override fun sink(newEvents: List<Event<EventMetadata>>, aggregateId: UUID): Either<CommandError, Long> {
             events += newEvents.map { it to aggregateId }
-            return Right(events.size.toLong())
+            return events.size.toLong().right()
         }
 
         override fun getAfter(
