@@ -4,6 +4,7 @@ import com.cultureamp.eventsourcing.DomainEventProcessor
 import com.cultureamp.eventsourcing.EventProcessor
 import org.jetbrains.exposed.sql.Database
 import org.jetbrains.exposed.sql.SchemaUtils
+import org.jetbrains.exposed.sql.SqlExpressionBuilder.eq
 import org.jetbrains.exposed.sql.Table
 import org.jetbrains.exposed.sql.deleteWhere
 import org.jetbrains.exposed.sql.insert
@@ -28,7 +29,7 @@ class SurveyNamesCommandProjector(private val database: Database): DomainEventPr
                     it[name] = event.name
                 }
             is Deleted ->
-                SurveyNames.deleteWhere { SurveyNames.surveyId eq aggregateId }
+                SurveyNames.deleteWhere { surveyId eq aggregateId }
             is Restored -> Unit
         }
     }

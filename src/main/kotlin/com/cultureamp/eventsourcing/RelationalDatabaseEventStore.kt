@@ -1,7 +1,6 @@
 package com.cultureamp.eventsourcing
 
 import arrow.core.Either
-import arrow.core.NonEmptyList
 import arrow.core.left
 import arrow.core.right
 import com.fasterxml.jackson.core.JsonProcessingException
@@ -12,19 +11,8 @@ import com.fasterxml.jackson.datatype.joda.JodaModule
 import com.fasterxml.jackson.module.kotlin.SingletonSupport
 import com.fasterxml.jackson.module.kotlin.kotlinModule
 import org.jetbrains.exposed.exceptions.ExposedSQLException
-import org.jetbrains.exposed.sql.Column
-import org.jetbrains.exposed.sql.Database
-import org.jetbrains.exposed.sql.Op
-import org.jetbrains.exposed.sql.ResultRow
-import org.jetbrains.exposed.sql.SchemaUtils
-import org.jetbrains.exposed.sql.Table
-import org.jetbrains.exposed.sql.Transaction
-import org.jetbrains.exposed.sql.and
-import org.jetbrains.exposed.sql.insert
+import org.jetbrains.exposed.sql.*
 import org.jetbrains.exposed.sql.jodatime.datetime
-import org.jetbrains.exposed.sql.max
-import org.jetbrains.exposed.sql.replace
-import org.jetbrains.exposed.sql.select
 import org.jetbrains.exposed.sql.transactions.transaction
 import org.jetbrains.exposed.sql.vendors.H2Dialect
 import org.jetbrains.exposed.sql.vendors.PostgreSQLDialect
@@ -130,13 +118,13 @@ class RelationalDatabaseEventStore<M : EventMetadata> @PublishedApi internal con
                             SequencedEvent(event, -1)
                         } else {
                             val insertedSequence = insertResult[eventsSinkTable.sequence]
-                            eventsSequenceStats.replace {
+                            eventsSequenceStats.upsert {
                                 it[eventsSequenceStats.eventType] = eventType
                                 it[eventsSequenceStats.sequence] = insertedSequence
                             }
                             SequencedEvent(event, insertedSequence)
                         }
-                    }.let { it.right() }
+                    }.right()
                 }
             }
         } catch (e: ExposedSQLException) {

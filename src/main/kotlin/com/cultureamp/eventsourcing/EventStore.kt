@@ -1,8 +1,7 @@
 package com.cultureamp.eventsourcing
 
 import arrow.core.Either
-import arrow.core.NonEmptyList
-import java.util.UUID
+import java.util.*
 import kotlin.reflect.KClass
 
 interface EventSink<M: EventMetadata> {
