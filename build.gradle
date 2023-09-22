@@ -143,12 +143,13 @@ compileTestKotlin {
 }
 
 dependencies {
+    api 'io.arrow-kt:arrow-core:1.2.0'
+    api "joda-time:joda-time:2.12.5"
+
     implementation "com.fasterxml.jackson.module:jackson-module-kotlin:2.15.2"
     implementation "com.fasterxml.jackson.datatype:jackson-datatype-joda:2.15.2"
     implementation "org.jetbrains.kotlin:kotlin-stdlib-jdk8:$kotlin_version"
     implementation "org.jetbrains.kotlinx:kotlinx-coroutines-core:1.7.3"
-    implementation "joda-time:joda-time:2.12.5"
-    implementation 'io.arrow-kt:arrow-core:1.2.0'
     implementation "org.jetbrains.kotlin:kotlin-reflect:$kotlin_version"
     implementation "org.jetbrains.exposed:exposed-core:$exposed_version"
     implementation "org.jetbrains.exposed:exposed-jdbc:$exposed_version"
