@@ -38,6 +38,10 @@ class ClassReflectionTest : DescribeSpec({
             E1::class.sealedSubclasses shouldBe emptyList()
             E2::class.sealedSubclasses shouldBe emptyList()
         }
+
+        it("works for sealed interfaces") {
+            G::class.sealedSubclasses shouldBe listOf(G1::class, G2::class)
+        }
     }
 
     describe("isFinal") {
@@ -126,6 +130,10 @@ class ClassReflectionTest : DescribeSpec({
             FSubSubSubSubSubSub::class.asNestedSealedConcreteClasses() shouldBe listOf(F7::class)
             F7::class.asNestedSealedConcreteClasses() shouldBe listOf(F7::class)
         }
+
+        it("works for sealed interfaces") {
+            G::class.asNestedSealedConcreteClasses() shouldBe listOf(G1::class, G2::class)
+        }
     }
 })
 
@@ -166,3 +174,7 @@ sealed class FSubSubSubSubSub : FSubSubSubSub()
 data class F6(val value: String) : FSubSubSubSubSub()
 sealed class FSubSubSubSubSubSub : FSubSubSubSubSub()
 data class F7(val value: String) : FSubSubSubSubSubSub()
+
+sealed interface G
+data class G1(val value: String) : G
+data class G2(val value: Int) : G
