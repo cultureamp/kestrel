@@ -1,42 +1,59 @@
 package com.cultureamp.eventsourcing
 
+import kotlinx.coroutines.sync.Mutex
 import org.jetbrains.exposed.sql.statements.api.ExposedConnection
 import org.slf4j.LoggerFactory
+import java.sql.Connection
 import java.sql.SQLException
+import java.util.UUID
 
 private val logger = LoggerFactory.getLogger(PGSessionAdvisoryBookmarkLock::class.java)
 class PGSessionAdvisoryBookmarkLock(
-    private val connectionProvider: () -> ExposedConnection<Any>,
+    private val lockTimeoutMs: Int = 60_000,
+    private val connectionProvider: () -> Connection,
 ) {
-    private var connection = connectionProvider()
+    private val lock = Any()
+    private var connection = getConnection()
 
     fun lock(bookmarkName: String) {
-        try {
-            acquireLock(connection, bookmarkName)
-        } catch (e: Exception) {
-            logger.info("Failed to refresh session lock for $bookmarkName, resetting connection to try again", e)
-            connection = connectionProvider()
-            acquireLock(connection, bookmarkName)
-        }
-    }
-
-    private fun acquireLock(connection: ExposedConnection<Any>, bookmarkName: String) {
-        val lockTimeoutMilliseconds = 10_000
-        val key = createKey(connection, bookmarkName)
-        while (!tryLock(connection, key, lockTimeoutMilliseconds)) {
-            logger.debug("Timed out trying to acquire lock on $bookmarkName after ${lockTimeoutMilliseconds}ms. Trying again")
-        }
-    }
-
-    private fun tryLock(connection: ExposedConnection<Any>, key: Long, lockTimeoutMs: Int): Boolean {
-        try {
-            connection.prepareStatement("SET LOCAL lock_timeout = ?", false).also {
-                it[1] = "${lockTimeoutMs}ms"
-                it.executeUpdate()
+        synchronized(lock) {
+            try {
+                refreshLock(connection, bookmarkName)
+            } catch (e: Exception) {
+                logger.info("Failed to refresh session lock for $bookmarkName, resetting connection to try again", e)
+                connection.close()
+                connection = getConnection()
+                refreshLock(connection, bookmarkName)
             }
-            connection.prepareStatement("SELECT pg_advisory_lock(?)", false).also {
-                it[1] = key
-                it.executeQuery()
+        }
+    }
+
+    private fun getConnection(): Connection {
+        val connection = connectionProvider().also { con ->
+            con.autoCommit = true
+            con.prepareStatement("SET lock_timeout = '${lockTimeoutMs}ms'").also {
+                it.executeUpdate()
+                it.close()
+            }
+
+        }
+        logger.info("Got connection $connection, autocommit=${connection.autoCommit}")
+        return connection
+    }
+
+    private fun refreshLock(connection: Connection, bookmarkName: String) {
+        val key = createKey(connection, bookmarkName)
+        while (!tryLock(connection, key)) {
+            logger.debug("Timed out trying to acquire lock on $bookmarkName after ${lockTimeoutMs}ms. Trying again")
+        }
+    }
+
+    private fun tryLock(connection: Connection, key: Long): Boolean {
+        try {
+            connection.prepareStatement("SELECT pg_advisory_lock(?)").also {
+                it.setLong(1, key)
+                it.executeQuery().close()
+                it.close()
             }
         } catch (e: SQLException) {
             if (e.message.orEmpty().contains("canceling statement due to lock timeout")) {
@@ -48,6 +65,8 @@ class PGSessionAdvisoryBookmarkLock(
         return true
     }
 
-    // TODO this should be done gooder, perhaps by looking up the bookmark in db?
-    private fun createKey(connection: ExposedConnection<Any>, bookmarkName: String): Long = bookmarkName.hashCode().toLong()
+    // TODO this is essentially MD5 hash and throwing away 1st half of result. Is that the best way?
+    private fun createKey(connection: Connection, bookmarkName: String): Long {
+        return UUID.nameUUIDFromBytes(bookmarkName.toByteArray()).leastSignificantBits
+    }
 }
