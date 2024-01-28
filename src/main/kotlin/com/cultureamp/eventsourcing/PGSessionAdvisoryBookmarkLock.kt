@@ -1,7 +1,5 @@
 package com.cultureamp.eventsourcing
 
-import kotlinx.coroutines.sync.Mutex
-import org.jetbrains.exposed.sql.statements.api.ExposedConnection
 import org.slf4j.LoggerFactory
 import java.sql.Connection
 import java.sql.SQLException
@@ -42,7 +40,7 @@ class PGSessionAdvisoryBookmarkLock(
     }
 
     private fun refreshLock(connection: Connection, bookmarkName: String) {
-        val key = createKey(connection, bookmarkName)
+        val key = createKey(bookmarkName)
         while (!tryLock(connection, key)) {
             logger.debug("Timed out trying to acquire lock on $bookmarkName after ${lockTimeoutMs}ms. Trying again")
         }
@@ -65,8 +63,8 @@ class PGSessionAdvisoryBookmarkLock(
         return true
     }
 
-    // TODO this is essentially MD5 hash and throwing away 1st half of result. Is that the best way?
-    private fun createKey(connection: Connection, bookmarkName: String): Long {
+    // this is essentially MD5 hash and throwing away 1st half of result
+    private fun createKey(bookmarkName: String): Long {
         return UUID.nameUUIDFromBytes(bookmarkName.toByteArray()).leastSignificantBits
     }
 }

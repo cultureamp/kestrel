@@ -43,7 +43,7 @@ class BatchedAsyncEventProcessor<M : EventMetadata>(
     },
     private val upcasting: Boolean = true,
     private val stats: StatisticsCollector? = null,
-    private val batchLockAcquisition: (bookmarkName: String) -> Unit = {},
+    private val lockBookmark: (bookmarkName: String) -> Unit = {},
 ) : AsyncEventProcessor<M> {
 
     constructor(
@@ -67,7 +67,7 @@ class BatchedAsyncEventProcessor<M : EventMetadata>(
     )
 
     fun processOneBatch(): Action {
-        batchLockAcquisition(bookmarkName)
+        lockBookmark(bookmarkName)
         val startBookmark = bookmarkStore.bookmarkFor(bookmarkName)
 
         startLog(startBookmark)
