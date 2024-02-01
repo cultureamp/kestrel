@@ -43,7 +43,6 @@ class BatchedAsyncEventProcessor<M : EventMetadata>(
     },
     private val upcasting: Boolean = true,
     private val stats: StatisticsCollector? = null,
-    private val lockBookmark: (bookmarkName: String) -> Unit = {},
 ) : AsyncEventProcessor<M> {
 
     constructor(
@@ -67,8 +66,14 @@ class BatchedAsyncEventProcessor<M : EventMetadata>(
     )
 
     fun processOneBatch(): Action {
-        lockBookmark(bookmarkName)
-        val startBookmark = bookmarkStore.bookmarkFor(bookmarkName)
+        val startBookmark = bookmarkStore.checkoutBookmark(bookmarkName).let {
+            if (it is Left<LockNotObtained>)
+                // try again shortly
+                // TODO should we log this?
+                return Action.Wait
+            else
+                (it as Right).value
+        }
 
         startLog(startBookmark)
 

@@ -71,6 +71,7 @@ fun bookmarkStoreCountingUpFrom(sequence: Long, allowedBookmarkNames: Set<String
     }
     override fun bookmarksFor(bookmarkNames: Set<String>) = bookmarkNames.map { bookmarkFor(it) }.toSet()
     override fun save(bookmark: Bookmark) = fail("Should not be called")
+    override fun checkoutBookmark(bookmarkName: String): Either<LockNotObtained, Bookmark> = Right(bookmarkFor(bookmarkName))
 }
 
 fun eventProcessorFor(name: String, eventClasses: List<KClass<out DomainEvent>>, bookmarkStore: BookmarkStore) = BookmarkedEventProcessor.from(

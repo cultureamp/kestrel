@@ -3,16 +3,37 @@ package com.cultureamp.eventsourcing
 import org.jetbrains.exposed.sql.*
 import org.jetbrains.exposed.sql.jodatime.datetime
 import org.jetbrains.exposed.sql.transactions.transaction
+import org.jetbrains.exposed.sql.vendors.PostgreSQLDialect
 import org.joda.time.DateTime
+import java.io.Closeable
+import java.sql.Connection
 
 interface BookmarkStore {
     fun bookmarkFor(bookmarkName: String): Bookmark
     fun bookmarksFor(bookmarkNames: Set<String>): Set<Bookmark>
     fun save(bookmark: Bookmark)
+
+    /**
+     * Finds the bookmark given by bookmarkName and attempts to lock it.
+     * If lock is obtained (or retained) the bookmark is returned, otherwise LockNotObtained
+     */
+    fun checkoutBookmark(bookmarkName: String): Either<LockNotObtained, Bookmark>
 }
 
-class RelationalDatabaseBookmarkStore(val db: Database, val table: Bookmarks = Bookmarks()) : BookmarkStore {
+class RelationalDatabaseBookmarkStore(
+    val db: Database,
+    val table: Bookmarks = Bookmarks(),
+    private val bookmarkLock: BookmarkLock = if (db.dialect is PostgreSQLDialect) createPGSessionLock(db) else NoOpBookmarkLock
+) : BookmarkStore {
     override fun bookmarkFor(bookmarkName: String): Bookmark = bookmarksFor(setOf(bookmarkName)).first()
+
+    override fun checkoutBookmark(bookmarkName: String): Either<LockNotObtained, Bookmark> =
+        bookmarkFor(bookmarkName).let {
+            if (bookmarkLock.tryLock(it))
+                Right(it)
+            else
+                Left(LockNotObtained)
+        }
 
     override fun bookmarksFor(bookmarkNames: Set<String>): Set<Bookmark> = transaction(db) {
         val matchingRows = rowsForBookmarks(bookmarkNames)
@@ -47,17 +68,9 @@ class RelationalDatabaseBookmarkStore(val db: Database, val table: Bookmarks = B
     private fun isExists(bookmarkName: String) = !rowsForBookmarks(setOf(bookmarkName)).empty()
 }
 
-class CachingBookmarkStore(private val delegate: BookmarkStore) : BookmarkStore {
-    private val cache = HashMap<String, Bookmark>()
-    override fun bookmarkFor(bookmarkName: String): Bookmark {
-        return cache[bookmarkName] ?: delegate.bookmarkFor(bookmarkName).apply { cache[bookmarkName] = this }
-    }
-
-    override fun bookmarksFor(bookmarkNames: Set<String>) = bookmarkNames.map { bookmarkFor(it) }.toSet()
-
-    override fun save(bookmark: Bookmark) {
-        cache[bookmark.name] = bookmark
-        delegate.save(bookmark)
+private fun createPGSessionLock(db: Database) = PGSessionAdvisoryBookmarkLock {
+    db.connector().connection.let {
+        it as? Connection ?: throw RuntimeException("Got a connection of an unknown type: $it")
     }
 }
 
@@ -71,3 +84,17 @@ class Bookmarks(tableName: String = "bookmarks") : Table(tableName) {
 
 data class Bookmark(val name: String, val sequence: Long)
 
+interface BookmarkLock : Closeable {
+    /**
+     * Attempts to acquire the lock for this bookmark.
+     * @return true If the lock is now held (whether it was freshly obtained or not), false otherwise
+     */
+    fun tryLock(bookmark: Bookmark): Boolean
+}
+
+object NoOpBookmarkLock: BookmarkLock {
+    override fun tryLock(bookmark: Bookmark) = true
+    override fun close() = Unit
+}
+
+object LockNotObtained

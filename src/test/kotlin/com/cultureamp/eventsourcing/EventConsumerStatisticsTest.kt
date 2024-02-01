@@ -48,7 +48,7 @@ class EventConsumerStatisticsTest : DescribeSpec({
     transaction {
         SchemaUtils.createMissingTablesAndColumns(table)
     }
-    val bookmarkStore = CachingBookmarkStore(RelationalDatabaseBookmarkStore(db, table))
+    val bookmarkStore = RelationalDatabaseBookmarkStore(db, table)
     val accountId = UUID.randomUUID()
 
     describe("Confirming statistics collectors are called") {
