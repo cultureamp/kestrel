@@ -2,13 +2,14 @@ package com.cultureamp.eventsourcing
 
 import org.slf4j.LoggerFactory
 import java.sql.Connection
+import java.sql.SQLException
 import java.util.UUID
 
 private val logger = LoggerFactory.getLogger(PGSessionAdvisoryBookmarkLock::class.java)
 class PGSessionAdvisoryBookmarkLock(
     private val connectionProvider: () -> Connection,
 ) : BookmarkLock {
-    private val lock = Any()
+    private val mutex = Any()
     internal var connection = getConnection()
     /**
      * The set of bookmarks that we believe we hold. Note that this is only for diagnostic purposes,
@@ -18,10 +19,10 @@ class PGSessionAdvisoryBookmarkLock(
     private var locksHeld = mutableSetOf<String>()
 
     override fun tryLock(bookmark: Bookmark): Boolean {
-        synchronized(lock) {
+        synchronized(mutex) {
             try {
                 return refreshLock(connection, bookmark.name)
-            } catch (e: Exception) {
+            } catch (e: SQLException) {
                 logger.info("Failed to refresh session lock for ${bookmark.name}, resetting connection to try again", e)
                 close()
                 connection = getConnection()
@@ -31,10 +32,14 @@ class PGSessionAdvisoryBookmarkLock(
     }
 
     override fun close() {
-        try {
-            connection.close()
-        } catch (_: Exception) {}
-        locksHeld.clear()
+        synchronized(mutex) {
+            try {
+                connection.close()
+            } catch (_: SQLException) {
+                // ignore
+            }
+            locksHeld.clear()
+        }
     }
 
     private fun getConnection(): Connection {
