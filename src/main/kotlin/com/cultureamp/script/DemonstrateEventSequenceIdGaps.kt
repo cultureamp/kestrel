@@ -137,6 +137,7 @@ fun main(args: Array<String>) {
                 val result = commandGateway.dispatch(CreateSimpleThing(UUID.randomUUID()), EventMetadata())
                 when (result) {
                     is Left -> throw RuntimeException(result.error.toString())
+                    else -> {}
                 }
             }
         }

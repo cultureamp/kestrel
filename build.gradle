@@ -28,12 +28,12 @@ sourceSets {
 
 
 task javadocJar(type: Jar) {
-    classifier = 'javadoc'
+    archiveClassifier = 'javadoc'
     from javadoc
 }
 
 task sourcesJar(type: Jar) {
-    classifier = 'sources'
+    archiveClassifier = 'sources'
     from sourceSets.main.allSource
 }
 
@@ -155,6 +155,7 @@ dependencies {
     implementation "org.jetbrains.exposed:exposed-core:$exposed_version"
     implementation "org.jetbrains.exposed:exposed-jdbc:$exposed_version"
     implementation "org.jetbrains.exposed:exposed-jodatime:$exposed_version"
+    implementation "org.jetbrains.exposed:exposed-json:$exposed_version"
     implementation "io.github.microutils:kotlin-logging:2.0.11"
     testImplementation "org.postgresql:postgresql:42.2.23"
     testImplementation 'org.testcontainers:postgresql:1.19.4'
