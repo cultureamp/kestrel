@@ -1,6 +1,7 @@
 package com.cultureamp.eventsourcing
 
 import com.fasterxml.jackson.core.JsonProcessingException
+import com.fasterxml.jackson.core.type.TypeReference
 import com.fasterxml.jackson.databind.ObjectMapper
 import com.fasterxml.jackson.databind.PropertyNamingStrategies
 import com.fasterxml.jackson.databind.SerializationFeature.WRITE_DATES_AS_TIMESTAMPS
@@ -18,6 +19,7 @@ import org.jetbrains.exposed.sql.Transaction
 import org.jetbrains.exposed.sql.and
 import org.jetbrains.exposed.sql.insert
 import org.jetbrains.exposed.sql.jodatime.datetime
+import org.jetbrains.exposed.sql.json.jsonb
 import org.jetbrains.exposed.sql.max
 import org.jetbrains.exposed.sql.replace
 import org.jetbrains.exposed.sql.select
@@ -41,14 +43,13 @@ val defaultEventTypeResolver = CanonicalNameEventTypeResolver
 
 class RelationalDatabaseEventStore<M : EventMetadata> @PublishedApi internal constructor(
     private val db: Database,
-    private val events: Events,
+    internal val events: Events<M>,
     private val eventsSequenceStats: EventsSequenceStats,
-    private val metadataClass: Class<M>,
     private val objectMapper: ObjectMapper,
     private val eventTypeResolver: EventTypeResolver,
     private val blockingLockUntilTransactionEnd: Transaction.() -> CommandError? = { null },
     private val afterSinkHook: (List<SequencedEvent<M>>) -> Unit = { },
-    private val eventsSinkTable: Events = events,
+    internal val eventsSinkTable: Events<M> = events,
 ) : EventStore<M> {
 
     companion object {
@@ -106,10 +107,8 @@ class RelationalDatabaseEventStore<M : EventMetadata> @PublishedApi internal con
             transaction(db) {
                 blockingLockUntilTransactionEnd()?.let { Left(it) } ?: run {
                     newEvents.map { event ->
-                        val body = objectMapper.writeValueAsString(event.domainEvent)
+                        val body: Map<String, Any> = objectMapper.convertValue(event.domainEvent, object : TypeReference<Map<String, Any>>() {})
                         val domainEventClass = event.domainEvent.javaClass
-                        val metadata = objectMapper.writeValueAsString(event.metadata)
-                        validateSerialization(domainEventClass, body, metadata)
                         val eventType = eventTypeResolver.serialize(domainEventClass)
                         val insertResult = eventsSinkTable.insert { row ->
                             row[eventsSinkTable.aggregateSequence] = event.aggregateSequence
@@ -119,7 +118,7 @@ class RelationalDatabaseEventStore<M : EventMetadata> @PublishedApi internal con
                             row[eventsSinkTable.eventType] = eventType
                             row[eventsSinkTable.createdAt] = event.createdAt
                             row[eventsSinkTable.body] = body
-                            row[eventsSinkTable.metadata] = metadata
+                            row[eventsSinkTable.metadata] = event.metadata
                         }
                         val dryRunMode = (events != eventsSinkTable)
                         if (dryRunMode) {
@@ -148,25 +147,10 @@ class RelationalDatabaseEventStore<M : EventMetadata> @PublishedApi internal con
         }
     }
 
-    private fun validateSerialization(domainEventClass: Class<DomainEvent>, body: String, metadata: String) {
-        // prove that json body can be deserialized, which catches invalid fields types, e.g. interfaces
-        try {
-            objectMapper.readValue(body, domainEventClass)
-        } catch (e: JsonProcessingException) {
-            throw EventBodySerializationException(e)
-        }
-
-        try {
-            objectMapper.readValue(metadata, metadataClass)
-        } catch (e: JsonProcessingException) {
-            throw EventMetadataSerializationException(e)
-        }
-    }
-
     private fun rowToSequencedEvent(row: ResultRow): SequencedEvent<M> = row.let {
         val eventType = eventTypeResolver.deserialize(row[events.aggregateType], row[events.eventType])
-        val domainEvent = objectMapper.readValue(row[events.body], eventType)
-        val metadata = objectMapper.readValue(row[events.metadata], metadataClass)
+        val domainEvent = objectMapper.convertValue(row[events.body], eventType)
+        val metadata = row[events.metadata]
 
         SequencedEvent(
             Event(
@@ -225,9 +209,7 @@ class RelationalDatabaseEventStore<M : EventMetadata> @PublishedApi internal con
     }
 }
 
-open class EventDataException(e: Exception) : Throwable(e)
-class EventBodySerializationException(e: Exception) : EventDataException(e)
-class EventMetadataSerializationException(e: Exception) : EventDataException(e)
+class EventDataException(e: Exception) : Throwable(e)
 
 object PostgresDatabaseEventStore {
     @PublishedApi
@@ -240,7 +222,16 @@ object PostgresDatabaseEventStore {
         noinline afterSinkHook: (List<SequencedEvent<M>>) -> Unit,
         eventsSinkTableName: String,
     ): RelationalDatabaseEventStore<M> {
-        return RelationalDatabaseEventStore(db, Events(tableName, Table::jsonb), EventsSequenceStats(eventsSequenceStateTableName), M::class.java, objectMapper, eventTypeResolver, Transaction::pgAdvisoryXactLock, afterSinkHook, Events(eventsSinkTableName, Table::jsonb), )
+        return RelationalDatabaseEventStore(
+            db,
+            Events(tableName, objectMapper, object : TypeReference<M>() {}),
+            EventsSequenceStats(eventsSequenceStateTableName),
+            objectMapper,
+            eventTypeResolver,
+            Transaction::pgAdvisoryXactLock,
+            afterSinkHook,
+            Events(eventsSinkTableName, objectMapper, object : TypeReference<M>() {}),
+        )
     }
 }
 
@@ -256,11 +247,16 @@ object H2DatabaseEventStore {
         noinline afterSinkHook: (List<SequencedEvent<M>>) -> Unit,
         eventsSinkTableName: String,
     ): RelationalDatabaseEventStore<M> {
-        return RelationalDatabaseEventStore(db, eventsTable(tableName), EventsSequenceStats(eventsSequenceStateTableName), M::class.java, objectMapper, eventTypeResolver, afterSinkHook = afterSinkHook, eventsSinkTable = Events(eventsSinkTableName, Table::jsonb), )
+        return RelationalDatabaseEventStore(
+            db,
+            Events(tableName, objectMapper, object : TypeReference<M>() {}),
+            EventsSequenceStats(eventsSequenceStateTableName),
+            objectMapper,
+            eventTypeResolver,
+            afterSinkHook = afterSinkHook,
+            eventsSinkTable = Events(eventsSinkTableName, objectMapper, object : TypeReference<M>() {}),
+        )
     }
-
-    @PublishedApi
-    internal fun eventsTable(tableName: String = defaultEventsTableName) = Events(tableName) { name -> this.text(name) }
 }
 
 internal fun <T> String.asClass(): Class<out T>? {
@@ -268,8 +264,9 @@ internal fun <T> String.asClass(): Class<out T>? {
     return Class.forName(this) as Class<out T>?
 }
 
-class Events(tableName: String = defaultEventsTableName, jsonb: Table.(String) -> Column<String> = Table::jsonb) :
-    Table(tableName) {
+class Events<M : EventMetadata>(tableName: String = defaultEventsTableName, private val objectMapper: ObjectMapper, metadataType: TypeReference<M>) : Table(tableName) {
+    private val mapType = object : TypeReference<Map<String, Any>>() {}
+
     val sequence = long("sequence").autoIncrement()
     val eventId = uuid("id")
     val aggregateSequence = long("aggregate_sequence")
@@ -277,14 +274,29 @@ class Events(tableName: String = defaultEventsTableName, jsonb: Table.(String) -
     val aggregateType = varchar("aggregate_type", 128)
     val eventType = varchar("event_type", 256)
     val createdAt = datetime("created_at")
-    val body = jsonb("json_body")
-    val metadata = jsonb("metadata")
+    val body = jsonb("json_body", { validatedSerialize(it, mapType) }, { deserialize(it, mapType) })
+    val metadata = jsonb("metadata", { validatedSerialize(it, metadataType) }, { deserialize(it, metadataType) })
     override val primaryKey: PrimaryKey = PrimaryKey(sequence)
 
     init {
         uniqueIndex(eventId)
         uniqueIndex(aggregateId, aggregateSequence)
         nonUniqueIndex(eventType, aggregateType)
+    }
+
+    private fun <T> validatedSerialize(value: Any, type: TypeReference<T>): String {
+        val jsonString = objectMapper.writeValueAsString(value)
+        // prove that object can be deserialized, which catches invalid fields types, e.g. interfaces
+        deserialize(jsonString, type)
+        return jsonString
+    }
+
+    private fun <T> deserialize(jsonString: String?, type: TypeReference<T>): T {
+        return try {
+            objectMapper.readValue(jsonString, type)
+        } catch (e: JsonProcessingException) {
+            throw EventDataException(e)
+        }
     }
 }
 

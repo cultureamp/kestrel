@@ -16,7 +16,6 @@ import java.util.*
 
 class UpcastTest : DescribeSpec({
     val db = Database.connect(url = "jdbc:h2:mem:test;MODE=MySQL;DB_CLOSE_DELAY=-1;", driver = "org.h2.Driver")
-    val table = H2DatabaseEventStore.eventsTable()
     val eventsSequenceStatsTable = EventsSequenceStats()
     val eventStore = RelationalDatabaseEventStore.create<StandardEventMetadata>(db)
     val bookmarksTable = Bookmarks()
@@ -35,7 +34,7 @@ class UpcastTest : DescribeSpec({
     beforeTest {
         transaction(db) {
             addLogger(StdOutSqlLogger)
-            SchemaUtils.create(table)
+            SchemaUtils.create(eventStore.events)
             SchemaUtils.create(eventsSequenceStatsTable)
             SchemaUtils.create(bookmarksTable)
         }
@@ -45,7 +44,7 @@ class UpcastTest : DescribeSpec({
         transaction(db) {
             SchemaUtils.drop(bookmarksTable)
             SchemaUtils.drop(eventsSequenceStatsTable)
-            SchemaUtils.drop(table)
+            SchemaUtils.drop(eventStore.events)
         }
     }
 

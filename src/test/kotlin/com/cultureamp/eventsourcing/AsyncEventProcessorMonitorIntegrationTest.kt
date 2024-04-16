@@ -20,9 +20,6 @@ import java.util.UUID
 
 class AsyncEventProcessorMonitorIntegrationTest : DescribeSpec({
     val db = PgTestConfig.db ?: Database.connect(url = "jdbc:h2:mem:test;MODE=MySQL;DB_CLOSE_DELAY=-1;", driver = "org.h2.Driver")
-    val tableEvent = Events()
-    val tableH2 = H2DatabaseEventStore.eventsTable()
-    val table = if (PgTestConfig.db != null) tableEvent else tableH2
     val eventsSequenceStatsTable = EventsSequenceStats()
     val eventStore = RelationalDatabaseEventStore.create<StandardEventMetadata>(db)
     val bookmarksTable = Bookmarks()
@@ -48,7 +45,7 @@ class AsyncEventProcessorMonitorIntegrationTest : DescribeSpec({
     beforeTest {
         transaction(db) {
             addLogger(StdOutSqlLogger)
-            SchemaUtils.create(table)
+            SchemaUtils.create(eventStore.events)
             SchemaUtils.create(eventsSequenceStatsTable)
             SchemaUtils.create(bookmarksTable)
         }
@@ -58,7 +55,7 @@ class AsyncEventProcessorMonitorIntegrationTest : DescribeSpec({
         transaction(db) {
             SchemaUtils.drop(bookmarksTable)
             SchemaUtils.drop(eventsSequenceStatsTable)
-            SchemaUtils.drop(table)
+            SchemaUtils.drop(eventStore.events)
         }
     }
 

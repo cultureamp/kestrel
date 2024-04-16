@@ -22,11 +22,11 @@ class RelationalDatabaseEventStoreTest : DescribeSpec({
     val db = PgTestConfig.db ?: Database.connect(url = "jdbc:h2:mem:test;MODE=MySQL;DB_CLOSE_DELAY=-1;", driver = "org.h2.Driver")
     val tableName = "eventStore"
     val dryRunTableName = "eventStoreDryRun"
-    val table = if (PgTestConfig.db != null) Events(tableName) else H2DatabaseEventStore.eventsTable(tableName)
-    val dryRunTable = if (PgTestConfig.db != null) Events(dryRunTableName) else H2DatabaseEventStore.eventsTable(dryRunTableName)
     val eventsSequenceStats = EventsSequenceStats()
     val store = RelationalDatabaseEventStore.create<StandardEventMetadata>(db, eventsTableName = tableName)
     val dryRunStore = RelationalDatabaseEventStore.createDryRun<StandardEventMetadata>(db, eventsTableName = tableName, eventsSinkTableName = dryRunTableName)
+    val table = store.events
+    val dryRunTable = dryRunStore.eventsSinkTable
 
     beforeTest {
         transaction(db) {

@@ -63,10 +63,8 @@ import com.cultureamp.eventsourcing.example.Created as SurveyCreated
 
 class CommandGatewayIntegrationTest : DescribeSpec({
     val db = PgTestConfig.db ?: Database.connect(url = "jdbc:h2:mem:test;MODE=MySQL;DB_CLOSE_DELAY=-1;", driver = "org.h2.Driver")
-    val table = Events()
-    val tableH2 = H2DatabaseEventStore.eventsTable()
-    val eventsTable = if (PgTestConfig.db != null) table else tableH2
     val eventStore = RelationalDatabaseEventStore.create<StandardEventMetadata>(db)
+    val eventsTable = eventStore.events
     val publishedSkillId = UUID.randomUUID()
     val accountWithPublishedSkillsId = UUID.randomUUID()
     val publishedSkillsProjection = object : PublishedSkillsProjection {
