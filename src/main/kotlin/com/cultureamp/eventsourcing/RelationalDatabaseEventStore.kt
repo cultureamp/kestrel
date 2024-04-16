@@ -264,7 +264,7 @@ internal fun <T> String.asClass(): Class<out T>? {
     return Class.forName(this) as Class<out T>?
 }
 
-class Events<M : EventMetadata>(tableName: String = defaultEventsTableName, private val objectMapper: ObjectMapper, metadataType: TypeReference<M>) : Table(tableName) {
+class Events<M : EventMetadata>(tableName: String = defaultEventsTableName, private val objectMapper: ObjectMapper = defaultObjectMapper, metadataType: TypeReference<M>) : Table(tableName) {
     private val mapType = object : TypeReference<Map<String, Any>>() {}
 
     val sequence = long("sequence").autoIncrement()
