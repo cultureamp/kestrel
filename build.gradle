@@ -157,7 +157,7 @@ dependencies {
     implementation "org.jetbrains.exposed:exposed-jodatime:$exposed_version"
     implementation "org.jetbrains.exposed:exposed-json:$exposed_version"
     implementation "io.github.microutils:kotlin-logging:2.0.11"
-    testImplementation "org.postgresql:postgresql:42.2.23"
+    implementation "org.postgresql:postgresql:42.7.3" // needed for driver in DemonstrateEventSequenceIdGaps.kt
     testImplementation 'org.testcontainers:postgresql:1.19.4'
     testRuntimeOnly("org.slf4j:slf4j-simple:2.0.9") // so the tests print out logs
 }

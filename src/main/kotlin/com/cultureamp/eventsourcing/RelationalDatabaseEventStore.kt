@@ -19,9 +19,9 @@ import org.jetbrains.exposed.sql.and
 import org.jetbrains.exposed.sql.insert
 import org.jetbrains.exposed.sql.jodatime.datetime
 import org.jetbrains.exposed.sql.max
-import org.jetbrains.exposed.sql.replace
 import org.jetbrains.exposed.sql.select
 import org.jetbrains.exposed.sql.transactions.transaction
+import org.jetbrains.exposed.sql.upsert
 import org.jetbrains.exposed.sql.vendors.H2Dialect
 import org.jetbrains.exposed.sql.vendors.PostgreSQLDialect
 import java.sql.SQLException
@@ -126,7 +126,7 @@ class RelationalDatabaseEventStore<M : EventMetadata> @PublishedApi internal con
                             SequencedEvent(event, -1)
                         } else {
                             val insertedSequence = insertResult[eventsSinkTable.sequence]
-                            eventsSequenceStats.replace {
+                            eventsSequenceStats.upsert {
                                 it[eventsSequenceStats.eventType] = eventType
                                 it[eventsSequenceStats.sequence] = insertedSequence
                             }
