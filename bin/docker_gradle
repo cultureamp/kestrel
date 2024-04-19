@@ -6,7 +6,7 @@ set -u
 #   VERSION_SUFFIX
 BASE="$(pwd)"
 
-GRADLE_IMAGE="gradle:6.3-jdk8"
+GRADLE_IMAGE="gradle:jdk17"
 
 VERSION_SUFFIX="${VERSION_SUFFIX:-}"
 
@@ -21,6 +21,7 @@ docker run \
   --rm \
   --volume "$BASE:/home/gradle/src" \
   --volume "$BASE/build:/home/gradle/src/build" \
+  --volume /var/run/docker.sock:/var/run/docker.sock \
   --workdir /home/gradle/src \
   "$GRADLE_IMAGE" \
   gradle \
