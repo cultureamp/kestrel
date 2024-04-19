@@ -256,7 +256,7 @@ object H2DatabaseEventStore {
         noinline afterSinkHook: (List<SequencedEvent<M>>) -> Unit,
         eventsSinkTableName: String,
     ): RelationalDatabaseEventStore<M> {
-        return RelationalDatabaseEventStore(db, eventsTable(tableName), EventsSequenceStats(eventsSequenceStateTableName), M::class.java, objectMapper, eventTypeResolver, afterSinkHook = afterSinkHook, eventsSinkTable = Events(eventsSinkTableName, Table::jsonb), )
+        return RelationalDatabaseEventStore(db, eventsTable(tableName), EventsSequenceStats(eventsSequenceStateTableName), M::class.java, objectMapper, eventTypeResolver, afterSinkHook = afterSinkHook, eventsSinkTable = eventsTable(eventsSinkTableName))
     }
 
     @PublishedApi
