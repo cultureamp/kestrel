@@ -6,7 +6,7 @@ set -u
 #   VERSION_SUFFIX
 BASE="$(pwd)"
 
-GRADLE_IMAGE="gradle:8.7-jdk8"
+GRADLE_IMAGE="gradle:jdk17"
 
 VERSION_SUFFIX="${VERSION_SUFFIX:-}"
 
