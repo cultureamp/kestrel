@@ -1,0 +1,8 @@
+#!/bin/bash
+
+if [[ "${BUILDKITE_BRANCH}" == "main" ]]; then
+    build_agent="build-restricted"
+else
+    build_agent="build-unrestricted"
+fi
+export BUILD_AGENT="${build_agent}"

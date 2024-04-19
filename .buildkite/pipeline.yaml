@@ -4,4 +4,4 @@ steps:
     branches: "*"
     command: bin/ci_build
     agents:
-      queue: build-restricted
+      queue: $BUILD_AGENT
