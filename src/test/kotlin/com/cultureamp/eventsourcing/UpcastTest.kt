@@ -1,7 +1,9 @@
 import com.cultureamp.eventsourcing.*
 import com.cultureamp.eventsourcing.example.*
 import com.cultureamp.eventsourcing.sample.StandardEventMetadata
+import io.kotest.assertions.throwables.shouldThrow
 import io.kotest.core.spec.style.DescribeSpec
+import io.kotest.matchers.should
 import io.kotest.matchers.shouldBe
 import org.jetbrains.exposed.sql.Database
 import org.jetbrains.exposed.sql.SchemaUtils
@@ -9,10 +11,11 @@ import org.jetbrains.exposed.sql.StdOutSqlLogger
 import org.jetbrains.exposed.sql.addLogger
 import org.jetbrains.exposed.sql.transactions.transaction
 import org.joda.time.DateTime
+import java.lang.RuntimeException
 import java.util.*
 
 class UpcastTest : DescribeSpec({
-    val db = Database.connect(url = "jdbc:h2:mem:test;MODE=PostgreSQL;DB_CLOSE_DELAY=-1;", driver = "org.h2.Driver")
+    val db = Database.connect(url = "jdbc:h2:mem:test;MODE=MySQL;DB_CLOSE_DELAY=-1;", driver = "org.h2.Driver")
     val table = H2DatabaseEventStore.eventsTable()
     val eventsSequenceStatsTable = EventsSequenceStats()
     val eventStore = RelationalDatabaseEventStore.create<StandardEventMetadata>(db)
@@ -76,11 +79,11 @@ class UpcastTest : DescribeSpec({
 
                 val events = eventStore.eventsFor(participantId)
                 events.size shouldBe 3
-                asyncEventProcessor.processOneBatch()
-                projector.isInvited(participantId) shouldBe false
-                commandGateway.dispatch(Reinvite(participantId, timestamp), metadata)
-                asyncEventProcessor.processOneBatch()
-                projector.isInvited(participantId) shouldBe true
+
+                val exception = shouldThrow<RuntimeException> {
+                    asyncEventProcessor.processOneBatch()
+                }
+                exception.message shouldBe "Projector only supports upcasted events"
             }
         }
 

@@ -1,9 +1,9 @@
 package com.cultureamp.eventsourcing.example
 
 import com.cultureamp.eventsourcing.DomainEventProcessor
-import com.cultureamp.eventsourcing.EventProcessor
 import org.jetbrains.exposed.sql.Database
 import org.jetbrains.exposed.sql.SchemaUtils
+import org.jetbrains.exposed.sql.SqlExpressionBuilder.eq
 import org.jetbrains.exposed.sql.Table
 import org.jetbrains.exposed.sql.deleteWhere
 import org.jetbrains.exposed.sql.insert
@@ -11,7 +11,7 @@ import org.jetbrains.exposed.sql.transactions.transaction
 import org.jetbrains.exposed.sql.update
 import java.util.*
 
-class SurveyNamesCommandProjector(private val database: Database): DomainEventProcessor<SurveyEvent> {
+class SurveyNamesCommandProjector(private val database: Database) : DomainEventProcessor<SurveyEvent> {
     override fun process(event: SurveyEvent, aggregateId: UUID): Unit = transaction(database) {
         when (event) {
             is Created -> event.name.forEach { locale, name ->
@@ -22,13 +22,16 @@ class SurveyNamesCommandProjector(private val database: Database): DomainEventPr
                     it[SurveyNames.name] = name
                 }
             }
+
             is Renamed ->
                 SurveyNames.update({ SurveyNames.surveyId eq aggregateId }) {
                     it[locale] = event.locale
                     it[name] = event.name
                 }
+
             is Deleted ->
                 SurveyNames.deleteWhere { SurveyNames.surveyId eq aggregateId }
+
             is Restored -> Unit
         }
     }
@@ -43,6 +46,6 @@ class SurveyNamesCommandProjector(private val database: Database): DomainEventPr
 object SurveyNames : Table() {
     val surveyId = uuid("survey_id")
     val accountId = uuid("account_id")
-    val locale = enumerationByName("locale",  10, Locale::class)
+    val locale = enumerationByName("locale", 10, Locale::class)
     val name = text("name").index()
 }

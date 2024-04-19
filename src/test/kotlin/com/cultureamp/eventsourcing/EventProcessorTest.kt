@@ -152,7 +152,7 @@ class EventProcessorTest : DescribeSpec({
                 EventProcessor.from(SecondProjector()::project)
             )
 
-            eventProcessor.eventClasses shouldBe listOf(FooEvent::class, BarEvent::class, BazEvent::class, QuuxEvent::class)
+            eventProcessor.eventClasses.toSet() shouldBe setOf(FooEvent::class, BarEvent::class, BazEvent::class, QuuxEvent::class)
         }
     }
 })

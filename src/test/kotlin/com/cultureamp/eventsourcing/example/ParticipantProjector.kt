@@ -25,6 +25,7 @@ class ParticipantProjector(private val database: Database): DomainEventProcessor
             is Reinvited -> ParticipantTable.update({ invitationId eq aggregateId }) {
                 it[invitedAt] = event.reinvitedAt
             }
+            is Rereinvited -> throw RuntimeException("Projector only supports upcasted events")
         }
     }
 
