@@ -13,6 +13,7 @@ import io.kotest.core.spec.style.DescribeSpec
 import io.kotest.matchers.shouldBe
 import org.jetbrains.exposed.sql.Database
 import org.jetbrains.exposed.sql.SchemaUtils
+import org.jetbrains.exposed.sql.Table
 import org.jetbrains.exposed.sql.selectAll
 import org.jetbrains.exposed.sql.transactions.transaction
 import org.joda.time.DateTime
@@ -20,27 +21,20 @@ import java.util.UUID
 
 class RelationalDatabaseEventStoreTest : DescribeSpec({
     val db = PgTestConfig.db ?: Database.connect(url = "jdbc:h2:mem:test;MODE=MySQL;DB_CLOSE_DELAY=-1;", driver = "org.h2.Driver")
-    val tableName = "eventStore"
-    val dryRunTableName = "eventStoreDryRun"
-    val table = if (PgTestConfig.db != null) Events(tableName) else H2DatabaseEventStore.eventsTable(tableName)
-    val dryRunTable = if (PgTestConfig.db != null) Events(dryRunTableName) else H2DatabaseEventStore.eventsTable(dryRunTableName)
-    val eventsSequenceStats = EventsSequenceStats()
-    val store = RelationalDatabaseEventStore.create<StandardEventMetadata>(db, eventsTableName = tableName)
-    val dryRunStore = RelationalDatabaseEventStore.createDryRun<StandardEventMetadata>(db, eventsTableName = tableName, eventsSinkTableName = dryRunTableName)
+    val eventsSequenceStats = RelationalDatabaseEventsSequenceStats(db)
+    val store = RelationalDatabaseEventStore.create<StandardEventMetadata>(db, eventsSequenceStats = eventsSequenceStats)
 
     beforeTest {
         transaction(db) {
-            SchemaUtils.create(table)
-            SchemaUtils.create(dryRunTable)
-            SchemaUtils.create(eventsSequenceStats)
+            SchemaUtils.create(store.events)
+            SchemaUtils.create(eventsSequenceStats.table)
         }
     }
 
     afterTest {
         transaction(db) {
-            SchemaUtils.drop(table)
-            SchemaUtils.drop(dryRunTable)
-            SchemaUtils.drop(eventsSequenceStats)
+            SchemaUtils.drop(store.events)
+            SchemaUtils.drop(eventsSequenceStats.table)
         }
     }
 
@@ -95,26 +89,12 @@ class RelationalDatabaseEventStoreTest : DescribeSpec({
                 event(PizzaToppingAdded(CHEESE), aggregateId, 2, StandardEventMetadata(firstAccountId)),
             )
 
-            store.lastSequence() shouldBe 0
+            eventsSequenceStats.lastSequence() shouldBe 0
             store.sink(events, aggregateId) shouldBe Right(3L)
-            store.lastSequence() shouldBe 3
-            store.lastSequence(listOf(PizzaCreated::class)) shouldBe 1
-            store.lastSequence(listOf(PizzaEaten::class)) shouldBe 2
-            store.lastSequence(listOf(PizzaCreated::class, PizzaEaten::class)) shouldBe 2
-        }
-
-        it("Doesn't store events in the main table when in dry run mode") {
-            val aggregateId = UUID.randomUUID()
-            val events = listOf(
-                event(PizzaCreated(MARGHERITA, listOf(TOMATO_PASTE)), aggregateId, 1, StandardEventMetadata(firstAccountId)),
-                event(PizzaEaten(), aggregateId, 3, StandardEventMetadata(firstAccountId)),
-                event(PizzaToppingAdded(CHEESE), aggregateId, 2, StandardEventMetadata(firstAccountId))
-            )
-
-            dryRunStore.lastSequence() shouldBe 0
-            dryRunStore.sink(events, aggregateId) shouldBe Right(-1L)
-            dryRunStore.lastSequence() shouldBe 0
-            dryRunStore.getAfter(0) shouldBe emptyList()
+            eventsSequenceStats.lastSequence() shouldBe 3
+            eventsSequenceStats.lastSequence(listOf(PizzaCreated::class)) shouldBe 1
+            eventsSequenceStats.lastSequence(listOf(PizzaEaten::class)) shouldBe 2
+            eventsSequenceStats.lastSequence(listOf(PizzaCreated::class, PizzaEaten::class)) shouldBe 2
         }
 
         it("gets the concurrency error from the sink") {
@@ -152,7 +132,7 @@ class RelationalDatabaseEventStoreTest : DescribeSpec({
                 capturedEvents.addAll(it)
             }
 
-            val storeWithAfterSinkHook = RelationalDatabaseEventStore.create(db, eventsTableName = tableName, afterSinkHook = afterSinkHook)
+            val storeWithAfterSinkHook = RelationalDatabaseEventStore.create(db, afterSinkHook = afterSinkHook)
 
             storeWithAfterSinkHook.sink(listOf(fooEvent, barEvent), UUID.randomUUID())
 
@@ -176,7 +156,7 @@ class RelationalDatabaseEventStoreTest : DescribeSpec({
             val alwaysFailsAfterSinkHook: (List<SequencedEvent<SpecificMetadata>>) -> Unit = {
                 throw IllegalStateException("expected")
             }
-            val storeWithAfterSinkHook = RelationalDatabaseEventStore.create(db, eventsTableName = tableName, afterSinkHook = alwaysFailsAfterSinkHook)
+            val storeWithAfterSinkHook = RelationalDatabaseEventStore.create(db, afterSinkHook = alwaysFailsAfterSinkHook)
             val exception = shouldThrow<IllegalStateException> {
                 storeWithAfterSinkHook.sink(listOf(fooEvent), fooEvent.aggregateId)
             }
@@ -191,6 +171,7 @@ class RelationalDatabaseEventStoreTest : DescribeSpec({
                 override fun deserialize(aggregateType: String, eventType: String) = eventType.substringAfter("custom.").asClass<DomainEvent>()!!
             }
             val customStore = RelationalDatabaseEventStore.create<StandardEventMetadata>(db, eventsTableName = "eventStore", eventTypeResolver = customEventTypeResolver)
+            customStore.createSchemaIfNotExists()
             val aggregateId = UUID.randomUUID()
             val pizzaCreatedDomainEvent = PizzaCreated(MARGHERITA, listOf(TOMATO_PASTE, BASIL, CHEESE))
             val pizzaCreatedEvent = event(
@@ -205,7 +186,7 @@ class RelationalDatabaseEventStoreTest : DescribeSpec({
             customStore.eventsFor(aggregateId) shouldBe events
 
             transaction(db) {
-                table.selectAll().map { it[table.eventType] shouldBe "custom.com.cultureamp.eventsourcing.sample.PizzaCreated" }
+                store.events.selectAll().map { it[store.events.eventType] shouldBe "custom.com.cultureamp.eventsourcing.sample.PizzaCreated" }
             }
         }
     }

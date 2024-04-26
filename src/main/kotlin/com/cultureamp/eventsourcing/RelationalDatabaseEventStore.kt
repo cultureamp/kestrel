@@ -18,10 +18,8 @@ import org.jetbrains.exposed.sql.Transaction
 import org.jetbrains.exposed.sql.and
 import org.jetbrains.exposed.sql.insert
 import org.jetbrains.exposed.sql.jodatime.datetime
-import org.jetbrains.exposed.sql.max
 import org.jetbrains.exposed.sql.select
 import org.jetbrains.exposed.sql.transactions.transaction
-import org.jetbrains.exposed.sql.upsert
 import org.jetbrains.exposed.sql.vendors.H2Dialect
 import org.jetbrains.exposed.sql.vendors.PostgreSQLDialect
 import java.sql.SQLException
@@ -35,14 +33,12 @@ val defaultObjectMapper = ObjectMapper()
     .setPropertyNamingStrategy(PropertyNamingStrategies.SNAKE_CASE)
 
 val defaultEventsTableName = "events"
-val defaultEventsSinkTableName = "events_dry_run_sink"
-val defaultEventsSequenceStatsTableName = "events_sequence_stats"
 val defaultEventTypeResolver = CanonicalNameEventTypeResolver
 
 class RelationalDatabaseEventStore<M : EventMetadata> @PublishedApi internal constructor(
     private val db: Database,
-    private val events: Events,
-    private val eventsSequenceStats: EventsSequenceStats,
+    val events: Events,
+    private val eventsSequenceStats: EventsSequenceStats?,
     private val metadataClass: Class<M>,
     private val objectMapper: ObjectMapper,
     private val eventTypeResolver: EventTypeResolver,
@@ -56,48 +52,27 @@ class RelationalDatabaseEventStore<M : EventMetadata> @PublishedApi internal con
             db: Database,
             objectMapper: ObjectMapper = defaultObjectMapper,
             eventsTableName: String = defaultEventsTableName,
-            eventsSequenceStateTableName: String = defaultEventsSequenceStatsTableName,
-            eventTypeResolver: EventTypeResolver = defaultEventTypeResolver,
             noinline afterSinkHook: (List<SequencedEvent<M>>) -> Unit = { },
-            eventsSinkTableName: String = eventsTableName,
-        ): RelationalDatabaseEventStore<M> =
-            when (db.dialect) {
-                is H2Dialect -> H2DatabaseEventStore.create(
-                    db,
-                    objectMapper,
-                    eventsTableName,
-                    eventsSequenceStateTableName,
-                    eventTypeResolver,
-                    afterSinkHook,
-                    eventsSinkTableName
-                )
-
-                is PostgreSQLDialect -> PostgresDatabaseEventStore.create(
-                    db,
-                    objectMapper,
-                    eventsTableName,
-                    eventsSequenceStateTableName,
-                    eventTypeResolver,
-                    afterSinkHook,
-                    eventsSinkTableName
-                )
-
+            eventTypeResolver: EventTypeResolver = defaultEventTypeResolver,
+            eventsSequenceStats: EventsSequenceStats? = RelationalDatabaseEventsSequenceStats(db, eventTypeResolver, defaultEventsSequenceStatsTableName).also { it.createSchemaIfNotExists() },
+        ): RelationalDatabaseEventStore<M> {
+            val jsonb: Table.(String) -> Column<String> = when (db.dialect) {
+                is H2Dialect -> Table::text
+                is PostgreSQLDialect -> Table::jsonb
                 else -> throw UnsupportedOperationException("${db.dialect} not currently supported")
             }
-        inline fun <reified M : EventMetadata> createDryRun(
-            db: Database,
-            objectMapper: ObjectMapper = defaultObjectMapper,
-            eventsTableName: String = defaultEventsTableName,
-            eventsSinkTableName: String = defaultEventsSinkTableName,
-            eventsSequenceStateTableName: String = defaultEventsSequenceStatsTableName,
-            eventTypeResolver: EventTypeResolver = defaultEventTypeResolver
-        ) =
-            create<M>(db, objectMapper, eventsTableName, eventsSequenceStateTableName, eventTypeResolver, {}, eventsSinkTableName)
+            val blockingLockUntilTransactionEnd: Transaction.() -> CommandError? = when (db.dialect) {
+                is H2Dialect -> { { null } }
+                is PostgreSQLDialect -> Transaction::pgAdvisoryXactLock
+                else -> throw UnsupportedOperationException("${db.dialect} not currently supported")
+            }
+            return RelationalDatabaseEventStore(db, Events(eventsTableName, jsonb), eventsSequenceStats, M::class.java, objectMapper, eventTypeResolver, blockingLockUntilTransactionEnd, afterSinkHook)
+        }
     }
 
     fun createSchemaIfNotExists() {
         transaction(db) {
-            SchemaUtils.create(events, eventsSequenceStats, eventsSinkTable)
+            SchemaUtils.create(events, eventsSinkTable)
         }
     }
 
@@ -126,10 +101,7 @@ class RelationalDatabaseEventStore<M : EventMetadata> @PublishedApi internal con
                             SequencedEvent(event, -1)
                         } else {
                             val insertedSequence = insertResult[eventsSinkTable.sequence]
-                            eventsSequenceStats.upsert {
-                                it[eventsSequenceStats.eventType] = eventType
-                                it[eventsSequenceStats.sequence] = insertedSequence
-                            }
+                            eventsSequenceStats?.update(eventType, insertedSequence)
                             SequencedEvent(event, insertedSequence)
                         }
                     }.let { Right(it) }
@@ -208,60 +180,11 @@ class RelationalDatabaseEventStore<M : EventMetadata> @PublishedApi internal con
                 .map { it.event }
         }
     }
-
-    override fun lastSequence(eventClasses: List<KClass<out DomainEvent>>): Long = transaction(db) {
-        val maxSequence = eventsSequenceStats.sequence.max()
-        eventsSequenceStats
-            .slice(maxSequence)
-            .select {
-                if (eventClasses.isNotEmpty()) {
-                    eventsSequenceStats.eventType.inList(eventClasses.map { eventTypeResolver.serialize(it.java) })
-                } else {
-                    Op.TRUE
-                }
-            }
-            .map { it[maxSequence] }
-            .first() ?: 0
-    }
 }
 
 open class EventDataException(e: Exception) : Throwable(e)
 class EventBodySerializationException(e: Exception) : EventDataException(e)
 class EventMetadataSerializationException(e: Exception) : EventDataException(e)
-
-object PostgresDatabaseEventStore {
-    @PublishedApi
-    internal inline fun <reified M : EventMetadata> create(
-        db: Database,
-        objectMapper: ObjectMapper,
-        tableName: String,
-        eventsSequenceStateTableName: String,
-        eventTypeResolver: EventTypeResolver,
-        noinline afterSinkHook: (List<SequencedEvent<M>>) -> Unit,
-        eventsSinkTableName: String,
-    ): RelationalDatabaseEventStore<M> {
-        return RelationalDatabaseEventStore(db, Events(tableName, Table::jsonb), EventsSequenceStats(eventsSequenceStateTableName), M::class.java, objectMapper, eventTypeResolver, Transaction::pgAdvisoryXactLock, afterSinkHook, Events(eventsSinkTableName, Table::jsonb), )
-    }
-}
-
-object H2DatabaseEventStore {
-    // need a `@PublishedApi` here to make it callable from `RelationalDatabaseEventStore.create()`
-    @PublishedApi
-    internal inline fun <reified M : EventMetadata> create(
-        db: Database,
-        objectMapper: ObjectMapper,
-        tableName: String,
-        eventsSequenceStateTableName: String,
-        eventTypeResolver: EventTypeResolver,
-        noinline afterSinkHook: (List<SequencedEvent<M>>) -> Unit,
-        eventsSinkTableName: String,
-    ): RelationalDatabaseEventStore<M> {
-        return RelationalDatabaseEventStore(db, eventsTable(tableName), EventsSequenceStats(eventsSequenceStateTableName), M::class.java, objectMapper, eventTypeResolver, afterSinkHook = afterSinkHook, eventsSinkTable = eventsTable(eventsSinkTableName))
-    }
-
-    @PublishedApi
-    internal fun eventsTable(tableName: String = defaultEventsTableName) = Events(tableName) { name -> this.text(name) }
-}
 
 internal fun <T> String.asClass(): Class<out T>? {
     @Suppress("UNCHECKED_CAST")
@@ -286,12 +209,6 @@ class Events(tableName: String = defaultEventsTableName, jsonb: Table.(String) -
         uniqueIndex(aggregateId, aggregateSequence)
         nonUniqueIndex(eventType, aggregateType)
     }
-}
-
-class EventsSequenceStats(tableName: String = defaultEventsSequenceStatsTableName) : Table(tableName) {
-    val eventType = varchar("event_type", 256)
-    override val primaryKey = PrimaryKey(eventType)
-    val sequence = long("sequence")
 }
 
 private fun Table.nonUniqueIndex(vararg columns: Column<*>) = index(false, *columns)

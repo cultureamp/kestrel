@@ -58,7 +58,6 @@ class BlockingAsyncEventProcessorWaiterTest : DescribeSpec({
 
 val alwaysFailsEventSource = object : EventSource<SpecificMetadata> {
     override fun getAfter(sequence: Long, eventClasses: List<KClass<out DomainEvent>>, batchSize: Int) = fail("Should not be called")
-    override fun lastSequence(eventClasses: List<KClass<out DomainEvent>>) = fail("Should not be called")
 }
 
 fun bookmarkStoreCountingUpFrom(sequence: Long, allowedBookmarkNames: Set<String>) = object : BookmarkStore {
