@@ -24,11 +24,12 @@ interface BookmarkedEventProcessor<M : EventMetadata> {
 }
 
 interface AsyncEventProcessor<M : EventMetadata> : BookmarkedEventProcessor<M> {
+    val eventSource: EventSource<M>
     val eventsSequenceStats: EventsSequenceStats
 }
 
 class BatchedAsyncEventProcessor<M : EventMetadata>(
-    val eventSource: EventSource<M>,
+    override val eventSource: EventSource<M>,
     override val eventsSequenceStats: EventsSequenceStats,
     override val bookmarkStore: BookmarkStore,
     override val bookmarkName: String,

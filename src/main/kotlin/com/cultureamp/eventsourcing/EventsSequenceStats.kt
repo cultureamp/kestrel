@@ -3,7 +3,9 @@ package com.cultureamp.eventsourcing
 import org.jetbrains.exposed.sql.Database
 import org.jetbrains.exposed.sql.Op
 import org.jetbrains.exposed.sql.SchemaUtils
+import org.jetbrains.exposed.sql.StdOutSqlLogger
 import org.jetbrains.exposed.sql.Table
+import org.jetbrains.exposed.sql.addLogger
 import org.jetbrains.exposed.sql.max
 import org.jetbrains.exposed.sql.select
 import org.jetbrains.exposed.sql.transactions.transaction
@@ -14,7 +16,7 @@ val defaultEventsSequenceStatsTableName = "events_sequence_stats"
 
 interface EventsSequenceStats {
     fun lastSequence(eventClasses: List<KClass<out DomainEvent>> = emptyList()): Long
-    fun update(eventType: String, sequence: Long)
+    fun update(eventClass: KClass<out DomainEvent>, sequence: Long)
 }
 
 class RelationalDatabaseEventsSequenceStats(
@@ -26,13 +28,15 @@ class RelationalDatabaseEventsSequenceStats(
 
     fun createSchemaIfNotExists() {
         transaction(db) {
+            println("creating table ${table.tableName}")
+            addLogger(StdOutSqlLogger)
             SchemaUtils.create(table)
         }
     }
 
-    override fun update(eventType: String, sequence: Long) = transaction(db) {
+    override fun update(eventClass: KClass<out DomainEvent>, sequence: Long) = transaction(db) {
         table.upsert {
-            it[table.eventType] = eventType
+            it[table.eventType] = eventTypeResolver.serialize(eventClass.java)
             it[table.sequence] = sequence
         }
         Unit

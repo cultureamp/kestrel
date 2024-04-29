@@ -60,7 +60,7 @@ class EventConsumerStatisticsTest : DescribeSpec({
     }
     val eventsSequenceStats = object : EventsSequenceStats {
         override fun lastSequence(eventClasses: List<KClass<out DomainEvent>>) = fail("Should not be called")
-        override fun update(eventType: String, sequence: Long) = fail("Should not be called")
+        override fun update(eventClass: KClass<out DomainEvent>, sequence: Long) = fail("Should not be called")
     }
 
     val table = Bookmarks()
