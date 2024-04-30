@@ -28,8 +28,6 @@ class RelationalDatabaseEventsSequenceStats(
 
     fun createSchemaIfNotExists() {
         transaction(db) {
-            println("creating table ${table.tableName}")
-            addLogger(StdOutSqlLogger)
             SchemaUtils.create(table)
         }
     }
