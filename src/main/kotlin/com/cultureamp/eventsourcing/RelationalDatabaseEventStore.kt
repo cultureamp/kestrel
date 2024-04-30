@@ -38,7 +38,7 @@ val defaultEventTypeResolver = CanonicalNameEventTypeResolver
 class RelationalDatabaseEventStore<M : EventMetadata> @PublishedApi internal constructor(
     private val db: Database,
     val events: Events,
-    private val eventsSequenceStats: EventsSequenceStats?,
+    val eventsSequenceStats: EventsSequenceStats?,
     private val metadataClass: Class<M>,
     private val objectMapper: ObjectMapper,
     private val eventTypeResolver: EventTypeResolver,
