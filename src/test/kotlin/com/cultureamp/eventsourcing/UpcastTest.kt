@@ -8,6 +8,7 @@ import io.kotest.matchers.shouldBe
 import org.jetbrains.exposed.sql.Database
 import org.jetbrains.exposed.sql.SchemaUtils
 import org.jetbrains.exposed.sql.StdOutSqlLogger
+import org.jetbrains.exposed.sql.Table
 import org.jetbrains.exposed.sql.addLogger
 import org.jetbrains.exposed.sql.transactions.transaction
 import org.joda.time.DateTime
@@ -16,11 +17,9 @@ import java.util.*
 
 class UpcastTest : DescribeSpec({
     val db = Database.connect(url = "jdbc:h2:mem:test;MODE=MySQL;DB_CLOSE_DELAY=-1;", driver = "org.h2.Driver")
-    val table = H2DatabaseEventStore.eventsTable()
-    val eventsSequenceStatsTable = EventsSequenceStats()
-    val eventStore = RelationalDatabaseEventStore.create<StandardEventMetadata>(db)
-    val bookmarksTable = Bookmarks()
-    val bookmarkStore = RelationalDatabaseBookmarkStore(db, bookmarksTable)
+    val eventsSequenceStats = RelationalDatabaseEventsSequenceStats(db)
+    val eventStore = RelationalDatabaseEventStore.create<StandardEventMetadata>(db, eventsSequenceStats = eventsSequenceStats)
+    val bookmarkStore = RelationalDatabaseBookmarkStore(db)
     val accountId = UUID.randomUUID()
     val commandGateway = CommandGateway(
         eventStore,
@@ -35,17 +34,17 @@ class UpcastTest : DescribeSpec({
     beforeTest {
         transaction(db) {
             addLogger(StdOutSqlLogger)
-            SchemaUtils.create(table)
-            SchemaUtils.create(eventsSequenceStatsTable)
-            SchemaUtils.create(bookmarksTable)
+            SchemaUtils.create(eventsSequenceStats.table)
+            SchemaUtils.create(bookmarkStore.table)
+            SchemaUtils.create(eventStore.events)
         }
     }
 
     afterTest {
         transaction(db) {
-            SchemaUtils.drop(bookmarksTable)
-            SchemaUtils.drop(eventsSequenceStatsTable)
-            SchemaUtils.drop(table)
+            SchemaUtils.drop(eventStore.events)
+            SchemaUtils.drop(bookmarkStore.table)
+            SchemaUtils.drop(eventsSequenceStats.table)
         }
     }
 
@@ -66,7 +65,7 @@ class UpcastTest : DescribeSpec({
             val projector = ParticipantProjector(db)
             val bookmarkName = "ParticipantBookmark"
             val eventProcessor = EventProcessor.from(projector)
-            val asyncEventProcessor = BatchedAsyncEventProcessor(eventStore, bookmarkStore, bookmarkName, eventProcessor, upcasting = false)
+            val asyncEventProcessor = BatchedAsyncEventProcessor(eventStore, eventsSequenceStats, bookmarkStore, bookmarkName, eventProcessor, upcasting = false)
 
             transaction(db) {
                 val participantId = UUID.randomUUID()
@@ -91,7 +90,7 @@ class UpcastTest : DescribeSpec({
             val projector = ParticipantProjector(db)
             val bookmarkName = "ParticipantBookmark"
             val eventProcessor = EventProcessor.from(projector)
-            val asyncEventProcessor = BatchedAsyncEventProcessor(eventStore, bookmarkStore, bookmarkName, eventProcessor)
+            val asyncEventProcessor = BatchedAsyncEventProcessor(eventStore, eventsSequenceStats, bookmarkStore, bookmarkName, eventProcessor)
 
             transaction(db) {
                 val participantId = UUID.randomUUID()

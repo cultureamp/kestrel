@@ -25,10 +25,12 @@ interface BookmarkedEventProcessor<M : EventMetadata> {
 
 interface AsyncEventProcessor<M : EventMetadata> : BookmarkedEventProcessor<M> {
     val eventSource: EventSource<M>
+    val eventsSequenceStats: EventsSequenceStats
 }
 
 class BatchedAsyncEventProcessor<M : EventMetadata>(
     override val eventSource: EventSource<M>,
+    override val eventsSequenceStats: EventsSequenceStats,
     override val bookmarkStore: BookmarkStore,
     override val bookmarkName: String,
     override val sequencedEventProcessor: SequencedEventProcessor<M>,
@@ -47,6 +49,7 @@ class BatchedAsyncEventProcessor<M : EventMetadata>(
 
     constructor(
         eventSource: EventSource<M>,
+        eventsSequenceStats: EventsSequenceStats,
         bookmarkStore: BookmarkStore,
         bookmarkName: String,
         eventProcessor: EventProcessor<M>,
@@ -62,7 +65,7 @@ class BatchedAsyncEventProcessor<M : EventMetadata>(
         upcasting: Boolean = true,
         stats: StatisticsCollector? = null,
     ) : this(
-        eventSource, bookmarkStore, bookmarkName, SequencedEventProcessor.from(eventProcessor), batchSize, startLog, endLog, upcasting, stats,
+        eventSource, eventsSequenceStats, bookmarkStore, bookmarkName, SequencedEventProcessor.from(eventProcessor), batchSize, startLog, endLog, upcasting, stats,
     )
 
     fun processOneBatch(): Action {

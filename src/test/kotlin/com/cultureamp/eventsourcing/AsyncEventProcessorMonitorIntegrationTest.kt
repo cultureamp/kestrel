@@ -13,6 +13,7 @@ import io.kotest.matchers.shouldBe
 import org.jetbrains.exposed.sql.Database
 import org.jetbrains.exposed.sql.SchemaUtils
 import org.jetbrains.exposed.sql.StdOutSqlLogger
+import org.jetbrains.exposed.sql.Table
 import org.jetbrains.exposed.sql.addLogger
 import org.jetbrains.exposed.sql.transactions.transaction
 import org.joda.time.DateTime
@@ -21,9 +22,9 @@ import java.util.UUID
 class AsyncEventProcessorMonitorIntegrationTest : DescribeSpec({
     val db = PgTestConfig.db ?: Database.connect(url = "jdbc:h2:mem:test;MODE=MySQL;DB_CLOSE_DELAY=-1;", driver = "org.h2.Driver")
     val tableEvent = Events()
-    val tableH2 = H2DatabaseEventStore.eventsTable()
+    val tableH2 = Events(jsonb = Table::text)
     val table = if (PgTestConfig.db != null) tableEvent else tableH2
-    val eventsSequenceStatsTable = EventsSequenceStats()
+    val eventsSequenceStats = RelationalDatabaseEventsSequenceStats(db)
     val eventStore = RelationalDatabaseEventStore.create<StandardEventMetadata>(db)
     val bookmarksTable = Bookmarks()
     val bookmarkStore = RelationalDatabaseBookmarkStore(db, bookmarksTable)
@@ -49,7 +50,7 @@ class AsyncEventProcessorMonitorIntegrationTest : DescribeSpec({
         transaction(db) {
             addLogger(StdOutSqlLogger)
             SchemaUtils.create(table)
-            SchemaUtils.create(eventsSequenceStatsTable)
+            SchemaUtils.create(eventsSequenceStats.table)
             SchemaUtils.create(bookmarksTable)
         }
     }
@@ -57,7 +58,7 @@ class AsyncEventProcessorMonitorIntegrationTest : DescribeSpec({
     afterTest {
         transaction(db) {
             SchemaUtils.drop(bookmarksTable)
-            SchemaUtils.drop(eventsSequenceStatsTable)
+            SchemaUtils.drop(eventsSequenceStats.table)
             SchemaUtils.drop(table)
         }
     }
@@ -67,7 +68,7 @@ class AsyncEventProcessorMonitorIntegrationTest : DescribeSpec({
             val projector = SurveyNamesCommandProjector(db)
             val bookmarkName = "SurveyNames"
             val eventProcessor = EventProcessor.from(projector)
-            val asyncEventProcessor = BatchedAsyncEventProcessor(eventStore, bookmarkStore, bookmarkName, eventProcessor)
+            val asyncEventProcessor = BatchedAsyncEventProcessor(eventStore, eventsSequenceStats, bookmarkStore, bookmarkName, eventProcessor)
 
             var capturedLag: Lag? = null
             val metrics: (Lag) -> Unit = {
@@ -82,8 +83,8 @@ class AsyncEventProcessorMonitorIntegrationTest : DescribeSpec({
             commandGateway.dispatch(CreateSurvey(surveyId, UUID.randomUUID(), emptyMap(), UUID.randomUUID(), DateTime.now()), StandardEventMetadata(accountId))
             commandGateway.dispatch(Invite(UUID.randomUUID(), UUID.randomUUID(), UUID.randomUUID(), DateTime.now()), StandardEventMetadata(accountId))
 
-            eventStore.lastSequence() shouldBe 2
-            eventStore.lastSequence(listOf(Created::class)) shouldBe 1
+            eventsSequenceStats.lastSequence() shouldBe 2
+            eventsSequenceStats.lastSequence(listOf(Created::class)) shouldBe 1
             bookmarkStore.bookmarkFor(bookmarkName) shouldBe Bookmark(bookmarkName, 0)
 
             asyncEventProcessorMonitor.run()

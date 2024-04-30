@@ -55,6 +55,7 @@ import io.kotest.matchers.shouldBe
 import io.kotest.matchers.types.shouldBeInstanceOf
 import org.jetbrains.exposed.sql.Database
 import org.jetbrains.exposed.sql.SchemaUtils
+import org.jetbrains.exposed.sql.Table
 import org.jetbrains.exposed.sql.selectAll
 import org.jetbrains.exposed.sql.transactions.transaction
 import org.joda.time.DateTime
@@ -64,7 +65,7 @@ import com.cultureamp.eventsourcing.example.Created as SurveyCreated
 class CommandGatewayIntegrationTest : DescribeSpec({
     val db = PgTestConfig.db ?: Database.connect(url = "jdbc:h2:mem:test;MODE=MySQL;DB_CLOSE_DELAY=-1;", driver = "org.h2.Driver")
     val table = Events()
-    val tableH2 = H2DatabaseEventStore.eventsTable()
+    val tableH2 = Events(jsonb = Table::text)
     val eventsTable = if (PgTestConfig.db != null) table else tableH2
     val eventStore = RelationalDatabaseEventStore.create<StandardEventMetadata>(db)
     val publishedSkillId = UUID.randomUUID()
@@ -83,7 +84,7 @@ class CommandGatewayIntegrationTest : DescribeSpec({
             PizzaAggregate::update,
             ::PizzaAggregate,
             PizzaAggregate::updated,
-            PizzaAggregate.Companion::aggregateType
+            PizzaAggregate.Companion::aggregateType,
         ),
         Route.from(ThingAggregate.partial(AlwaysBoppable)),
         Route.from(SimpleThingAggregate),
@@ -91,37 +92,37 @@ class CommandGatewayIntegrationTest : DescribeSpec({
         Route.fromStateless(
             PaymentSagaAggregate::create,
             PaymentSagaAggregate::update,
-            PaymentSagaAggregate
+            PaymentSagaAggregate,
         ),
         Route.from(
             SurveyCaptureLayoutAggregate.Companion::create,
             SurveyCaptureLayoutAggregate::update,
             SurveyCaptureLayoutAggregate.Companion::created,
-            SurveyCaptureLayoutAggregate::updated
+            SurveyCaptureLayoutAggregate::updated,
         ),
         Route.from(
             SurveyAggregate.Companion::create.partial(SurveyNameAlwaysAvailable),
             SurveyAggregate::update.partial2(SurveyNameAlwaysAvailable),
             ::SurveyAggregate,
-            SurveyAggregate::updated
+            SurveyAggregate::updated,
         ),
         Route.from(
             SurveySagaAggregate.Companion::create,
             SurveySagaAggregate::update,
-            ::SurveySagaAggregate
+            ::SurveySagaAggregate,
         ),
         Route.from(
             ParticipantAggregate.Companion::create,
             ParticipantAggregate::update,
             ParticipantAggregate.Companion::created,
-            ParticipantAggregate::updated
+            ParticipantAggregate::updated,
         ),
         Route.from(
             SkillsCustomisationDraftAggregate.Companion::create.partial(publishedSkillsProjection).partial(AlwaysAdminAdminProjection),
             SkillsCustomisationDraftAggregate::update.partial2(publishedSkillsProjection).partial2(AlwaysAdminAdminProjection),
             SkillsCustomisationDraftAggregate.Companion::created,
-            SkillsCustomisationDraftAggregate::updated
-        )
+            SkillsCustomisationDraftAggregate::updated,
+        ),
     )
 
     afterTest {
@@ -204,7 +205,10 @@ class CommandGatewayIntegrationTest : DescribeSpec({
         it("can route to an aggregate created with function handles without metadata") {
             val surveyCaptureLayoutId = UUID.randomUUID()
             gateway.dispatch(Generate(surveyCaptureLayoutId, UUID.randomUUID(), DateTime.now()), metadata) shouldBe Right(Created)
-            gateway.dispatch(AddSection(surveyCaptureLayoutId, UUID.randomUUID(), listOf(LocalizedText("hello", Locale.en)), emptyList(), emptyList(), IntendedPurpose.standard, "code", null, DateTime.now()), metadata) shouldBe Right(Updated)
+            gateway.dispatch(
+                AddSection(surveyCaptureLayoutId, UUID.randomUUID(), listOf(LocalizedText("hello", Locale.en)), emptyList(), emptyList(), IntendedPurpose.standard, "code", null, DateTime.now()),
+                metadata,
+            ) shouldBe Right(Updated)
 
             transaction(db) {
                 eventsTable.selectAll().count() shouldBe 2
