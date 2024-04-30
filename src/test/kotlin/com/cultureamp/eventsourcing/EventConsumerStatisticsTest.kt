@@ -48,9 +48,6 @@ class EventConsumerStatisticsTest : DescribeSpec({
             return result.map { SequencedEvent(it.first, seq++) }
         }
 
-//        override fun lastSequence(eventClasses: List<KClass<out DomainEvent>>): Long {
-//            return seq + events.size
-//        }
 
         override fun eventsFor(aggregateId: UUID): List<Event<EventMetadata>> {
             val results = events.filter { it.second == aggregateId }.map { it.first }
