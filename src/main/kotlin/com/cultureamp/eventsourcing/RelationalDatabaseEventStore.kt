@@ -101,7 +101,7 @@ class RelationalDatabaseEventStore<M : EventMetadata> @PublishedApi internal con
                             SequencedEvent(event, -1)
                         } else {
                             val insertedSequence = insertResult[eventsSinkTable.sequence]
-                            eventsSequenceStats?.update(event.domainEvent::class, insertedSequence)
+                            eventsSequenceStats?.save(event.domainEvent::class, insertedSequence)
                             SequencedEvent(event, insertedSequence)
                         }
                     }.let { Right(it) }

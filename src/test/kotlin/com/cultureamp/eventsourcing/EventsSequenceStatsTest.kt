@@ -24,10 +24,10 @@ class EventsSequenceStatsTest : DescribeSpec({
     eventsSequenceStats.createSchemaIfNotExists()
 
     fun updateSequence(eventClass: KClass<out DomainEvent>, sequence: Long) {
-        eventsSequenceStats.update(eventClass, sequence)
+        eventsSequenceStats.save(eventClass, sequence)
 
         // Idempotency
-        eventsSequenceStats.update(eventClass, sequence)
+        eventsSequenceStats.save(eventClass, sequence)
     }
 
     describe("RelationalDatabaseEventsSequenceStats") {
