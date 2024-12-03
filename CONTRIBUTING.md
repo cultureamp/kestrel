@@ -32,10 +32,9 @@ Then you can push the artefacts to Sonatype, and from there publish them to mave
 ### 1. Sonatype Credentials
 To access Sonatype you need the Sonatype credentials via [LastPass](https://lastpass.com) which you'll need to put in your environment
 ```
-export SONATYPE_USERNAME="william.boxhall.cultureamp"
-export SONATYPE_PASSWORD='<password from lastpass>'
+export SONATYPE_USERNAME=HW5QuxHU
+export SONATYPE_PASSWORD='<token from lastpass>'
 ```
-Be sure to put the password in single quotes, it's got a bunch of special chars
 
 ### 2. Installing GPG
 Command line: `brew install gpg2`
