@@ -5,7 +5,7 @@ import com.fasterxml.jackson.databind.ObjectMapper
 import com.fasterxml.jackson.databind.PropertyNamingStrategies
 import com.fasterxml.jackson.databind.SerializationFeature.WRITE_DATES_AS_TIMESTAMPS
 import com.fasterxml.jackson.datatype.joda.JodaModule
-import com.fasterxml.jackson.module.kotlin.SingletonSupport
+import com.fasterxml.jackson.module.kotlin.KotlinFeature
 import com.fasterxml.jackson.module.kotlin.kotlinModule
 import org.jetbrains.exposed.exceptions.ExposedSQLException
 import org.jetbrains.exposed.sql.Column
@@ -27,7 +27,7 @@ import java.util.UUID
 import kotlin.reflect.KClass
 
 val defaultObjectMapper = ObjectMapper()
-    .registerModule(kotlinModule { singletonSupport(SingletonSupport.CANONICALIZE) })
+    .registerModule(kotlinModule { enable(KotlinFeature.SingletonSupport) })
     .registerModule(JodaModule())
     .configure(WRITE_DATES_AS_TIMESTAMPS, false)
     .setPropertyNamingStrategy(PropertyNamingStrategies.SNAKE_CASE)
