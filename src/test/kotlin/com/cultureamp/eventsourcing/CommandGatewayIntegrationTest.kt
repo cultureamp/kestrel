@@ -174,7 +174,7 @@ class CommandGatewayIntegrationTest : DescribeSpec({
             val aggregateId = UUID.randomUUID()
             val result = gateway.dispatch(CreateClassicPizza(aggregateId, PizzaStyle.MARGHERITA), metadata)
             result shouldBe Right(Created)
-            val result2 = gateway.dispatch(EatPizza(aggregateId), StandardEventMetadata(accountId))
+            val result2 = gateway.dispatch(EatPizza(aggregateId), StandardEventMetadata(accountId, executorId))
             result2 shouldBe Right(Updated)
             val result3 = gateway.dispatch(AddTopping(aggregateId, PizzaTopping.PINEAPPLE), metadata)
             result3.shouldBeInstanceOf<Left<PizzaAlreadyEaten>>()

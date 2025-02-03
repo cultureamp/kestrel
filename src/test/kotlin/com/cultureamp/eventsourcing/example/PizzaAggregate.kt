@@ -67,16 +67,18 @@ object PizzaEaten : PizzaUpdateEvent() {
     operator fun invoke() = PizzaEaten
 }
 
-sealed class PizzaError : DomainError
-class ToppingAlreadyPresent : PizzaError()
-class PizzaAlreadyEaten : PizzaError()
+sealed interface PizzaError : DomainError
+object ToppingAlreadyPresent : PizzaError
+object PizzaAlreadyEaten : PizzaError
+object PizzaOnDifferentAccount : PizzaError
+object PizzaMustBeEatenByLastPersonWhoEdittedIt : PizzaError
 
-data class PizzaAggregate(val baseStyle: PizzaStyle, val toppings: List<PizzaTopping>, val isEaten: Boolean = false) {
-    constructor(event: PizzaCreated) : this(baseStyle = event.baseStyle, toppings = event.initialToppings)
+data class PizzaAggregate(val baseStyle: PizzaStyle, val toppings: List<PizzaTopping>, val accountId: UUID, val latestExecutorId: UUID?, val isEaten: Boolean = false) {
+    constructor(event: PizzaCreated, metadata: StandardEventMetadata) : this(baseStyle = event.baseStyle, toppings = event.initialToppings, accountId = metadata.accountId, latestExecutorId = metadata.executorId)
 
-    fun updated(event: PizzaUpdateEvent): PizzaAggregate = when (event) {
-        is PizzaToppingAdded -> this.copy(toppings = this.toppings + event.newTopping)
-        is PizzaEaten -> this.copy(isEaten = true)
+    fun updated(event: PizzaUpdateEvent, metadata: StandardEventMetadata): PizzaAggregate = when (event) {
+        is PizzaToppingAdded -> this.copy(toppings = this.toppings + event.newTopping, latestExecutorId = metadata.executorId)
+        is PizzaEaten -> this.copy(isEaten = true, latestExecutorId = metadata.executorId)
     }
 
     companion object {
@@ -106,14 +108,18 @@ data class PizzaAggregate(val baseStyle: PizzaStyle, val toppings: List<PizzaTop
     }
 
     fun update(command: PizzaUpdateCommand, metadata: StandardEventMetadata): Either<PizzaError, List<PizzaUpdateEvent>> {
+        if (metadata.accountId != accountId) return Left(PizzaOnDifferentAccount)
         return when (isEaten) {
-            true -> Left(PizzaAlreadyEaten())
+            true -> Left(PizzaAlreadyEaten)
             false -> when (command) {
                 is AddTopping -> when (toppings.contains(command.topping)) {
-                    true -> Left(ToppingAlreadyPresent())
+                    true -> Left(ToppingAlreadyPresent)
                     false -> Right(listOf(PizzaToppingAdded(command.topping)))
                 }
-                is EatPizza -> Right(listOf(PizzaEaten()))
+                is EatPizza -> when{
+                    metadata.executorId != latestExecutorId -> Left(PizzaMustBeEatenByLastPersonWhoEdittedIt)
+                    else -> Right(listOf(PizzaEaten()))
+                }
             }
         }
     }
