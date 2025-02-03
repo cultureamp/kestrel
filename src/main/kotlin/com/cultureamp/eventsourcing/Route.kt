@@ -23,8 +23,25 @@ data class Route<CC : CreationCommand, UC : UpdateCommand, M : EventMetadata>(
         inline fun <reified CC : CreationCommand, CE : CreationEvent, Err : DomainError, reified M : EventMetadata, reified UC : UpdateCommand, UE : UpdateEvent, reified A : Any> from(
             noinline create: (CC, M) -> Either<Err, Pair<CE, List<UE>>>,
             noinline update: A.(UC, M) -> Either<Err, List<UE>>,
+            noinline created: (CE, M) -> A,
+            noinline updated: A.(UE, M) -> A = { _,_ -> this },
+            noinline aggregateType: () -> String = { A::class.simpleName!! }
+        ): Route<CC, UC, M> = from(AggregateConstructor.from(create, update, created, updated, aggregateType))
+
+        @JvmName("fromCreationCommandReturningMultipleEvents")
+        inline fun <reified CC : CreationCommand, CE : CreationEvent, Err : DomainError, reified M : EventMetadata, reified UC : UpdateCommand, UE : UpdateEvent, reified A : Any> from(
+            noinline create: (CC, M) -> Either<Err, Pair<CE, List<UE>>>,
+            noinline update: A.(UC, M) -> Either<Err, List<UE>>,
             noinline created: (CE) -> A,
             noinline updated: A.(UE) -> A = { _ -> this },
+            noinline aggregateType: () -> String = { A::class.simpleName!! }
+        ): Route<CC, UC, M> = from(AggregateConstructor.from(create, update, created, updated, aggregateType))
+
+        inline fun <reified CC : CreationCommand, CE : CreationEvent, Err : DomainError, reified M : EventMetadata, reified UC : UpdateCommand, UE : UpdateEvent, reified A : Any> from(
+            noinline create: (CC, M) -> Either<Err, CE>,
+            noinline update: A.(UC, M) -> Either<Err, List<UE>>,
+            noinline created: (CE, M) -> A,
+            noinline updated: A.(UE, M) -> A = { _,_ -> this },
             noinline aggregateType: () -> String = { A::class.simpleName!! }
         ): Route<CC, UC, M> = from(AggregateConstructor.from(create, update, created, updated, aggregateType))
 
