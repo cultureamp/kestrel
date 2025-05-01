@@ -4,18 +4,18 @@ import com.cultureamp.common.asNestedSealedConcreteClasses
 import kotlin.reflect.KClass
 
 interface EventTypeResolver {
-    fun serialize(domainEventClass: Class<out DomainEvent>): String
-    fun deserialize(aggregateType: String, eventType: String): Class<out DomainEvent>
+    fun serialize(domainEventClass: Class<out DomainEvent>): EventTypeDescription
+    fun deserialize(eventTypeDescription: EventTypeDescription): Class<out DomainEvent>
 }
 
 object CanonicalNameEventTypeResolver : EventTypeResolver {
-    override fun serialize(domainEventClass: Class<out DomainEvent>) = domainEventClass.canonicalName
-    override fun deserialize(aggregateType: String, eventType: String) = eventType.asClass<DomainEvent>()!!
+    override fun serialize(domainEventClass: Class<out DomainEvent>) = EventTypeDescription(domainEventClass.canonicalName, null)
+    override fun deserialize(eventTypeDescription: EventTypeDescription) = eventTypeDescription.eventType.asClass<DomainEvent>()!!
 }
 
-class PackageRemovingEventTypeResolver(vararg eventClasses: KClass<out DomainEvent>) : EventTypeResolver {
-    private val eventTypeToClass = run {
-        val allConcreteClasses = eventClasses.flatMap { it.asNestedSealedConcreteClasses().toSet() }
+class PackageRemovingEventTypeResolver(aggregateTypeToEventType: Map<KClass<*>, KClass<out DomainEvent>>) : EventTypeResolver {
+    private val eventTypeToEventClass = run {
+        val allConcreteClasses = aggregateTypeToEventType.values.flatMap { it.asNestedSealedConcreteClasses().toSet() }
         val allConcreteClassSimpleNames = allConcreteClasses.map { it.simpleName!! }
         val duplicates = allConcreteClassSimpleNames.groupBy { it }.mapValues { it.value.size }.filter { it.value > 1 }
         if (duplicates.isNotEmpty()) {
@@ -23,8 +23,16 @@ class PackageRemovingEventTypeResolver(vararg eventClasses: KClass<out DomainEve
         }
         allConcreteClassSimpleNames.zip(allConcreteClasses).toMap()
     }
+    private val eventTypeToAggregateType: Map<String, String> = aggregateTypeToEventType.map { (aggregateType, eventType) ->
+        eventType.asNestedSealedConcreteClasses().map { it.simpleName!! to aggregateType.simpleName!! }
+    }.flatten().toMap()
 
-    override fun deserialize(aggregateType: String, eventType: String) = eventTypeToClass.getValue(eventType).java
+    override fun deserialize(eventTypeDescription: EventTypeDescription) = eventTypeToEventClass.getValue(eventTypeDescription.eventType).java
 
-    override fun serialize(domainEventClass: Class<out DomainEvent>) = domainEventClass.simpleName
+    override fun serialize(domainEventClass: Class<out DomainEvent>) = EventTypeDescription(eventType = domainEventClass.simpleName, aggregateType = eventTypeToAggregateType[domainEventClass.simpleName])
 }
+
+data class EventTypeDescription(val eventType: String, val aggregateType: String?)
+
+fun List<EventTypeDescription>.aggregateTypes() = mapNotNull { it.aggregateType }.distinct()
+fun List<EventTypeDescription>.eventTypes() = map { it.eventType }.distinct()

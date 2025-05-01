@@ -1,7 +1,9 @@
 package com.cultureamp.eventsourcing
 
+import com.cultureamp.eventsourcing.sample.PizzaAggregate
 import com.cultureamp.eventsourcing.sample.PizzaCreated
 import com.cultureamp.eventsourcing.sample.PizzaEaten
+import com.cultureamp.eventsourcing.sample.PizzaEvent
 import com.cultureamp.eventsourcing.sample.PizzaStyle.MARGHERITA
 import com.cultureamp.eventsourcing.sample.PizzaTopping.BASIL
 import com.cultureamp.eventsourcing.sample.PizzaTopping.CHEESE
@@ -13,7 +15,6 @@ import io.kotest.core.spec.style.DescribeSpec
 import io.kotest.matchers.shouldBe
 import org.jetbrains.exposed.sql.Database
 import org.jetbrains.exposed.sql.SchemaUtils
-import org.jetbrains.exposed.sql.Table
 import org.jetbrains.exposed.sql.selectAll
 import org.jetbrains.exposed.sql.transactions.transaction
 import org.joda.time.DateTime
@@ -164,13 +165,13 @@ class RelationalDatabaseEventStoreTest : DescribeSpec({
             storeWithAfterSinkHook.eventsFor(fooEvent.aggregateId) shouldBe listOf(fooEvent)
         }
 
-        it("allows providing a custom event type resolver") {
+        it("allows providing a custom event type resolver that doesn't support aggregate-types") {
             val customEventTypeResolver = object : EventTypeResolver {
-                override fun serialize(domainEventClass: Class<out DomainEvent>) = "custom.${domainEventClass.canonicalName}"
+                override fun serialize(domainEventClass: Class<out DomainEvent>) = EventTypeDescription("custom.${domainEventClass.canonicalName}", null)
 
-                override fun deserialize(aggregateType: String, eventType: String) = eventType.substringAfter("custom.").asClass<DomainEvent>()!!
+                override fun deserialize(eventTypeDescription: EventTypeDescription) = eventTypeDescription.eventType.substringAfter("custom.").asClass<DomainEvent>()!!
             }
-            val customStore = RelationalDatabaseEventStore.create<StandardEventMetadata>(db, eventsTableName = "eventStore", eventTypeResolver = customEventTypeResolver)
+            val customStore = RelationalDatabaseEventStore.create<StandardEventMetadata>(db, eventsTableName = "eventStoreNoAggregateTypes", eventTypeResolver = customEventTypeResolver)
             customStore.createSchemaIfNotExists()
             val aggregateId = UUID.randomUUID()
             val pizzaCreatedDomainEvent = PizzaCreated(MARGHERITA, listOf(TOMATO_PASTE, BASIL, CHEESE))
@@ -181,9 +182,37 @@ class RelationalDatabaseEventStoreTest : DescribeSpec({
                 StandardEventMetadata(firstAccountId, firstExecutorId),
             )
 
-            val events = listOf(pizzaCreatedEvent)
+            val sequencedEvents = listOf(pizzaCreatedEvent).mapIndexed { seq, ev -> SequencedEvent(ev, (seq + 1).toLong()) }
+            val events = sequencedEvents.map { it.event }
             customStore.sink(events, aggregateId) shouldBe Right(1L)
             customStore.eventsFor(aggregateId) shouldBe events
+            customStore.getAfter(0L) shouldBe sequencedEvents
+            customStore.getAfter(0L, listOf(PizzaCreated::class)) shouldBe sequencedEvents
+
+            transaction(db) {
+                store.events.selectAll().map { it[store.events.eventType] shouldBe "custom.com.cultureamp.eventsourcing.sample.PizzaCreated" }
+            }
+        }
+
+        it("allows providing a custom event type resolver that supports aggregate-types") {
+            val packageRemovingEventTypeResolver = PackageRemovingEventTypeResolver(mapOf(PizzaAggregate::class to PizzaEvent::class))
+            val customStore = RelationalDatabaseEventStore.create<StandardEventMetadata>(db, eventsTableName = "eventStoreWithAggregateTypes", eventTypeResolver = packageRemovingEventTypeResolver)
+            customStore.createSchemaIfNotExists()
+            val aggregateId = UUID.randomUUID()
+            val pizzaCreatedDomainEvent = PizzaCreated(MARGHERITA, listOf(TOMATO_PASTE, BASIL, CHEESE))
+            val pizzaCreatedEvent = event(
+                pizzaCreatedDomainEvent,
+                aggregateId,
+                1,
+                StandardEventMetadata(firstAccountId, firstExecutorId),
+            )
+
+            val sequencedEvents = listOf(pizzaCreatedEvent).mapIndexed { seq, ev -> SequencedEvent(ev, (seq + 1).toLong()) }
+            val events = sequencedEvents.map { it.event }
+            customStore.sink(events, aggregateId) shouldBe Right(1L)
+            customStore.eventsFor(aggregateId) shouldBe events
+            customStore.getAfter(0L) shouldBe sequencedEvents
+            customStore.getAfter(0L, listOf(PizzaCreated::class)) shouldBe sequencedEvents
 
             transaction(db) {
                 store.events.selectAll().map { it[store.events.eventType] shouldBe "custom.com.cultureamp.eventsourcing.sample.PizzaCreated" }
@@ -193,5 +222,5 @@ class RelationalDatabaseEventStoreTest : DescribeSpec({
 })
 
 fun <M : EventMetadata> event(domainEvent: DomainEvent, aggregateId: UUID, index: Int, metadata: M): Event<M> {
-    return Event(UUID.randomUUID(), aggregateId, index.toLong(), "pizza", DateTime.now(), metadata, domainEvent)
+    return Event(UUID.randomUUID(), aggregateId, index.toLong(), PizzaAggregate::class.simpleName!!, DateTime.now(), metadata, domainEvent)
 }

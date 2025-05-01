@@ -85,13 +85,13 @@ class RelationalDatabaseEventStore<M : EventMetadata> @PublishedApi internal con
                         val domainEventClass = event.domainEvent.javaClass
                         val metadata = objectMapper.writeValueAsString(event.metadata)
                         validateSerialization(domainEventClass, body, metadata)
-                        val eventType = eventTypeResolver.serialize(domainEventClass)
+                        val eventTypeDescription = eventTypeResolver.serialize(domainEventClass)
                         val insertResult = eventsSinkTable.insert { row ->
                             row[eventsSinkTable.aggregateSequence] = event.aggregateSequence
                             row[eventsSinkTable.eventId] = event.id
                             row[eventsSinkTable.aggregateId] = aggregateId
                             row[eventsSinkTable.aggregateType] = event.aggregateType
-                            row[eventsSinkTable.eventType] = eventType
+                            row[eventsSinkTable.eventType] = eventTypeDescription.eventType
                             row[eventsSinkTable.createdAt] = event.createdAt
                             row[eventsSinkTable.body] = body
                             row[eventsSinkTable.metadata] = metadata
@@ -136,7 +136,7 @@ class RelationalDatabaseEventStore<M : EventMetadata> @PublishedApi internal con
     }
 
     private fun rowToSequencedEvent(row: ResultRow): SequencedEvent<M> = row.let {
-        val eventType = eventTypeResolver.deserialize(row[events.aggregateType], row[events.eventType])
+        val eventType = eventTypeResolver.deserialize(EventTypeDescription(aggregateType = row[events.aggregateType], eventType = row[events.eventType]))
         val domainEvent = objectMapper.readValue(row[events.body], eventType)
         val metadata = objectMapper.readValue(row[events.metadata], metadataClass)
 
@@ -159,7 +159,12 @@ class RelationalDatabaseEventStore<M : EventMetadata> @PublishedApi internal con
             events
                 .select {
                     val eventTypeMatches = if (eventClasses.isNotEmpty()) {
-                        events.eventType.inList(eventClasses.map { eventTypeResolver.serialize(it.java) })
+                        val eventTypeDefinitions = eventClasses.map { eventTypeResolver.serialize(it.java) }
+                        val eventTypes = eventTypeDefinitions.eventTypes()
+                        val eventTypeClause = if (eventTypes.isNotEmpty()) events.eventType.inList(eventTypes) else Op.TRUE
+                        val aggregateTypes = eventTypeDefinitions.aggregateTypes()
+                        val aggregateTypeClause = if (aggregateTypes.isNotEmpty()) events.aggregateType.inList(aggregateTypes) else Op.TRUE
+                        aggregateTypeClause and eventTypeClause
                     } else {
                         Op.TRUE
                     }
