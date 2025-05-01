@@ -230,14 +230,3 @@ fun Transaction.pgAdvisoryXactLock(): CommandError? {
     }
     return null
 }
-
-interface EventTypeResolver {
-    fun serialize(domainEventClass: Class<out DomainEvent>): String
-    fun deserialize(aggregateType: String, eventType: String): Class<out DomainEvent>
-}
-
-object CanonicalNameEventTypeResolver : EventTypeResolver {
-    override fun serialize(domainEventClass: Class<out DomainEvent>) = domainEventClass.canonicalName
-
-    override fun deserialize(aggregateType: String, eventType: String) = eventType.asClass<DomainEvent>()!!
-}
