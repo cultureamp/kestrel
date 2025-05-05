@@ -32,7 +32,7 @@ class RelationalDatabaseEventsSequenceStats(
 
     override fun save(eventClass: KClass<out DomainEvent>, sequence: Long) = transaction(db) {
         table.upsert {
-            it[table.eventType] = eventTypeResolver.serialize(eventClass.java)
+            it[table.eventType] = eventTypeResolver.serialize(eventClass.java).eventType
             it[table.sequence] = sequence
         }
         Unit
@@ -44,7 +44,9 @@ class RelationalDatabaseEventsSequenceStats(
             .slice(maxSequence)
             .select {
                 if (eventClasses.isNotEmpty()) {
-                    table.eventType.inList(eventClasses.map { eventTypeResolver.serialize(it.java) })
+                    val eventTypeDefinitions = eventClasses.map { eventTypeResolver.serialize(it.java) }
+                    val eventTypes = eventTypeDefinitions.eventTypes()
+                    if (eventTypes.isNotEmpty()) table.eventType.inList(eventTypes) else Op.TRUE
                 } else {
                     Op.TRUE
                 }
