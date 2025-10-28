@@ -13,7 +13,7 @@ buildscript {
 
 plugins {
     id 'java'
-    id 'org.jetbrains.kotlin.jvm' version '1.5.31'
+    id 'org.jetbrains.kotlin.jvm' version '1.9.23'
     id 'maven-publish'
     id 'signing'
     id "org.owasp.dependencycheck" version "6.5.0.1"
