@@ -21,7 +21,10 @@ plugins {
 
 group group_id
 version "$base_version$version_suffix"
-archivesBaseName = "kestrel"
+
+base {
+    archivesName = "kestrel"
+}
 
 java {
     sourceCompatibility = JavaVersion.VERSION_17
