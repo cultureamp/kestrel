@@ -35,7 +35,7 @@ val defaultObjectMapper = ObjectMapper()
 val defaultEventsTableName = "events"
 val defaultEventTypeResolver = CanonicalNameEventTypeResolver
 
-class RelationalDatabaseEventStore<M : EventMetadata> @PublishedApi internal constructor(
+class RelationalDatabaseEventStore<M : EventMetadata>(
     private val db: Database,
     val events: Events,
     val eventsSequenceStats: EventsSequenceStats?,
@@ -55,18 +55,23 @@ class RelationalDatabaseEventStore<M : EventMetadata> @PublishedApi internal con
             noinline afterSinkHook: (List<SequencedEvent<M>>) -> Unit = { },
             eventTypeResolver: EventTypeResolver = defaultEventTypeResolver,
             eventsSequenceStats: EventsSequenceStats? = RelationalDatabaseEventsSequenceStats(db, eventTypeResolver, defaultEventsSequenceStatsTableName).also { it.createSchemaIfNotExists() },
+            lockTimeoutMs: Int = 10_000,
+            noinline blockingLockUntilTransactionEnd: Transaction.() -> CommandError? = {
+                when (db.dialect) {
+                    is H2Dialect -> null
+                    is PostgreSQLDialect -> pgAdvisoryXactLock(lockTimeoutMs)
+                    else -> throw UnsupportedOperationException("${db.dialect} not currently supported")
+                }
+            },
+            noinline jsonBody: Table.(String) -> Column<String> = { colName ->
+                when (db.dialect) {
+                    is H2Dialect -> text(colName)
+                    is PostgreSQLDialect -> jsonb(colName)
+                    else -> throw UnsupportedOperationException("${db.dialect} not currently supported")
+                }
+            },
         ): RelationalDatabaseEventStore<M> {
-            val jsonb: Table.(String) -> Column<String> = when (db.dialect) {
-                is H2Dialect -> Table::text
-                is PostgreSQLDialect -> Table::jsonb
-                else -> throw UnsupportedOperationException("${db.dialect} not currently supported")
-            }
-            val blockingLockUntilTransactionEnd: Transaction.() -> CommandError? = when (db.dialect) {
-                is H2Dialect -> { { null } }
-                is PostgreSQLDialect -> Transaction::pgAdvisoryXactLock
-                else -> throw UnsupportedOperationException("${db.dialect} not currently supported")
-            }
-            return RelationalDatabaseEventStore(db, Events(eventsTableName, jsonb), eventsSequenceStats, M::class.java, objectMapper, eventTypeResolver, blockingLockUntilTransactionEnd, afterSinkHook)
+            return RelationalDatabaseEventStore(db, Events(eventsTableName, jsonBody), eventsSequenceStats, M::class.java, objectMapper, eventTypeResolver, blockingLockUntilTransactionEnd, afterSinkHook)
         }
     }
 
@@ -221,16 +226,25 @@ private fun Table.nonUniqueIndex(vararg columns: Column<*>) = index(false, *colu
 object ConcurrencyError : RetriableError
 object LockingError : CommandError
 
-fun Transaction.pgAdvisoryXactLock(): CommandError? {
-    val lockTimeoutMilliseconds = 10_000
-    try {
-        exec("SET LOCAL lock_timeout = '${lockTimeoutMilliseconds}ms';")
-        exec("SELECT pg_advisory_xact_lock(-1)")
-    } catch (e: SQLException) {
-        if (e.message.orEmpty().contains("canceling statement due to lock timeout")) {
-            return LockingError
-        } else {
-            throw e
+fun Transaction.pgAdvisoryXactLock(lockTimeoutMs: Int = 10_000): CommandError? {
+    if (lockTimeoutMs == 0) {
+        // Non-blocking
+        val gotLock = exec("SELECT pg_try_advisory_xact_lock(-1)") { rs ->
+            if (rs.next()) rs.getBoolean(1) else false
+        } ?: false
+
+        if (!gotLock) return LockingError
+    } else {
+        // Blocking with timeout
+        try {
+            exec("SET LOCAL lock_timeout = '${lockTimeoutMs}ms';")
+            exec("SELECT pg_advisory_xact_lock(-1)")
+        } catch (e: SQLException) {
+            if (e.message.orEmpty().contains("canceling statement due to lock timeout")) {
+                return LockingError
+            } else {
+                throw e
+            }
         }
     }
     return null
