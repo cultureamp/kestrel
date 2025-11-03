@@ -12,7 +12,7 @@ buildscript {
 
 plugins {
     id 'java'
-    id 'org.jetbrains.kotlin.jvm' version '1.9.24'
+    id 'org.jetbrains.kotlin.jvm' version '2.0.21'
     id 'maven-publish'
     id 'signing'
     id "org.owasp.dependencycheck" version "6.5.0.1"
@@ -143,7 +143,6 @@ test {
 
 compileKotlin {
     kotlinOptions {
-        freeCompilerArgs = ["-XXLanguage:+InlineClasses"]
         jvmTarget = project.targetJvmVersion
     }
 }
