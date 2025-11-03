@@ -76,8 +76,8 @@ fun bookmarkStoreCountingUpFrom(sequence: Long, allowedBookmarkNames: Set<String
 fun eventProcessorFor(name: String, eventClasses: List<KClass<out DomainEvent>>, bookmarkStore: BookmarkStore) = BookmarkedEventProcessor.from(
     bookmarkStore,
     name,
-    object : SequencedEventProcessor<SpecificMetadata> {
-        override fun process(sequencedEvent: SequencedEvent<out SpecificMetadata>) = fail("Should not be called")
+    object : EventProcessor<SpecificMetadata> {
+        override fun process(event: Event<out SpecificMetadata>, sequence: Long) = fail("Should not be called")
         override fun domainEventClasses(): List<KClass<out DomainEvent>> = eventClasses
     },
 )

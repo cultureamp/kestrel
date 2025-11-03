@@ -12,7 +12,7 @@ class BlockingAsyncEventProcessorWaiter<M : EventMetadata>(
 ) {
     fun waitUntilProcessed(events: List<SequencedEvent<M>>) {
         val projectorToMaxRelevantSequence: Map<BookmarkedEventProcessor<M>, Long> = eventProcessors.associateWith { eventProcessor ->
-            val eventProcessorEventTypes = eventProcessor.sequencedEventProcessor.domainEventClasses().toSet()
+            val eventProcessorEventTypes = eventProcessor.eventProcessor.domainEventClasses().toSet()
             val relevantSequencedEvents = events.filter { eventProcessorEventTypes.contains(it.event.domainEvent::class) }
             val maxRelevantSequence = relevantSequencedEvents.lastOrNull()?.let { it.sequence }
             maxRelevantSequence
