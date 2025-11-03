@@ -29,3 +29,17 @@ interface DomainEventProcessorWithMetadata<in E : DomainEvent, in M : EventMetad
         }
     }
 }
+
+interface DomainEventProcessorWithSequence<in E : DomainEvent, in M : EventMetadata> {
+    fun process(event: E, aggregateId: UUID, metadata: M, eventId: UUID, sequence: Long)
+
+    companion object {
+        fun <E : DomainEvent, M : EventMetadata> from(process: (E, UUID, M, UUID, Long) -> Any?): DomainEventProcessorWithSequence<E, M> {
+            return object : DomainEventProcessorWithSequence<E, M> {
+                override fun process(event: E, aggregateId: UUID, metadata: M, eventId: UUID, sequence: Long) {
+                    process(event, aggregateId, metadata, eventId, sequence)
+                }
+            }
+        }
+    }
+}

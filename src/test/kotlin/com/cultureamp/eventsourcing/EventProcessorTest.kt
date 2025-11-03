@@ -41,7 +41,7 @@ class EventProcessorTest : DescribeSpec({
             }
             val eventProcessor = EventProcessor.from(Projector()::project)
 
-            eventProcessor.process(fooEvent)
+            eventProcessor.process(fooEvent, 1L)
 
             events shouldContain (fooEvent.aggregateId to fooDomainEvent)
         }
@@ -58,7 +58,7 @@ class EventProcessorTest : DescribeSpec({
 
             val eventProcessor = EventProcessor.from(ProjectorWithMetadata()::project)
 
-            eventProcessor.process(fooEvent)
+            eventProcessor.process(fooEvent, 2L)
 
             events shouldContain (fooEvent.aggregateId to Tuple3(fooDomainEvent, fooEvent.metadata, fooEvent.id))
         }
@@ -75,7 +75,7 @@ class EventProcessorTest : DescribeSpec({
 
             val eventProcessor = EventProcessor.from(projector)
 
-            eventProcessor.process(fooEvent)
+            eventProcessor.process(fooEvent, 3L)
 
             events shouldContain (fooEvent.aggregateId to fooDomainEvent)
         }
@@ -92,9 +92,46 @@ class EventProcessorTest : DescribeSpec({
 
             val eventProcessor = EventProcessor.from(projector)
 
-            eventProcessor.process(fooEvent)
+            eventProcessor.process(fooEvent, 4L)
 
             events shouldContain (fooEvent.aggregateId to Tuple3(fooDomainEvent, fooEvent.metadata, fooEvent.id))
+        }
+    }
+
+    describe("from((E, UUID, M, UUID, Long) -> Any?)") {
+        it("can process events with their aggregateIds, metadata, eventIds and sequence numbers") {
+            data class EventData(val event: TestEvent, val metadata: EventMetadata, val eventId: UUID, val sequence: Long)
+            val events = mutableMapOf<UUID, EventData>()
+
+            class ProjectorWithSequence {
+                fun project(event: FooEvent, aggregateId: UUID, metadata: SpecificMetadata, eventId: UUID, sequence: Long) {
+                    events[aggregateId] = EventData(event, metadata, eventId, sequence)
+                }
+            }
+
+            val eventProcessor = EventProcessor.from(ProjectorWithSequence()::project)
+
+            eventProcessor.process(fooEvent, 123L)
+
+            events shouldContain (fooEvent.aggregateId to EventData(fooDomainEvent, fooEvent.metadata, fooEvent.id, 123L))
+        }
+    }
+
+    describe("from(DomainEventProcessorWithSequence)") {
+        it("can process events with their aggregateIds, metadata, eventIds and sequence numbers") {
+            data class EventData(val event: TestEvent, val metadata: EventMetadata, val eventId: UUID, val sequence: Long)
+            val events = mutableMapOf<UUID, EventData>()
+            val projector = object : DomainEventProcessorWithSequence<FooEvent, SpecificMetadata> {
+                override fun process(event: FooEvent, aggregateId: UUID, metadata: SpecificMetadata, eventId: UUID, sequence: Long) {
+                    events[aggregateId] = EventData(event, metadata, eventId, sequence)
+                }
+            }
+
+            val eventProcessor = EventProcessor.from(projector)
+
+            eventProcessor.process(fooEvent, 456L)
+
+            events shouldContain (fooEvent.aggregateId to EventData(fooDomainEvent, fooEvent.metadata, fooEvent.id, 456L))
         }
     }
 
@@ -124,8 +161,8 @@ class EventProcessorTest : DescribeSpec({
                 EventProcessor.from(projectorWithOverlap::project)
             )
 
-            eventProcessor.process(fooEvent)
-            eventProcessor.process(bazEvent)
+            eventProcessor.process(fooEvent, 10L)
+            eventProcessor.process(bazEvent, 11L)
             val it = events.iterator()
             it.shouldHaveNext()
             it.next() shouldBe Triple(fooEvent.aggregateId, fooDomainEvent, projector)

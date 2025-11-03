@@ -6,19 +6,13 @@ import kotlin.random.Random
 interface BookmarkedEventProcessor<M : EventMetadata> {
     val bookmarkStore: BookmarkStore
     val bookmarkName: String
-    val sequencedEventProcessor: SequencedEventProcessor<M>
+    val eventProcessor: EventProcessor<M>
 
     companion object {
-        fun <M : EventMetadata> from(bookmarkStore: BookmarkStore, bookmarkName: String, eventProcessor: EventProcessor<M>) = from(
-            bookmarkStore,
-            bookmarkName,
-            SequencedEventProcessor.from(eventProcessor),
-        )
-
-        fun <M : EventMetadata> from(bookmarkStore: BookmarkStore, bookmarkName: String, eventProcessor: SequencedEventProcessor<M>) = object : BookmarkedEventProcessor<M> {
+        fun <M : EventMetadata> from(bookmarkStore: BookmarkStore, bookmarkName: String, eventProcessor: EventProcessor<M>) = object : BookmarkedEventProcessor<M> {
             override val bookmarkStore = bookmarkStore
             override val bookmarkName = bookmarkName
-            override val sequencedEventProcessor = eventProcessor
+            override val eventProcessor = eventProcessor
         }
     }
 }
@@ -33,7 +27,7 @@ class BatchedAsyncEventProcessor<M : EventMetadata>(
     override val eventsSequenceStats: EventsSequenceStats,
     override val bookmarkStore: BookmarkStore,
     override val bookmarkName: String,
-    override val sequencedEventProcessor: SequencedEventProcessor<M>,
+    override val eventProcessor: EventProcessor<M>,
     private val batchSize: Int = 1000,
     private val startLog: (Bookmark) -> Unit = { bookmark ->
         System.out.println("Polling for events for ${bookmark.name} from sequence ${bookmark.sequence}")
@@ -47,27 +41,6 @@ class BatchedAsyncEventProcessor<M : EventMetadata>(
     private val stats: StatisticsCollector? = null,
 ) : AsyncEventProcessor<M> {
 
-    constructor(
-        eventSource: EventSource<M>,
-        eventsSequenceStats: EventsSequenceStats,
-        bookmarkStore: BookmarkStore,
-        bookmarkName: String,
-        eventProcessor: EventProcessor<M>,
-        batchSize: Int = 1000,
-        startLog: (Bookmark) -> Unit = { bookmark ->
-            System.out.println("Polling for events for ${bookmark.name} from sequence ${bookmark.sequence}")
-        },
-        endLog: (Int, Bookmark) -> Unit = { count, bookmark ->
-            if (count > 0 || Random.nextFloat() < 0.01) {
-                System.out.println("Finished processing batch for ${bookmark.name}, $count events up to sequence ${bookmark.sequence}")
-            }
-        },
-        upcasting: Boolean = true,
-        stats: StatisticsCollector? = null,
-    ) : this(
-        eventSource, eventsSequenceStats, bookmarkStore, bookmarkName, SequencedEventProcessor.from(eventProcessor), batchSize, startLog, endLog, upcasting, stats,
-    )
-
     fun processOneBatch(): Action {
         val startBookmark = bookmarkStore.checkoutBookmark(bookmarkName).let {
             if (it is Left<LockNotObtained>)
@@ -80,7 +53,7 @@ class BatchedAsyncEventProcessor<M : EventMetadata>(
 
         startLog(startBookmark)
 
-        val (count, finalBookmark) = eventSource.getAfter(startBookmark.sequence, sequencedEventProcessor.domainEventClasses(), batchSize).foldIndexed(
+        val (count, finalBookmark) = eventSource.getAfter(startBookmark.sequence, eventProcessor.domainEventClasses(), batchSize).foldIndexed(
             0 to startBookmark,
         ) { index, _, sequencedEvent ->
             when (upcasting) {
@@ -121,8 +94,8 @@ class BatchedAsyncEventProcessor<M : EventMetadata>(
     private fun processEvent(event: SequencedEvent<out M>) {
         stats?.let {
             val startTime = System.currentTimeMillis()
-            sequencedEventProcessor.process(event)
+            eventProcessor.process(event.event, event.sequence)
             stats.eventProcessed(this, event, System.currentTimeMillis() - startTime)
-        } ?: sequencedEventProcessor.process(event)
+        } ?: eventProcessor.process(event.event, event.sequence)
     }
 }
