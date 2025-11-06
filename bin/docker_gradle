@@ -14,13 +14,10 @@ echo "--- :docker: pulling $GRADLE_IMAGE"
 docker pull "$GRADLE_IMAGE"
 
 echo "--- running 'gradle -Pversion_suffix=$VERSION_SUFFIX $*"
-# create and mount target dir as read-write, mount codebase as read-only
-mkdir -p "$BASE/build"
 
 docker run \
   --rm \
   --volume "$BASE:/home/gradle/src" \
-  --volume "$BASE/build:/home/gradle/src/build" \
   --volume /var/run/docker.sock:/var/run/docker.sock \
   --workdir /home/gradle/src \
   "$GRADLE_IMAGE" \
