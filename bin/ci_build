@@ -1,2 +1,2 @@
 #!/bin/bash
-exec bin/ci_gradle build dependencyCheckAnalyze
+exec bin/ci_gradle clean build dependencyCheckAnalyze --no-build-cache

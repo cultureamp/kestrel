@@ -18,22 +18,25 @@ If you need to test your version with another project in your development enviro
 `SKIP_SIGNING=true ./gradlew publishToMavenLocal`
 
 ## Publishing
-If you're authorized to publish to nexus, which is a process done manually by a developer, you'll need access to the Sonatype credentials in lastpass (details below). 
+If you're authorized to publish to Maven Central, which is a process done manually by a developer, you'll need access to the Central Portal credentials (details below).
+
+**Note: Sonatype has migrated from OSSRH to Central Portal. The old OSSRH system is deprecated.**
 
 Before you publish for the first time you will need to do some set up:
-1. Set up Sonatype Credentials 
+1. Set up Central Portal Credentials
 2. Install GPG (if not already done)
 3. A GPG key set up
-4. Gradle configured with your GPG & Sonatype credentials
+4. Gradle configured with your GPG & Central Portal credentials
 
-Then you can push the artefacts to Sonatype, and from there publish them to maven central
+Then you can push the artefacts directly to Maven Central via the Central Portal
 
 
-### 1. Sonatype Credentials
-To access Sonatype you need the Sonatype credentials via [LastPass](https://lastpass.com) which you'll need to put in your environment
-```
-export SONATYPE_USERNAME=HW5QuxHU
-export SONATYPE_PASSWORD='<token from lastpass>'
+### 1. Central Portal Credentials
+To access the Central Portal you need credentials from 1Password, Team Develop > Kestrel Sonatype Credentials
+
+```bash
+export CENTRAL_TOKEN_USERNAME="lQBcTi"
+export CENTRAL_TOKEN_PASSWORD="<from 1password>"
 ```
 
 ### 2. Installing GPG
@@ -67,38 +70,40 @@ signing.gnupg.keyName=<gpg_key_name>
 ```
 where `<gpg_passphrase>` is the passphrase you set up for the key, and `<gpg_key_name>` is the last 8 digits of the key id (eg `AA803DA2` in the example above)
 
-### 5. Pushing to sonatype
-Then to push up to Sonatype
+### 5. Publishing to Maven Central
+The build now uses the Gradle Nexus Publish Plugin which handles the complete publishing workflow automatically.
 
-`./gradlew clean build publish`
+To publish a new version:
 
-This will build kestrel, sign it and upload it to Sonatype staging repository. 
+```bash
+./gradlew publishToSonatype closeAndReleaseSonatypeStagingRepository
+```
 
-### 6. Pushing to maven central
-To push from Sonatype to Maven Central, you need to do the following steps adapted from
-[the documentation](https://www.albertgao.xyz/2018/01/18/how-to-publish-artifact-to-maven-central-via-gradle/):
+This single command will:
+1. Build and sign the artifacts
+2. Upload to Central Portal staging repository
+3. Automatically close and release the staging repository
+4. Publish directly to Maven Central
 
-- Open [Nexus Repository Manager](https://oss.sonatype.org/#welcome)
-- Click the Log in at upper right corner
-- On the left side, click Staging Repositories
-- Search for the project by using "comcultureamp"
-- Select the right item and click the Close button to close it. This finalizes the package in order to publish it.
-- Click the Refresh button until the state in the "Activity" tab shows that repository has been closed.
-- If there are any errors:
-  - You can inspect them at the Activity panel.
-  - You need to Drop this upload
-  - Fix them in your local folder
-  - Run the `./gradlew clean build publish` task again.
-  - Then Close then continue
-- If there are no errors:
-  - Click Release button
-- Your artifact has uploaded to [Maven central](https://search.maven.org/artifact/com.cultureamp/kestrel) (may take up to 2 hours to appear but should be much faster).
+**No manual staging repository management is required anymore.**
+
+The artifacts typically appear on Maven Central within 15-30 minutes after the build completes successfully.
+
+You can verify publication at:
+- **Central Portal**: https://central.sonatype.com/artifact/com.cultureamp/kestrel
+- **Maven Central Search**: https://search.maven.org/artifact/com.cultureamp/kestrel
 
 # Links
 
-- https://central.sonatype.org/pages/releasing-the-deployment.html
-- https://central.sonatype.org/pages/gradle.html (Outdated)
-- https://www.albertgao.xyz/2018/01/18/how-to-publish-artifact-to-maven-central-via-gradle/
+**Current (Central Portal):**
+- https://central.sonatype.org/publish/requirements/
+- https://central.sonatype.org/publish/publish-portal-gradle/
+- https://github.com/gradle-nexus/publish-plugin
 - https://central.sonatype.org/pages/working-with-pgp-signatures.html
 - https://docs.gradle.org/current/userguide/signing_plugin.html
 - https://docs.gradle.org/current/userguide/publishing_maven.html
+
+**Legacy (OSSRH - Deprecated):**
+- ~~https://central.sonatype.org/pages/gradle.html~~ (Outdated)
+- ~~https://www.albertgao.xyz/2018/01/18/how-to-publish-artifact-to-maven-central-via-gradle/~~ (Uses old OSSRH)
+- ~~https://central.sonatype.org/pages/releasing-the-deployment.html~~ (OSSRH-specific)
