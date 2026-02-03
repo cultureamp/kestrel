@@ -218,6 +218,99 @@ class RelationalDatabaseEventStoreTest : DescribeSpec({
                 store.events.selectAll().map { it[store.events.eventType] shouldBe "custom.com.cultureamp.eventsourcing.sample.PizzaCreated" }
             }
         }
+
+        it("sends each sunk event to endOfSinkTransactionHook before transaction commit") {
+            val fooDomainEvent = FooEvent("bar")
+            val fooEvent = Event(
+                id = UUID.randomUUID(),
+                aggregateId = UUID.randomUUID(),
+                aggregateSequence = 1,
+                aggregateType = "aggregateType",
+                createdAt = DateTime.now(),
+                metadata = SpecificMetadata("specialField"),
+                domainEvent = fooDomainEvent,
+            )
+            val barDomainEvent = BarEvent("quux")
+            val barEvent = Event(
+                id = UUID.randomUUID(),
+                aggregateId = UUID.randomUUID(),
+                aggregateSequence = 2,
+                aggregateType = "aggregateType",
+                createdAt = DateTime.now(),
+                metadata = SpecificMetadata("specialField"),
+                domainEvent = barDomainEvent,
+            )
+            val capturedEvents = mutableListOf<SequencedEvent<SpecificMetadata>>()
+            val endOfSinkTransactionHook: (List<SequencedEvent<SpecificMetadata>>) -> Unit = {
+                capturedEvents.addAll(it)
+            }
+
+            val storeWithEndOfSinkTransactionHook = RelationalDatabaseEventStore.create(db, endOfSinkTransactionHook = endOfSinkTransactionHook)
+
+            storeWithEndOfSinkTransactionHook.sink(listOf(fooEvent, barEvent), UUID.randomUUID())
+
+            capturedEvents shouldBe listOf(
+                SequencedEvent(fooEvent, 1L),
+                SequencedEvent(barEvent, 2L),
+            )
+        }
+
+        it("rolls back transaction if endOfSinkTransactionHook throws an exception") {
+            val fooDomainEvent = FooEvent("bar")
+            val fooEvent = Event(
+                id = UUID.randomUUID(),
+                aggregateId = UUID.randomUUID(),
+                aggregateSequence = 1,
+                aggregateType = "aggregateType",
+                createdAt = DateTime.now(),
+                metadata = SpecificMetadata("specialField"),
+                domainEvent = fooDomainEvent,
+            )
+            val alwaysFailsEndOfSinkTransactionHook: (List<SequencedEvent<SpecificMetadata>>) -> Unit = {
+                throw IllegalStateException("expected")
+            }
+            val storeWithEndOfSinkTransactionHook = RelationalDatabaseEventStore.create(db, endOfSinkTransactionHook = alwaysFailsEndOfSinkTransactionHook)
+
+            val exception = shouldThrow<IllegalStateException> {
+                storeWithEndOfSinkTransactionHook.sink(listOf(fooEvent), fooEvent.aggregateId)
+            }
+            exception.message shouldBe "expected"
+
+            // Verify that no events were persisted due to transaction rollback
+            storeWithEndOfSinkTransactionHook.eventsFor(fooEvent.aggregateId) shouldBe emptyList()
+        }
+
+        it("calls endOfSinkTransactionHook before afterSinkHook") {
+            val fooDomainEvent = FooEvent("bar")
+            val fooEvent = Event(
+                id = UUID.randomUUID(),
+                aggregateId = UUID.randomUUID(),
+                aggregateSequence = 1,
+                aggregateType = "aggregateType",
+                createdAt = DateTime.now(),
+                metadata = SpecificMetadata("specialField"),
+                domainEvent = fooDomainEvent,
+            )
+
+            val executionOrder = mutableListOf<String>()
+            val endOfSinkTransactionHook: (List<SequencedEvent<SpecificMetadata>>) -> Unit = {
+                executionOrder.add("endOfSinkTransactionHook")
+            }
+            val afterSinkHook: (List<SequencedEvent<SpecificMetadata>>) -> Unit = {
+                executionOrder.add("afterSinkHook")
+            }
+
+            val storeWithBothHooks = RelationalDatabaseEventStore.create(
+                db,
+                endOfSinkTransactionHook = endOfSinkTransactionHook,
+                afterSinkHook = afterSinkHook
+            )
+
+            storeWithBothHooks.sink(listOf(fooEvent), fooEvent.aggregateId)
+
+            // Verify execution order: endOfSinkTransactionHook should be called before afterSinkHook
+            executionOrder shouldBe listOf("endOfSinkTransactionHook", "afterSinkHook")
+        }
     }
 })
 
