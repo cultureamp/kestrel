@@ -7,7 +7,9 @@ data class SyncProcessorConfig(
     val processorName: String,
     val eventProcessor: EventProcessor<*>,
     val bookmarkStore: BookmarkStore,
-    val isActive: Boolean = true
+    val isActive: Boolean = true,
+    // New field for catchup validation
+    val catchupValidationConfig: CatchupValidationConfig = CatchupValidationConfig()
 )
 
 /**
@@ -26,6 +28,7 @@ data class ConfigurationValidationError(val validationErrors: List<String>) : Co
  */
 class SyncProcessorConfigurationManager<M : EventMetadata>(
     private val catchupValidator: ProjectionCatchupValidator,
+    private val syncCatchupValidator: SyncProcessorCatchupValidator<M>? = null,
     private val timeoutMs: Long = 5000
 ) {
 
@@ -71,6 +74,44 @@ class SyncProcessorConfigurationManager<M : EventMetadata>(
             }
         }
 
+        // Additional pre-deployment catchup validation if sync validator is available
+        if (syncCatchupValidator != null) {
+            val bookmarkedProcessors = newConfigs.filter { it.isActive }.map { config ->
+                @Suppress("UNCHECKED_CAST")
+                BookmarkedEventProcessor.from(
+                    bookmarkStore = config.bookmarkStore,
+                    bookmarkName = config.processorName,
+                    eventProcessor = config.eventProcessor as EventProcessor<M>
+                )
+            }
+
+            val validationConfigsMap = newConfigs.associate { it.processorName to it.catchupValidationConfig }
+            val syncValidationResult = syncCatchupValidator.validateProcessorsBeforeSync(bookmarkedProcessors, validationConfigsMap)
+
+            when (syncValidationResult) {
+                is Left -> {
+                    when (val error = syncValidationResult.error) {
+                        is SyncCatchupValidationFailed -> {
+                            errors.addAll(error.validationResults.map { result ->
+                                when (result) {
+                                    is CatchupBehind -> "Sync validation failed for '${result.projectionName}': behind by ${result.gap} events (${result.currentSequence}/${result.targetSequence})"
+                                    is CatchupAhead -> "Sync validation warning for '${result.projectionName}': ahead by ${result.gap} events (${result.currentSequence}/${result.targetSequence})"
+                                    is CatchupError -> "Sync validation error for '${result.projectionName}': ${result.error}"
+                                    is CatchupValid -> "Sync validation passed for '${result.projectionName}' (sequence: ${result.sequence})"
+                                }
+                            })
+                        }
+                        is SyncCatchupValidationException -> {
+                            errors.add("Sync validation exception: ${error.cause.message}")
+                        }
+                    }
+                }
+                is Right -> {
+                    // Validation passed
+                }
+            }
+        }
+
         return if (errors.isEmpty()) {
             ConfigurationChangeSuccess("Configuration validation passed for ${newConfigs.size} processors")
         } else {
@@ -83,11 +124,13 @@ class SyncProcessorConfigurationManager<M : EventMetadata>(
      *
      * @param configs List of processor configurations
      * @param logger Optional logger function
+     * @param enableValidation Whether to enable catchup validation (default true)
      * @return BlockingSyncEventProcessor configured with the given processors
      */
     fun createSyncProcessor(
         configs: List<SyncProcessorConfig>,
-        logger: (String) -> Unit = System.out::println
+        logger: (String) -> Unit = System.out::println,
+        enableValidation: Boolean = true
     ): Either<ConfigurationChangeError, BlockingSyncEventProcessor<M>> {
         return try {
             val activeConfigs = configs.filter { it.isActive }
@@ -105,10 +148,17 @@ class SyncProcessorConfigurationManager<M : EventMetadata>(
                 )
             }
 
+            // Build validation configuration map from processor configs
+            val validationConfigs = activeConfigs.associate { config ->
+                config.processorName to config.catchupValidationConfig
+            }
+
             val syncProcessor: BlockingSyncEventProcessor<M> = BlockingSyncEventProcessor<M>(
                 eventProcessors = bookmarkedProcessors,
                 timeoutMs = timeoutMs,
-                logger = logger
+                logger = logger,
+                catchupValidator = if (enableValidation) syncCatchupValidator else null,
+                validationConfigs = validationConfigs
             )
 
             Right(syncProcessor)

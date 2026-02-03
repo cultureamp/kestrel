@@ -38,6 +38,7 @@ data class ProjectionLifecycleConfig(
 class ProjectionLifecycleManager<M : EventMetadata>(
     private val catchupValidator: ProjectionCatchupValidator,
     private val configurationManager: SyncProcessorConfigurationManager<M>,
+    private val syncCatchupValidator: SyncProcessorCatchupValidator<M>? = null,
     private val eventStore: EventSource<M>? = null
 ) {
 
@@ -131,10 +132,11 @@ class ProjectionLifecycleManager<M : EventMetadata>(
     fun executeABSubstitution(
         currentProjectionName: String,
         candidateProjectionName: String,
-        candidateConfig: SyncProcessorConfig
+        candidateConfig: SyncProcessorConfig,
+        enforceValidation: Boolean = true
     ): SubstitutionResult {
         return try {
-            // Step 1: Validate candidate is ready
+            // Step 1: Validate candidate is ready using traditional validator
             val substitutionPlan = configurationManager.planABSubstitution(currentProjectionName, candidateProjectionName)
 
             when (substitutionPlan) {
@@ -149,8 +151,42 @@ class ProjectionLifecycleManager<M : EventMetadata>(
                     )
                 }
                 is ConfigurationChangeSuccess -> {
-                    // Step 2: Create new sync processor configuration
-                    val newConfigResult = configurationManager.createSyncProcessor(listOf(candidateConfig))
+                    // Step 1.5: Set up configuration with validation enforcement if enabled
+                    val configToUse = if (enforceValidation && syncCatchupValidator != null) {
+                        // Set candidate config to ENFORCE mode for A/B substitutions unless explicitly configured otherwise
+                        val enforcedConfig = if (candidateConfig.catchupValidationConfig.validationMode == CatchupValidationMode.SKIP) {
+                            candidateConfig
+                        } else {
+                            candidateConfig.copy(
+                                catchupValidationConfig = candidateConfig.catchupValidationConfig.copy(
+                                    validationMode = CatchupValidationMode.ENFORCE
+                                )
+                            )
+                        }
+
+                        // Pre-validate the configuration before creating the processor
+                        val preValidationResult = configurationManager.validateConfiguration(listOf(enforcedConfig))
+                        if (preValidationResult is ConfigurationValidationError) {
+                            return SubstitutionError(
+                                "A/B substitution sync validation failed: ${preValidationResult.validationErrors.joinToString("; ")}",
+                                listOf(
+                                    "Ensure '$candidateProjectionName' is fully caught up before substitution",
+                                    "Check catchup validation configuration",
+                                    "Consider adjusting allowableGap if small gaps are acceptable"
+                                )
+                            )
+                        }
+
+                        enforcedConfig
+                    } else {
+                        candidateConfig
+                    }
+
+                    // Step 2: Create new sync processor configuration with validation enforcement
+                    val newConfigResult = configurationManager.createSyncProcessor(
+                        listOf(configToUse),
+                        enableValidation = enforceValidation
+                    )
 
                     when (newConfigResult) {
                         is Left -> {
@@ -164,6 +200,7 @@ class ProjectionLifecycleManager<M : EventMetadata>(
                             SubstitutionSuccess(
                                 "A/B substitution ready for deployment. " +
                                 "Replace EventStore endOfSinkTransactionHook with new BlockingSyncEventProcessor. " +
+                                "Validation enforcement: ${if (enforceValidation) "ENABLED" else "DISABLED"}. " +
                                 "Old projection: '$currentProjectionName', New projection: '$candidateProjectionName'",
                                 currentProjectionName,
                                 candidateProjectionName
@@ -217,9 +254,10 @@ class ProjectionLifecycleManager<M : EventMetadata>(
      * Provides a summary report of all projection statuses.
      *
      * @param projectionConfigs List of projections to report on
+     * @param includeValidationStatus Whether to include sync processor validation status
      * @return Human-readable status report
      */
-    fun generateStatusReport(projectionConfigs: List<ProjectionLifecycleConfig>): String {
+    fun generateStatusReport(projectionConfigs: List<ProjectionLifecycleConfig>, includeValidationStatus: Boolean = true): String {
         val statuses = monitorProjections(projectionConfigs)
         val report = StringBuilder()
 
@@ -241,6 +279,44 @@ class ProjectionLifecycleManager<M : EventMetadata>(
                 is ProjectionError -> {
                     report.appendLine("❌ $name: ERROR - ${status.error}")
                 }
+            }
+        }
+
+        // Add sync processor validation status if available and requested
+        if (includeValidationStatus && syncCatchupValidator != null) {
+            report.appendLine()
+            report.appendLine("=== Sync Processor Catchup Validation ===")
+
+            try {
+                val bookmarkedProcessors = projectionConfigs.map { config ->
+                    @Suppress("UNCHECKED_CAST")
+                    BookmarkedEventProcessor.from(
+                        bookmarkStore = config.bookmarkStore,
+                        bookmarkName = config.name,
+                        eventProcessor = config.eventProcessor as EventProcessor<M>
+                    )
+                }
+
+                val validationStatuses = syncCatchupValidator.getValidationStatus(bookmarkedProcessors)
+
+                validationStatuses.forEach { (name, validationResult) ->
+                    when (validationResult) {
+                        is CatchupValid -> {
+                            report.appendLine("✅ $name: CAUGHT UP (sequence: ${validationResult.sequence})")
+                        }
+                        is CatchupBehind -> {
+                            report.appendLine("⚠️ $name: BEHIND by ${validationResult.gap} events (${validationResult.currentSequence}/${validationResult.targetSequence})")
+                        }
+                        is CatchupAhead -> {
+                            report.appendLine("🔄 $name: AHEAD by ${validationResult.gap} events (${validationResult.currentSequence}/${validationResult.targetSequence})")
+                        }
+                        is CatchupError -> {
+                            report.appendLine("❌ $name: VALIDATION ERROR - ${validationResult.error}")
+                        }
+                    }
+                }
+            } catch (e: Exception) {
+                report.appendLine("❌ Failed to get sync validation status: ${e.message}")
             }
         }
 

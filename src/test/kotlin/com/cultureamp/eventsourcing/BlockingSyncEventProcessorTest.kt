@@ -184,6 +184,173 @@ class BlockingSyncEventProcessorTest : StringSpec({
         processedEvents.size shouldBe 2 // Both events processed
         bookmarkStore.bookmarkFor("catch-all-processor").sequence shouldBe 2
     }
+
+    "processes events successfully when validation passes" {
+        val processedEvents = mutableListOf<Event<EventMetadata>>()
+        val bookmarkStore = InMemoryBookmarkStore()
+        val eventsSequenceStats = MockEventsSequenceStats(100L) // Current max sequence
+
+        val validator = SyncProcessorCatchupValidator<EventMetadata>(
+            eventsSequenceStats,
+            CatchupValidationConfig(validationMode = CatchupValidationMode.ENFORCE)
+        )
+
+        val processor = EventProcessor.from<ThingCreated> { event, aggregateId ->
+            processedEvents.add(Event(UUID.randomUUID(), aggregateId, 1, "test", DateTime.now(), EventMetadata(), event))
+        }
+
+        val bookmarkedProcessor = BookmarkedEventProcessor.from(bookmarkStore, "test-processor", processor)
+        bookmarkStore.save(Bookmark("test-processor", 100L)) // Up to date
+
+        val syncProcessor = BlockingSyncEventProcessor(
+            eventProcessors = listOf(bookmarkedProcessor),
+            timeoutMs = 1000,
+            catchupValidator = validator
+        )
+
+        val event1 = createSimpleEvent(ThingCreated, 101)
+        val events = listOf(event1)
+
+        val result = syncProcessor.processEvents(events)
+
+        result.shouldBeInstanceOf<Right<Unit>>()
+        processedEvents.size shouldBe 1
+        bookmarkStore.bookmarkFor("test-processor").sequence shouldBe 101
+    }
+
+    "fails validation when processor is behind in ENFORCE mode" {
+        val bookmarkStore = InMemoryBookmarkStore()
+        val eventsSequenceStats = MockEventsSequenceStats(100L)
+
+        val validator = SyncProcessorCatchupValidator<EventMetadata>(
+            eventsSequenceStats,
+            CatchupValidationConfig(
+                validationMode = CatchupValidationMode.ENFORCE,
+                allowableGap = 5
+            )
+        )
+
+        val processor = EventProcessor.from<ThingCreated> { _, _ -> }
+        val bookmarkedProcessor = BookmarkedEventProcessor.from(bookmarkStore, "test-processor", processor)
+        bookmarkStore.save(Bookmark("test-processor", 90L)) // Behind by 10, gap tolerance is 5
+
+        val syncProcessor = BlockingSyncEventProcessor(
+            eventProcessors = listOf(bookmarkedProcessor),
+            timeoutMs = 1000,
+            catchupValidator = validator
+        )
+
+        val event1 = createSimpleEvent(ThingCreated, 101)
+        val events = listOf(event1)
+
+        val result = syncProcessor.processEvents(events)
+
+        result.shouldBeInstanceOf<Left<SyncProcessorCatchupValidationError>>()
+        val error = (result as Left<SyncProcessorCatchupValidationError>).error
+        error.processor shouldBe "Multiple processors"
+    }
+
+    "processes events with warning when processor is behind in WARN mode" {
+        val processedEvents = mutableListOf<Event<EventMetadata>>()
+        val bookmarkStore = InMemoryBookmarkStore()
+        val eventsSequenceStats = MockEventsSequenceStats(100L)
+
+        val validator = SyncProcessorCatchupValidator<EventMetadata>(
+            eventsSequenceStats,
+            CatchupValidationConfig(validationMode = CatchupValidationMode.WARN)
+        )
+
+        val processor = EventProcessor.from<ThingCreated> { event, aggregateId ->
+            processedEvents.add(Event(UUID.randomUUID(), aggregateId, 1, "test", DateTime.now(), EventMetadata(), event))
+        }
+
+        val bookmarkedProcessor = BookmarkedEventProcessor.from(bookmarkStore, "test-processor", processor)
+        bookmarkStore.save(Bookmark("test-processor", 90L)) // Behind by 10
+
+        val syncProcessor = BlockingSyncEventProcessor(
+            eventProcessors = listOf(bookmarkedProcessor),
+            timeoutMs = 1000,
+            catchupValidator = validator
+        )
+
+        val event1 = createSimpleEvent(ThingCreated, 101)
+        val events = listOf(event1)
+
+        val result = syncProcessor.processEvents(events)
+
+        result.shouldBeInstanceOf<Right<Unit>>() // Should succeed with warning
+        processedEvents.size shouldBe 1
+    }
+
+    "processes events without validation when validator is null" {
+        val processedEvents = mutableListOf<Event<EventMetadata>>()
+        val bookmarkStore = InMemoryBookmarkStore()
+
+        val processor = EventProcessor.from<ThingCreated> { event, aggregateId ->
+            processedEvents.add(Event(UUID.randomUUID(), aggregateId, 1, "test", DateTime.now(), EventMetadata(), event))
+        }
+
+        val bookmarkedProcessor = BookmarkedEventProcessor.from(bookmarkStore, "test-processor", processor)
+
+        val syncProcessor = BlockingSyncEventProcessor(
+            eventProcessors = listOf(bookmarkedProcessor),
+            timeoutMs = 1000,
+            catchupValidator = null // No validation
+        )
+
+        val event1 = createSimpleEvent(ThingCreated, 1)
+        val events = listOf(event1)
+
+        val result = syncProcessor.processEvents(events)
+
+        result.shouldBeInstanceOf<Right<Unit>>()
+        processedEvents.size shouldBe 1
+    }
+
+    "applies per-processor validation configs" {
+        val processedEvents = mutableListOf<Event<EventMetadata>>()
+        val bookmarkStore = InMemoryBookmarkStore()
+        val eventsSequenceStats = MockEventsSequenceStats(100L)
+
+        val validator = SyncProcessorCatchupValidator<EventMetadata>(
+            eventsSequenceStats,
+            CatchupValidationConfig(validationMode = CatchupValidationMode.ENFORCE)
+        )
+
+        val processor1 = EventProcessor.from<ThingCreated> { event, aggregateId ->
+            processedEvents.add(Event(UUID.randomUUID(), aggregateId, 1, "test", DateTime.now(), EventMetadata(), event))
+        }
+        val processor2 = EventProcessor.from<Tweaked> { event, aggregateId ->
+            processedEvents.add(Event(UUID.randomUUID(), aggregateId, 1, "test", DateTime.now(), EventMetadata(), event))
+        }
+
+        val bookmarkedProcessor1 = BookmarkedEventProcessor.from(bookmarkStore, "processor1", processor1)
+        val bookmarkedProcessor2 = BookmarkedEventProcessor.from(bookmarkStore, "processor2", processor2)
+
+        bookmarkStore.save(Bookmark("processor1", 95L)) // Behind by 5
+        bookmarkStore.save(Bookmark("processor2", 85L)) // Behind by 15
+
+        val validationConfigs = mapOf(
+            "processor1" to CatchupValidationConfig(allowableGap = 10), // Should pass
+            "processor2" to CatchupValidationConfig(validationMode = CatchupValidationMode.SKIP) // Should be skipped
+        )
+
+        val syncProcessor = BlockingSyncEventProcessor(
+            eventProcessors = listOf(bookmarkedProcessor1, bookmarkedProcessor2),
+            timeoutMs = 1000,
+            catchupValidator = validator,
+            validationConfigs = validationConfigs
+        )
+
+        val event1 = createSimpleEvent(ThingCreated, 101)
+        val event2 = createSimpleEvent(Tweaked("updated"), 102)
+        val events = listOf(event1, event2)
+
+        val result = syncProcessor.processEvents(events)
+
+        result.shouldBeInstanceOf<Right<Unit>>()
+        processedEvents.size shouldBe 2
+    }
 })
 
 private fun createSimpleEvent(domainEvent: DomainEvent, sequence: Long, aggregateId: UUID = UUID.randomUUID()): SequencedEvent<EventMetadata> {
@@ -231,4 +398,14 @@ class FailingBookmarkStore : BookmarkStore {
 
     override fun checkoutBookmark(bookmarkName: String): Either<LockNotObtained, Bookmark> =
         Right(bookmarkFor(bookmarkName))
+}
+
+class MockEventsSequenceStats(private val maxSequence: Long) : EventsSequenceStats {
+    override fun lastSequence(eventClasses: List<kotlin.reflect.KClass<out DomainEvent>>): Long {
+        return maxSequence
+    }
+
+    override fun save(eventClass: kotlin.reflect.KClass<out DomainEvent>, sequence: Long) {
+        // Mock implementation - no-op
+    }
 }

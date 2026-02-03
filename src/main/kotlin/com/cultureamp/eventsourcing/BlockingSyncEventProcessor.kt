@@ -9,6 +9,7 @@ import kotlin.coroutines.CoroutineContext
 sealed class SyncProcessorError
 data class SyncProcessorTimeoutError(val timeoutMs: Long, val processor: String) : SyncProcessorError()
 data class SyncProcessorException(val processor: String, val cause: Throwable) : SyncProcessorError()
+data class SyncProcessorCatchupValidationError(val processor: String, val validationResults: List<CatchupValidationResult>) : SyncProcessorError()
 
 /**
  * Processes events synchronously through a list of bookmarked event processors.
@@ -22,8 +23,21 @@ class BlockingSyncEventProcessor<M : EventMetadata>(
     private val eventProcessors: List<BookmarkedEventProcessor<M>>,
     private val timeoutMs: Long = 5000,
     private val logger: (String) -> Unit = System.out::println,
-    private val coroutineContext: CoroutineContext = Dispatchers.IO
+    private val coroutineContext: CoroutineContext = Dispatchers.IO,
+    // New parameters for validation
+    private val catchupValidator: SyncProcessorCatchupValidator<M>? = null,
+    private val validationConfigs: Map<String, CatchupValidationConfig> = emptyMap()
 ) {
+
+    /**
+     * Backward compatibility constructor without validation parameters
+     */
+    constructor(
+        eventProcessors: List<BookmarkedEventProcessor<M>>,
+        timeoutMs: Long = 5000,
+        logger: (String) -> Unit = System.out::println,
+        coroutineContext: CoroutineContext = Dispatchers.IO
+    ) : this(eventProcessors, timeoutMs, logger, coroutineContext, null, emptyMap())
     /**
      * Processes the given sequenced events through all relevant event processors.
      *
@@ -41,6 +55,22 @@ class BlockingSyncEventProcessor<M : EventMetadata>(
     fun processEvents(sequencedEvents: List<SequencedEvent<M>>): Either<SyncProcessorError, Unit> {
         if (sequencedEvents.isEmpty()) {
             return Right(Unit)
+        }
+
+        // Validate catchup status before processing if validator is configured
+        catchupValidator?.let { validator ->
+            val validationResult = validator.validateProcessorsBeforeSync(eventProcessors, validationConfigs)
+            when (validationResult) {
+                is Left -> {
+                    return when (val error = validationResult.error) {
+                        is SyncCatchupValidationFailed -> Left(SyncProcessorCatchupValidationError(error.processorName, error.validationResults))
+                        is SyncCatchupValidationException -> Left(SyncProcessorException("validation", error.cause))
+                    }
+                }
+                is Right -> {
+                    // Validation passed, continue processing
+                }
+            }
         }
 
         // Group processors by the events they're interested in

@@ -14,8 +14,16 @@ data class CatchupError(val projectionName: String, val error: String) : Catchup
  */
 data class CatchupValidationConfig(
     val allowableGap: Long = 0, // Allow projection to be behind by this many events
-    val allowAhead: Boolean = true // Allow projection to be ahead of target
+    val allowAhead: Boolean = true, // Allow projection to be ahead of target
+    val validationMode: CatchupValidationMode = CatchupValidationMode.ENFORCE, // Validation enforcement mode
+    val skipValidationOnFirstDeploy: Boolean = false // Skip validation for first deployment
 )
+
+enum class CatchupValidationMode {
+    ENFORCE,    // Fail processing if validation fails
+    WARN,       // Log warning but continue processing
+    SKIP        // No validation (emergency override)
+}
 
 /**
  * Validates projection catch-up status for A/B substitution scenarios.

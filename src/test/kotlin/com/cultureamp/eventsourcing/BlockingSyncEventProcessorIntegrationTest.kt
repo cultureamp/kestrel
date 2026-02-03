@@ -438,4 +438,318 @@ class BlockingSyncEventProcessorIntegrationTest : DescribeSpec({
             bookmarkStore.bookmarkFor("failing-projector").sequence shouldBe 0L
         }
     }
+
+    describe("BlockingSyncEventProcessor Catchup Validation Integration") {
+        it("processes events successfully when validation passes") {
+            val processedEvents = mutableListOf<PizzaEvent>()
+            val projector = EventProcessor.from<PizzaEvent, StandardEventMetadata> { event, _, _, _, _ ->
+                processedEvents.add(event)
+            }
+            val bookmarkedProjector = BookmarkedEventProcessor.from(bookmarkStore, "validated-projector", projector)
+
+            // Set up validator that will pass (allow gap of 1 since processor starts at 0 and we're creating first event)
+            val validator = SyncProcessorCatchupValidator<StandardEventMetadata>(
+                eventsSequenceStats,
+                CatchupValidationConfig(validationMode = CatchupValidationMode.ENFORCE, allowableGap = 1)
+            )
+
+            val syncProcessor = BlockingSyncEventProcessor(
+                listOf(bookmarkedProjector),
+                catchupValidator = validator
+            )
+
+            val eventStore = RelationalDatabaseEventStore.create(
+                db,
+                eventsSequenceStats = eventsSequenceStats,
+                endOfSinkTransactionHook = { sequencedEvents ->
+                    syncProcessor.processEvents(sequencedEvents).fold(
+                        { error -> throw RuntimeException("Sync processor failed: $error") },
+                        { /* success */ }
+                    )
+                }
+            )
+
+            val gateway = EventStoreCommandGateway(
+                eventStore,
+                Route.from(
+                    PizzaAggregate.Companion::create,
+                    PizzaAggregate::update,
+                    ::PizzaAggregate,
+                    PizzaAggregate::updated,
+                    PizzaAggregate.Companion::aggregateType,
+                )
+            )
+
+            // Dispatch command
+            val pizzaId = UUID.randomUUID()
+            val result = gateway.dispatch(CreateClassicPizza(pizzaId, PizzaStyle.MARGHERITA), metadata)
+
+            // Verify command succeeded
+            result shouldBe Right(Created)
+            processedEvents.size shouldBe 1
+            bookmarkStore.bookmarkFor("validated-projector").sequence shouldBe 1L
+        }
+
+        it("fails transaction when catchup validation fails") {
+            val processedEvents = mutableListOf<PizzaEvent>()
+            val projector = EventProcessor.from<PizzaEvent, StandardEventMetadata> { event, _, _, _, _ ->
+                processedEvents.add(event)
+            }
+            val bookmarkedProjector = BookmarkedEventProcessor.from(bookmarkStore, "behind-projector", projector)
+
+            // First, create an event to establish a baseline sequence
+            val initialEventStore = RelationalDatabaseEventStore.create<StandardEventMetadata>(db, eventsSequenceStats = eventsSequenceStats)
+            val initialGateway = EventStoreCommandGateway(
+                initialEventStore,
+                Route.from(
+                    PizzaAggregate.Companion::create,
+                    PizzaAggregate::update,
+                    ::PizzaAggregate,
+                    PizzaAggregate::updated,
+                    PizzaAggregate.Companion::aggregateType,
+                )
+            )
+            initialGateway.dispatch(CreateClassicPizza(UUID.randomUUID(), PizzaStyle.MARGHERITA), metadata)
+
+            // Set up validator that will fail (processor behind by 1, no gap tolerance)
+            val validator = SyncProcessorCatchupValidator<StandardEventMetadata>(
+                eventsSequenceStats,
+                CatchupValidationConfig(validationMode = CatchupValidationMode.ENFORCE, allowableGap = 0)
+            )
+
+            val syncProcessor = BlockingSyncEventProcessor(
+                listOf(bookmarkedProjector),
+                catchupValidator = validator
+            )
+
+            val eventStore = RelationalDatabaseEventStore.create(
+                db,
+                eventsSequenceStats = eventsSequenceStats,
+                endOfSinkTransactionHook = { sequencedEvents ->
+                    syncProcessor.processEvents(sequencedEvents).fold(
+                        { error -> throw RuntimeException("Sync processor validation failed: $error") },
+                        { /* success */ }
+                    )
+                }
+            )
+
+            val gateway = EventStoreCommandGateway(
+                eventStore,
+                Route.from(
+                    PizzaAggregate.Companion::create,
+                    PizzaAggregate::update,
+                    ::PizzaAggregate,
+                    PizzaAggregate::updated,
+                    PizzaAggregate.Companion::aggregateType,
+                )
+            )
+
+            // Attempt to dispatch command - should fail validation
+            val pizzaId = UUID.randomUUID()
+            val result = runCatching {
+                gateway.dispatch(CreateClassicPizza(pizzaId, PizzaStyle.HAWAIIAN), metadata)
+            }
+
+            // Verify command failed due to validation
+            result.isFailure shouldBe true
+            result.exceptionOrNull()?.message?.contains("validation failed") shouldBe true
+
+            // Verify no additional events were persisted due to validation failure
+            transaction(db) {
+                eventsTable.selectAll().count() shouldBe 1 // Only the initial event
+            }
+
+            // Verify projector didn't process new event
+            processedEvents.size shouldBe 0
+            bookmarkStore.bookmarkFor("behind-projector").sequence shouldBe 0L
+        }
+
+        it("processes with WARN validation mode even when behind") {
+            val processedEvents = mutableListOf<PizzaEvent>()
+            val projector = EventProcessor.from<PizzaEvent, StandardEventMetadata> { event, _, _, _, _ ->
+                processedEvents.add(event)
+            }
+            val bookmarkedProjector = BookmarkedEventProcessor.from(bookmarkStore, "warn-projector", projector)
+
+            // Create baseline events
+            val initialEventStore = RelationalDatabaseEventStore.create<StandardEventMetadata>(db, eventsSequenceStats = eventsSequenceStats)
+            val initialGateway = EventStoreCommandGateway(
+                initialEventStore,
+                Route.from(
+                    PizzaAggregate.Companion::create,
+                    PizzaAggregate::update,
+                    ::PizzaAggregate,
+                    PizzaAggregate::updated,
+                    PizzaAggregate.Companion::aggregateType,
+                )
+            )
+            initialGateway.dispatch(CreateClassicPizza(UUID.randomUUID(), PizzaStyle.MARGHERITA), metadata)
+
+            // Set up validator in WARN mode
+            val validator = SyncProcessorCatchupValidator<StandardEventMetadata>(
+                eventsSequenceStats,
+                CatchupValidationConfig(validationMode = CatchupValidationMode.WARN)
+            )
+
+            val syncProcessor = BlockingSyncEventProcessor(
+                listOf(bookmarkedProjector),
+                catchupValidator = validator
+            )
+
+            val eventStore = RelationalDatabaseEventStore.create(
+                db,
+                eventsSequenceStats = eventsSequenceStats,
+                endOfSinkTransactionHook = { sequencedEvents ->
+                    syncProcessor.processEvents(sequencedEvents).fold(
+                        { error -> throw RuntimeException("Sync processor failed: $error") },
+                        { /* success */ }
+                    )
+                }
+            )
+
+            val gateway = EventStoreCommandGateway(
+                eventStore,
+                Route.from(
+                    PizzaAggregate.Companion::create,
+                    PizzaAggregate::update,
+                    ::PizzaAggregate,
+                    PizzaAggregate::updated,
+                    PizzaAggregate.Companion::aggregateType,
+                )
+            )
+
+            // Dispatch command - should succeed with warning
+            val pizzaId = UUID.randomUUID()
+            val result = gateway.dispatch(CreateClassicPizza(pizzaId, PizzaStyle.HAWAIIAN), metadata)
+
+            // Verify command succeeded despite being behind
+            result shouldBe Right(Created)
+            processedEvents.size shouldBe 1
+            bookmarkStore.bookmarkFor("warn-projector").sequence shouldBe 2L // Processed the new event
+        }
+
+        it("uses per-processor validation configs correctly") {
+            val processor1Events = mutableListOf<PizzaEvent>()
+            val processor2Events = mutableListOf<PizzaEvent>()
+
+            val projector1 = EventProcessor.from<PizzaEvent, StandardEventMetadata> { event, _, _, _, _ ->
+                processor1Events.add(event)
+            }
+            val projector2 = EventProcessor.from<PizzaEvent, StandardEventMetadata> { event, _, _, _, _ ->
+                processor2Events.add(event)
+            }
+
+            val bookmarkedProjector1 = BookmarkedEventProcessor.from(bookmarkStore, "strict-projector", projector1)
+            val bookmarkedProjector2 = BookmarkedEventProcessor.from(bookmarkStore, "lenient-projector", projector2)
+
+            // Create baseline events
+            val initialEventStore = RelationalDatabaseEventStore.create<StandardEventMetadata>(db, eventsSequenceStats = eventsSequenceStats)
+            val initialGateway = EventStoreCommandGateway(
+                initialEventStore,
+                Route.from(
+                    PizzaAggregate.Companion::create,
+                    PizzaAggregate::update,
+                    ::PizzaAggregate,
+                    PizzaAggregate::updated,
+                    PizzaAggregate.Companion::aggregateType,
+                )
+            )
+            initialGateway.dispatch(CreateClassicPizza(UUID.randomUUID(), PizzaStyle.MARGHERITA), metadata)
+
+            // Set projector1 behind by 1 (strict validation should fail)
+            // projector2 starts at 0 (lenient validation should pass)
+
+            val validator = SyncProcessorCatchupValidator<StandardEventMetadata>(
+                eventsSequenceStats,
+                CatchupValidationConfig(validationMode = CatchupValidationMode.ENFORCE)
+            )
+
+            val validationConfigs = mapOf(
+                "strict-projector" to CatchupValidationConfig(validationMode = CatchupValidationMode.ENFORCE, allowableGap = 0),
+                "lenient-projector" to CatchupValidationConfig(validationMode = CatchupValidationMode.WARN)
+            )
+
+            val syncProcessor = BlockingSyncEventProcessor(
+                listOf(bookmarkedProjector1, bookmarkedProjector2),
+                catchupValidator = validator,
+                validationConfigs = validationConfigs
+            )
+
+            val eventStore = RelationalDatabaseEventStore.create(
+                db,
+                eventsSequenceStats = eventsSequenceStats,
+                endOfSinkTransactionHook = { sequencedEvents ->
+                    syncProcessor.processEvents(sequencedEvents).fold(
+                        { error -> throw RuntimeException("Sync processor validation failed: $error") },
+                        { /* success */ }
+                    )
+                }
+            )
+
+            val gateway = EventStoreCommandGateway(
+                eventStore,
+                Route.from(
+                    PizzaAggregate.Companion::create,
+                    PizzaAggregate::update,
+                    ::PizzaAggregate,
+                    PizzaAggregate::updated,
+                    PizzaAggregate.Companion::aggregateType,
+                )
+            )
+
+            // This should fail because strict-projector is behind by 1 with 0 gap tolerance
+            val result = runCatching {
+                gateway.dispatch(CreateClassicPizza(UUID.randomUUID(), PizzaStyle.HAWAIIAN), metadata)
+            }
+
+            result.isFailure shouldBe true
+            processor1Events.size shouldBe 0
+            processor2Events.size shouldBe 0
+            bookmarkStore.bookmarkFor("strict-projector").sequence shouldBe 0L
+            bookmarkStore.bookmarkFor("lenient-projector").sequence shouldBe 0L
+        }
+
+        it("bypasses validation when validator is not configured") {
+            val processedEvents = mutableListOf<PizzaEvent>()
+            val projector = EventProcessor.from<PizzaEvent, StandardEventMetadata> { event, _, _, _, _ ->
+                processedEvents.add(event)
+            }
+            val bookmarkedProjector = BookmarkedEventProcessor.from(bookmarkStore, "no-validation-projector", projector)
+
+            val syncProcessor = BlockingSyncEventProcessor(
+                listOf(bookmarkedProjector)
+                // No catchupValidator configured
+            )
+
+            val eventStore = RelationalDatabaseEventStore.create(
+                db,
+                eventsSequenceStats = eventsSequenceStats,
+                endOfSinkTransactionHook = { sequencedEvents ->
+                    syncProcessor.processEvents(sequencedEvents).fold(
+                        { error -> throw RuntimeException("Sync processor failed: $error") },
+                        { /* success */ }
+                    )
+                }
+            )
+
+            val gateway = EventStoreCommandGateway(
+                eventStore,
+                Route.from(
+                    PizzaAggregate.Companion::create,
+                    PizzaAggregate::update,
+                    ::PizzaAggregate,
+                    PizzaAggregate::updated,
+                    PizzaAggregate.Companion::aggregateType,
+                )
+            )
+
+            // Should succeed regardless of catchup status since no validator
+            val pizzaId = UUID.randomUUID()
+            val result = gateway.dispatch(CreateClassicPizza(pizzaId, PizzaStyle.MARGHERITA), metadata)
+
+            result shouldBe Right(Created)
+            processedEvents.size shouldBe 1
+            bookmarkStore.bookmarkFor("no-validation-projector").sequence shouldBe 1L
+        }
+    }
 })
