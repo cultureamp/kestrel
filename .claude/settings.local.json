@@ -1,0 +1,29 @@
+{
+  "permissions": {
+    "allow": [
+      "Bash(./gradlew build:*)",
+      "Bash(./gradlew properties)",
+      "Bash(echo:*)",
+      "Bash(echo \"SONATYPE_PASSWORD is: $SONATYPE_PASSWORD:+SET\")",
+      "WebFetch(domain:central.sonatype.com)",
+      "Bash(curl -s \"https://repo1.maven.org/maven2/com/cultureamp/kestrel/maven-metadata.xml\")",
+      "Bash(gpg:*)",
+      "Bash(SKIP_SIGNING=true ./gradlew publishMavenJavaPublicationToMavenRepository)",
+      "Bash(curl:*)",
+      "Bash(source:*)",
+      "Bash(./gradlew:*)",
+      "WebFetch(domain:github.com)",
+      "Bash(java:*)",
+      "Bash(git push:*)",
+      "WebFetch(domain:hub.docker.com)",
+      "Bash(git add:*)",
+      "WebFetch(domain:plugins.gradle.org)",
+      "Bash(export VERSION_SUFFIX=\"-test-SNAPSHOT\")",
+      "Bash(bin/docker_gradle clean:*)",
+      "Bash(bin/docker_gradle:*)",
+      "Bash(git commit:*)"
+    ],
+    "deny": [],
+    "ask": []
+  }
+}
