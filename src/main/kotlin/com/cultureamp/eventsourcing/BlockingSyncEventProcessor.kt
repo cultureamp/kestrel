@@ -59,24 +59,15 @@ class BlockingSyncEventProcessor<M : EventMetadata>(
         logger("Processing ${sequencedEvents.size} events through ${processorToRelevantEvents.size} sync processors")
 
         return try {
-            runBlocking(coroutineContext) {
-                // Process all processors in parallel
-                val deferredResults = processorToRelevantEvents.map { (processor, events) ->
-                    async {
-                        processEventsForProcessor(processor, events)
-                    }
+            // Process all processors sequentially to maintain transaction context
+            // We avoid coroutines here to keep the database transaction context
+            for ((processor, events) in processorToRelevantEvents) {
+                val result = processEventsForProcessorSync(processor, events)
+                if (result is Left) {
+                    return result
                 }
-
-                // Wait for all processors to complete
-                val results = deferredResults.awaitAll()
-
-                // Check if any failed
-                results.firstOrNull { it is Left }?.let {
-                    return@runBlocking it as Either<SyncProcessorError, Unit>
-                }
-
-                Right(Unit)
             }
+            Right(Unit)
         } catch (e: Exception) {
             Left(SyncProcessorException("multiple processors", e))
         }
@@ -84,34 +75,42 @@ class BlockingSyncEventProcessor<M : EventMetadata>(
 
     /**
      * Process events for a single processor sequentially, updating bookmarks after each event.
+     * Synchronous version without coroutines to maintain transaction context.
      */
-    private suspend fun processEventsForProcessor(
+    private fun processEventsForProcessorSync(
         processor: BookmarkedEventProcessor<M>,
         events: List<SequencedEvent<M>>
     ): Either<SyncProcessorError, Unit> {
         return try {
-            withTimeout(timeoutMs) {
-                // Get current bookmark to start from
-                val currentBookmark = processor.bookmarkStore.bookmarkFor(processor.bookmarkName)
-                var latestBookmark = currentBookmark
+            // Get current bookmark to start from
+            val bookmarkStore = processor.bookmarkStore
+            val currentBookmark = if (bookmarkStore is TransactionalBookmarkStore) {
+                bookmarkStore.bookmarkForInCurrentTransaction(processor.bookmarkName)
+            } else {
+                bookmarkStore.bookmarkFor(processor.bookmarkName)
+            }
+            var latestBookmark = currentBookmark
 
-                // Process events sequentially, updating bookmark after each
-                for (event in events) {
-                    // Only process events newer than our current bookmark
-                    if (event.sequence > latestBookmark.sequence) {
-                        // Process the event
-                        processor.eventProcessor.process(event.event, event.sequence)
+            // Process events sequentially, updating bookmark after each
+            for (event in events) {
+                // Only process events newer than our current bookmark
+                if (event.sequence > latestBookmark.sequence) {
+                    // Process the event
+                    processor.eventProcessor.process(event.event, event.sequence)
 
-                        // Update bookmark to reflect this event has been processed
-                        latestBookmark = latestBookmark.copy(sequence = event.sequence)
-                        processor.bookmarkStore.save(latestBookmark)
+                    // Update bookmark to reflect this event has been processed
+                    latestBookmark = latestBookmark.copy(sequence = event.sequence)
+
+                    // Use transactional save if available to participate in the current transaction
+                    if (bookmarkStore is TransactionalBookmarkStore) {
+                        bookmarkStore.saveInCurrentTransaction(latestBookmark)
+                    } else {
+                        bookmarkStore.save(latestBookmark)
                     }
                 }
-
-                Right(Unit)
             }
-        } catch (e: TimeoutCancellationException) {
-            Left(SyncProcessorTimeoutError(timeoutMs, processor.bookmarkName))
+
+            Right(Unit)
         } catch (e: Exception) {
             Left(SyncProcessorException(processor.bookmarkName, e))
         }

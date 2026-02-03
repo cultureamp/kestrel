@@ -3,6 +3,7 @@ package com.cultureamp.eventsourcing
 import org.jetbrains.exposed.sql.*
 import org.jetbrains.exposed.sql.jodatime.datetime
 import org.jetbrains.exposed.sql.transactions.transaction
+import org.jetbrains.exposed.sql.transactions.TransactionManager
 import org.jetbrains.exposed.sql.vendors.PostgreSQLDialect
 import org.joda.time.DateTime
 import java.io.Closeable
@@ -20,11 +21,28 @@ interface BookmarkStore {
     fun checkoutBookmark(bookmarkName: String): Either<LockNotObtained, Bookmark>
 }
 
+/**
+ * Extended interface for bookmark stores that support transactional operations
+ */
+interface TransactionalBookmarkStore : BookmarkStore {
+    /**
+     * Saves a bookmark within the current transaction context without creating a new transaction.
+     * This should only be called from within an existing transaction.
+     */
+    fun saveInCurrentTransaction(bookmark: Bookmark)
+
+    /**
+     * Gets bookmark within the current transaction context without creating a new transaction.
+     * This should only be called from within an existing transaction.
+     */
+    fun bookmarkForInCurrentTransaction(bookmarkName: String): Bookmark
+}
+
 class RelationalDatabaseBookmarkStore(
     val db: Database,
     val table: Bookmarks = Bookmarks(),
     private val bookmarkLock: BookmarkLock = if (db.dialect is PostgreSQLDialect) createPGSessionLock(db) else NoOpBookmarkLock
-) : BookmarkStore {
+) : TransactionalBookmarkStore {
     override fun bookmarkFor(bookmarkName: String): Bookmark = bookmarksFor(setOf(bookmarkName)).first()
 
     override fun checkoutBookmark(bookmarkName: String): Either<LockNotObtained, Bookmark> =
@@ -43,6 +61,25 @@ class RelationalDatabaseBookmarkStore(
     }
 
     override fun save(bookmark: Bookmark): Unit = transaction(db) {
+        saveBookmarkInTransaction(bookmark)
+    }
+
+    override fun saveInCurrentTransaction(bookmark: Bookmark): Unit {
+        saveBookmarkInTransaction(bookmark)
+    }
+
+    override fun bookmarkForInCurrentTransaction(bookmarkName: String): Bookmark {
+        return bookmarksForInCurrentTransaction(setOf(bookmarkName)).first()
+    }
+
+    private fun bookmarksForInCurrentTransaction(bookmarkNames: Set<String>): Set<Bookmark> {
+        val matchingRows = rowsForBookmarks(bookmarkNames)
+        val foundBookmarks = matchingRows.map { Bookmark(it[table.name], it[table.sequence]) }.toSet()
+        val emptyBookmarks = (bookmarkNames - foundBookmarks.map { it.name }.toSet()).map { Bookmark(it, 0) }.toSet()
+        return foundBookmarks + emptyBookmarks
+    }
+
+    private fun saveBookmarkInTransaction(bookmark: Bookmark) {
         if (!isExists(bookmark.name)) {
             table.insert {
                 it[name] = bookmark.name

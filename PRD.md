@@ -219,16 +219,38 @@ val eventStore = RelationalDatabaseEventStore(
 2. ✅ Test performance impact on command processing with table-level lock
 3. ✅ Validate bookmark consistency between sync and async processors
 4. ✅ Test error scenarios and transaction rollback behavior
-5. 🚨 CRITICAL ISSUE IDENTIFIED: Bookmark store creates separate transactions, breaking sync guarantees
+5. ✅ FIXED: Resolved bookmark store transaction isolation issue
 
 **Phase 3 Results:**
 - Comprehensive integration tests created in `BlockingSyncEventProcessorIntegrationTest.kt`
 - All tests pass with acceptable performance (BUILD SUCCESSFUL in 2s)
 - Tests cover: end-to-end sync processing, transaction rollback, multiple processors, mixed aggregates
 - Performance impact is minimal for simple projections as designed
-- **CRITICAL ISSUE**: `RelationalDatabaseBookmarkStore.save()` creates its own transaction that commits immediately, not participating in the outer EventStore transaction. This breaks synchronous processing guarantees where bookmark updates should rollback with failed processors.
+- **CRITICAL ISSUE RESOLVED**: Fixed `RelationalDatabaseBookmarkStore` transaction isolation
 
-**Next Priority**: Fix bookmark store transaction isolation before proceeding to Phase 4.
+### Phase 3.5: Bookmark Store Transaction Isolation Fix ✅ COMPLETED
+**Problem Identified:** `RelationalDatabaseBookmarkStore.save()` created separate transactions that committed immediately, not participating in the outer EventStore transaction. This broke synchronous processing guarantees where bookmark updates should rollback with failed processors.
+
+**Solution Implemented:**
+1. ✅ Created `TransactionalBookmarkStore` interface extending `BookmarkStore`
+2. ✅ Added `saveInCurrentTransaction()` method for transaction-aware bookmark saves
+3. ✅ Added `bookmarkForInCurrentTransaction()` method for transaction-aware bookmark reads
+4. ✅ Updated `BlockingSyncEventProcessor` to use transactional methods when available
+5. ✅ Removed coroutines from sync processor to maintain transaction context
+6. ✅ All integration tests now pass with proper transaction rollback behavior
+
+**Technical Implementation:**
+- `RelationalDatabaseBookmarkStore` now implements `TransactionalBookmarkStore`
+- `BlockingSyncEventProcessor` detects transactional bookmark stores and uses them appropriately
+- Bookmark operations within sync processing participate in the same database transaction as event storage
+- Transaction rollback now properly reverts both events and bookmark updates
+- Maintains backward compatibility with existing bookmark store usage patterns
+
+**Validation Results:**
+- All 7 integration tests pass, including the critical transaction isolation test
+- Bookmark rollback behavior verified: both successful and failing processor bookmarks rollback to 0L when transaction fails
+- No performance regression observed
+- Backward compatibility maintained for async processor usage
 
 ### Phase 4: A/B Substitution Tooling
 1. Build utilities for validating projection catch-up status

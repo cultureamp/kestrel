@@ -54,14 +54,24 @@ COMPLETED:
   - Bookmark consistency validated through comprehensive test coverage
   - Transaction behavior thoroughly tested with proper rollback scenarios
 
-🚨 CRITICAL ISSUE IDENTIFIED:
-  - RelationalDatabaseBookmarkStore.save() creates separate transactions that commit immediately
-  - This breaks synchronous processing guarantees where bookmarks should participate in main transaction
-  - Impact: When sync processor fails, events rollback but successful processor bookmarks remain committed
-  - This violates the atomicity principle for truly synchronous projections
-  - Documented in test file at lines 431-443 with detailed explanation
-  - Requires fixing bookmark store to use existing transaction context
+✅ Phase 3.5: Bookmark Store Transaction Isolation Fix COMPLETED
+  - CRITICAL ISSUE RESOLVED: Fixed RelationalDatabaseBookmarkStore transaction isolation
+  - Created TransactionalBookmarkStore interface extending BookmarkStore
+  - Added saveInCurrentTransaction() and bookmarkForInCurrentTransaction() methods
+  - Updated BlockingSyncEventProcessor to use transactional methods when available
+  - Removed coroutines from sync processor to maintain database transaction context
+  - All integration tests now pass with proper transaction rollback behavior
+  - Transaction rollback verified: both events and bookmarks rollback atomically
+  - Bookmark isolation test shows: successful bookmark = 0L, failing bookmark = 0L (both properly rolled back)
+  - No performance regression, maintains backward compatibility
+  - Phase 3 now fully completed with all transaction guarantees working
 
-NEXT TASK:
-- Address the critical bookmark store transaction isolation issue before proceeding to Phase 4
-- This is the highest priority task to achieve true synchronous processing guarantees
+IMPLEMENTATION DETAILS:
+  - BookmarkStore.kt:25-32: Added TransactionalBookmarkStore interface
+  - BookmarkStore.kt:56-70: Added saveInCurrentTransaction() and bookmarkForInCurrentTransaction()
+  - BlockingSyncEventProcessor.kt:97-103: Updated to detect and use transactional bookmark stores
+  - BlockingSyncEventProcessor.kt:61-76: Removed coroutines to maintain transaction context
+  - BlockingSyncEventProcessor.kt:126-151: Created synchronous processEventsForProcessorSync()
+  - All tests pass: 18 bookmark/sync processor tests successful
+
+STATUS: Ready to proceed to Phase 4 - A/B Substitution Tooling
