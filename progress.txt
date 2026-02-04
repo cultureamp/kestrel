@@ -39,3 +39,19 @@
   - BlockingSyncEventProcessorUpdaterTest.kt: 4 comprehensive tests for filtering behavior
   - PRD.md: Marked Phase 2 tasks as complete
 - **Status**: Phase 2 complete, basic processing and filtering works, ready for Phase 3 (catch-up mechanism)
+
+### Task Completed (a92de25): Add catch-up mechanism to BlockingSyncEventProcessorUpdater
+- **PRD Items**: Phase 3 - Add catch-up mechanism, test catch-up scenarios, test no-op when caught up
+- **Key Decisions**:
+  - Added EventSource<M> parameter to constructor for fetching missed events
+  - Implemented catch-up logic: check bookmark.sequence vs minNewEventSequence, fetch with eventSource.getAfter()
+  - Changed forEach to for loop to allow continue statements (Kotlin doesn't allow continue in forEach)
+  - Only fetch missed events when gap exists (bookmark.sequence < minNewEventSequence - 1)
+  - Filter fetched events to only those before new events (it.sequence < minNewEventSequence)
+  - Updated all existing tests to pass testEventSource() parameter
+  - Added 2 comprehensive catch-up tests: processor behind (gap exists) and processor caught up (no gap)
+- **Files Changed**:
+  - BlockingSyncEventProcessorUpdater.kt: Added EventSource param, catch-up logic, changed forEach to for loop
+  - BlockingSyncEventProcessorUpdaterTest.kt: Updated existing tests, added 2 catch-up tests
+  - PRD.md: Marked Phase 3 tasks complete
+- **Status**: Phase 3 complete, catch-up mechanism implemented and tested, ready for Phase 4 (synchronous processing)

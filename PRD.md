@@ -36,9 +36,9 @@ Granular plan:
 - [x] **Test**: Test with multiple processors handling different event types
 
 ## Phase 3: Catch-up Mechanism
-- [ ] **Update `BlockingSyncEventProcessorUpdater`**: Add catch-up mechanism - check bookmark vs new events, fetch missed events with `EventSource.getAfter()`
-- [ ] **Test in `BlockingSyncEventProcessorUpdaterTest`**: Test catch-up scenarios when processors are behind current events
-- [ ] **Test in `BlockingSyncEventProcessorUpdaterTest`**: Test no-op behavior when processors are already caught up
+- [x] **Update `BlockingSyncEventProcessorUpdater`**: Add catch-up mechanism - check bookmark vs new events, fetch missed events with `EventSource.getAfter()`
+- [x] **Test in `BlockingSyncEventProcessorUpdaterTest`**: Test catch-up scenarios when processors are behind current events
+- [x] **Test in `BlockingSyncEventProcessorUpdaterTest`**: Test no-op behavior when processors are already caught up
 
 ## Phase 4: Synchronous Processing
 - [ ] **Update `BlockingSyncEventProcessorUpdater`**: Implement synchronous event processing - call `processor.process()` for each relevant event
