@@ -3,6 +3,7 @@
 claude --permission-mode acceptEdits "@PRD.md @progress.txt \
 1. Read the PRD and progress file. \
 2. Find the next incomplete task and implement it. \
+  - tick boxes in the PRD task breakdown as you go
 3. Commit your changes. \
    Before committing, run ./gradlew build to prove everything compiles and tests pass, otherwise don't commit
 4. Update progress.txt with what you did \
