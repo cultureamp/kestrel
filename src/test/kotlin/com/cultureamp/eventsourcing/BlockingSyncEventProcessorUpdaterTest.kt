@@ -4,6 +4,7 @@ import io.kotest.core.spec.style.StringSpec
 import io.kotest.matchers.shouldBe
 import org.joda.time.DateTime
 import java.util.*
+import kotlin.reflect.KClass
 
 class BlockingSyncEventProcessorUpdaterTest : StringSpec({
 
@@ -29,7 +30,8 @@ class BlockingSyncEventProcessorUpdaterTest : StringSpec({
         )
 
         val updater = BlockingSyncEventProcessorUpdater<SpecificMetadata>(
-            listOf(fooProcessor, barProcessor)
+            listOf(fooProcessor, barProcessor),
+            testEventSource()
         )
 
         val events = listOf(
@@ -67,7 +69,8 @@ class BlockingSyncEventProcessorUpdaterTest : StringSpec({
         )
 
         val updater = BlockingSyncEventProcessorUpdater<SpecificMetadata>(
-            listOf(processor1, processor2)
+            listOf(processor1, processor2),
+            testEventSource()
         )
 
         val events = listOf(
@@ -93,7 +96,10 @@ class BlockingSyncEventProcessorUpdaterTest : StringSpec({
             }
         )
 
-        val updater = BlockingSyncEventProcessorUpdater<SpecificMetadata>(listOf(processor))
+        val updater = BlockingSyncEventProcessorUpdater<SpecificMetadata>(
+            listOf(processor),
+            testEventSource()
+        )
 
         updater.processEvents(emptyList())
 
@@ -101,7 +107,10 @@ class BlockingSyncEventProcessorUpdaterTest : StringSpec({
     }
 
     "should handle empty processor list" {
-        val updater = BlockingSyncEventProcessorUpdater<SpecificMetadata>(emptyList())
+        val updater = BlockingSyncEventProcessorUpdater<SpecificMetadata>(
+            emptyList(),
+            testEventSource()
+        )
 
         val events = listOf(
             createSequencedEvent(FooEvent("test-foo"), 1L)
@@ -110,6 +119,103 @@ class BlockingSyncEventProcessorUpdaterTest : StringSpec({
         // Should not throw any exception
         updater.processEvents(events)
     }
+
+    "should catch up processor when behind current events" {
+        val processedEvents = mutableListOf<String>()
+        val missedEvents = mutableListOf<SequencedEvent<SpecificMetadata>>()
+
+        // Create missed events that should be fetched during catch-up
+        missedEvents.add(createSequencedEvent(FooEvent("missed-foo-1"), 5L))
+        missedEvents.add(createSequencedEvent(FooEvent("missed-foo-2"), 6L))
+
+        val testEventSource = object : EventSource<SpecificMetadata> {
+            override fun getAfter(sequence: Long, eventClasses: List<KClass<out DomainEvent>>, batchSize: Int): List<SequencedEvent<SpecificMetadata>> {
+                return when (sequence) {
+                    3L -> missedEvents.filter { it.sequence > sequence && it.sequence < 10L }
+                    else -> emptyList()
+                }
+            }
+        }
+
+        // BookmarkStore that returns bookmark at sequence 3, so there's a gap before new events at sequence 10
+        val bookmarkStore = object : BookmarkStore {
+            override fun bookmarkFor(bookmarkName: String): Bookmark = Bookmark(bookmarkName, 3L)
+            override fun bookmarksFor(bookmarkNames: Set<String>) = bookmarkNames.map { bookmarkFor(it) }.toSet()
+            override fun save(bookmark: Bookmark) = Unit
+            override fun checkoutBookmark(bookmarkName: String): Either<LockNotObtained, Bookmark> = Right(bookmarkFor(bookmarkName))
+        }
+
+        val processor = BookmarkedEventProcessor.from(
+            bookmarkStore,
+            "test-processor",
+            EventProcessor.from<FooEvent, SpecificMetadata> { event, _, _, _ ->
+                processedEvents.add("processed: ${event.foo}")
+            }
+        )
+
+        val updater = BlockingSyncEventProcessorUpdater<SpecificMetadata>(
+            listOf(processor),
+            testEventSource
+        )
+
+        // New events starting at sequence 10 (gap from bookmark at 3)
+        val newEvents = listOf(
+            createSequencedEvent(FooEvent("new-foo"), 10L)
+        )
+
+        updater.processEvents(newEvents)
+
+        // Should process missed events first, then new events
+        processedEvents shouldBe listOf(
+            "processed: missed-foo-1",
+            "processed: missed-foo-2",
+            "processed: new-foo"
+        )
+    }
+
+    "should not fetch missed events when processor is caught up" {
+        val processedEvents = mutableListOf<String>()
+        var getAfterCalled = false
+
+        val testEventSource = object : EventSource<SpecificMetadata> {
+            override fun getAfter(sequence: Long, eventClasses: List<KClass<out DomainEvent>>, batchSize: Int): List<SequencedEvent<SpecificMetadata>> {
+                getAfterCalled = true
+                return emptyList()
+            }
+        }
+
+        // BookmarkStore that returns bookmark at sequence 9, so no gap with new events at sequence 10
+        val bookmarkStore = object : BookmarkStore {
+            override fun bookmarkFor(bookmarkName: String): Bookmark = Bookmark(bookmarkName, 9L)
+            override fun bookmarksFor(bookmarkNames: Set<String>) = bookmarkNames.map { bookmarkFor(it) }.toSet()
+            override fun save(bookmark: Bookmark) = Unit
+            override fun checkoutBookmark(bookmarkName: String): Either<LockNotObtained, Bookmark> = Right(bookmarkFor(bookmarkName))
+        }
+
+        val processor = BookmarkedEventProcessor.from(
+            bookmarkStore,
+            "test-processor",
+            EventProcessor.from<FooEvent, SpecificMetadata> { event, _, _, _ ->
+                processedEvents.add("processed: ${event.foo}")
+            }
+        )
+
+        val updater = BlockingSyncEventProcessorUpdater<SpecificMetadata>(
+            listOf(processor),
+            testEventSource
+        )
+
+        val newEvents = listOf(
+            createSequencedEvent(FooEvent("new-foo"), 10L)
+        )
+
+        updater.processEvents(newEvents)
+
+        // Should only process new events
+        processedEvents shouldBe listOf("processed: new-foo")
+        // getAfter should not have been called since processor is caught up
+        getAfterCalled shouldBe false
+    }
 })
 
 private fun testBookmarkStore() = object : BookmarkStore {
@@ -117,6 +223,12 @@ private fun testBookmarkStore() = object : BookmarkStore {
     override fun bookmarksFor(bookmarkNames: Set<String>) = bookmarkNames.map { bookmarkFor(it) }.toSet()
     override fun save(bookmark: Bookmark) = Unit
     override fun checkoutBookmark(bookmarkName: String): Either<LockNotObtained, Bookmark> = Right(bookmarkFor(bookmarkName))
+}
+
+private fun testEventSource() = object : EventSource<SpecificMetadata> {
+    override fun getAfter(sequence: Long, eventClasses: List<KClass<out DomainEvent>>, batchSize: Int): List<SequencedEvent<SpecificMetadata>> {
+        return emptyList() // Simple implementation for basic tests
+    }
 }
 
 private fun createSequencedEvent(domainEvent: DomainEvent, sequence: Long): SequencedEvent<SpecificMetadata> {
