@@ -30,10 +30,10 @@ Granular plan:
 - [x] **Test**: Verify transaction rollback when `endOfSinkTransactionHook` throws exception
 
 ## Phase 2: Event Filtering and Processor Structure
-- [ ] Create new `BlockingSyncEventProcessorUpdater` class accepting list of `BookmarkedEventProcessor<M>`
-- [ ] Implement event filtering logic using `domainEventClasses()` (pattern from `BlockingAsyncEventProcessorWaiter`)
-- [ ] **Test**: Create `BlockingSyncEventProcessorUpdaterTest` - verify event type filtering works correctly
-- [ ] **Test**: Test with multiple processors handling different event types
+- [x] Create new `BlockingSyncEventProcessorUpdater` class accepting list of `BookmarkedEventProcessor<M>`
+- [x] Implement event filtering logic using `domainEventClasses()` (pattern from `BlockingAsyncEventProcessorWaiter`)
+- [x] **Test**: Create `BlockingSyncEventProcessorUpdaterTest` - verify event type filtering works correctly
+- [x] **Test**: Test with multiple processors handling different event types
 
 ## Phase 3: Catch-up Mechanism
 - [ ] **Update `BlockingSyncEventProcessorUpdater`**: Add catch-up mechanism - check bookmark vs new events, fetch missed events with `EventSource.getAfter()`

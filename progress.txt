@@ -1,0 +1,41 @@
+## Phase 1: EventStore Hook Enhancement Progress
+
+### Task Completed (e881603): Add endOfSinkTransactionHook to RelationalDatabaseEventStore
+- **PRD Items**: Phase 1 - Constructor update, create() method update, sink() modification, error handling
+- **Key Decisions**:
+  - Added endOfSinkTransactionHook parameter as 8th parameter in constructor (before afterSinkHook)
+  - Positioned in create() method after eventsTableName param for logical grouping
+  - Called hook within transaction after all events inserted but before commit
+  - Added try-catch with re-throw to ensure transaction rollback on hook failures
+  - Maintained backward compatibility with default empty implementation { }
+- **Files Changed**:
+  - RelationalDatabaseEventStore.kt: Constructor signature, create() method, sink() method
+- **Status**: Implementation complete, compiles successfully, basic tests pass
+- **Next Tasks**: Create BlockingSyncEventProcessorUpdater class (Phase 2)
+
+### Task Completed (2dab094): Add tests for endOfSinkTransactionHook behavior
+- **PRD Items**: Phase 1 - Test backward compatibility, transaction timing, rollback behavior
+- **Key Decisions**:
+  - Verified all existing tests pass without modification (backward compatibility maintained)
+  - Added test confirming endOfSinkTransactionHook called within transaction before afterSinkHook
+  - Added test verifying transaction rollback when endOfSinkTransactionHook throws exception
+  - Used call order tracking and database queries within transaction to prove timing
+- **Files Changed**:
+  - RelationalDatabaseEventStoreTest.kt: Added 2 comprehensive tests
+  - PRD.md: Marked Phase 1 tests as complete
+- **Status**: Phase 1 complete, all tests pass, ready for Phase 2
+
+### Task Completed (44c1ebd): Implement BlockingSyncEventProcessorUpdater with event filtering
+- **PRD Items**: Phase 2 - Create BlockingSyncEventProcessorUpdater class, implement event filtering, create tests
+- **Key Decisions**:
+  - Created basic class with processEvents() method accepting List<SequencedEvent<M>>
+  - Implemented event filtering using domainEventClasses().toSet() pattern from BlockingAsyncEventProcessorWaiter
+  - Each processor filters events to only those matching its domainEventClasses before processing
+  - Used forEach loops for processors and their relevant events (simple synchronous processing)
+  - Created comprehensive test suite covering: event type filtering, multiple processors same event type, empty cases
+  - Used SpecificMetadata and FooEvent/BarEvent/BazEvent from existing test patterns
+- **Files Changed**:
+  - BlockingSyncEventProcessorUpdater.kt: New class with event filtering logic
+  - BlockingSyncEventProcessorUpdaterTest.kt: 4 comprehensive tests for filtering behavior
+  - PRD.md: Marked Phase 2 tasks as complete
+- **Status**: Phase 2 complete, basic processing and filtering works, ready for Phase 3 (catch-up mechanism)
