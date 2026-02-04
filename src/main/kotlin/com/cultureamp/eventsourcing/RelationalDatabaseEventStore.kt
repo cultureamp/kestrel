@@ -112,12 +112,8 @@ class RelationalDatabaseEventStore<M : EventMetadata>(
                             SequencedEvent(event, insertedSequence)
                         }
                     }.let { sequencedEvents ->
-                        try {
-                            endOfSinkTransactionHook(sequencedEvents)
-                            Right(sequencedEvents)
-                        } catch (e: Exception) {
-                            throw e // Re-throw to cause transaction rollback
-                        }
+                        endOfSinkTransactionHook(sequencedEvents)
+                        Right(sequencedEvents)
                     }
                 }
             }
