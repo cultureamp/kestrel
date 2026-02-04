@@ -239,9 +239,7 @@ class RelationalDatabaseEventStoreTest : DescribeSpec({
                 hookCallOrder.add("transaction")
                 capturedTransactionHookEvents.addAll(events)
                 // Verify we can still query the database (we're in transaction)
-                transaction(db) {
-                    store.events.selectAll().count() shouldBe 1L
-                }
+                store.events.selectAll().count() shouldBe 1L
             }
 
             val afterSinkHook: (List<SequencedEvent<SpecificMetadata>>) -> Unit = { events ->
