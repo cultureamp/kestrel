@@ -19,4 +19,35 @@ appropriate sequence number so that they can safely handle these new events. Tak
 just for the part where it filters down based on event-type - not all event-processors need to handle all event types.
 
 Granular plan:
-<individual tasks defined by claude and ticked off one by one in a markdown list>
+
+## Phase 1: EventStore Hook Enhancement
+- [ ] Update `RelationalDatabaseEventStore` constructor to accept `endOfSinkTransactionHook` parameter
+- [ ] Add `endOfSinkTransactionHook` parameter to companion `create()` method with default empty implementation
+- [ ] **Test**: Update `RelationalDatabaseEventStoreTest` - verify backward compatibility with existing tests
+- [ ] Modify `sink()` method to call new hook WITHIN the database transaction (before commit)
+- [ ] **Test**: Verify `endOfSinkTransactionHook` called within transaction and before `afterSinkHook`
+- [ ] Add error handling for hook failures - wrap in try-catch to allow transaction rollback
+- [ ] **Test**: Verify transaction rollback when `endOfSinkTransactionHook` throws exception
+
+## Phase 2: Event Filtering and Processor Structure
+- [ ] Create new `BlockingSyncEventProcessorUpdater` class accepting list of `BookmarkedEventProcessor<M>`
+- [ ] Implement event filtering logic using `domainEventClasses()` (pattern from `BlockingAsyncEventProcessorWaiter`)
+- [ ] **Test**: Create `BlockingSyncEventProcessorUpdaterTest` - verify event type filtering works correctly
+- [ ] **Test**: Test with multiple processors handling different event types
+
+## Phase 3: Catch-up Mechanism
+- [ ] **Update `BlockingSyncEventProcessorUpdater`**: Add catch-up mechanism - check bookmark vs new events, fetch missed events with `EventSource.getAfter()`
+- [ ] **Test in `BlockingSyncEventProcessorUpdaterTest`**: Test catch-up scenarios when processors are behind current events
+- [ ] **Test in `BlockingSyncEventProcessorUpdaterTest`**: Test no-op behavior when processors are already caught up
+
+## Phase 4: Synchronous Processing
+- [ ] **Update `BlockingSyncEventProcessorUpdater`**: Implement synchronous event processing - call `processor.process()` for each relevant event
+- [ ] **Update `BlockingSyncEventProcessorUpdater`**: Add bookmark updates - save new bookmark after processing each event
+- [ ] **Test in `BlockingSyncEventProcessorUpdaterTest`**: Verify bookmark updates after successful processing
+- [ ] **Update `BlockingSyncEventProcessorUpdater`**: Handle multiple processors with proper error handling (fail-fast approach)
+- [ ] **Test in `BlockingSyncEventProcessorUpdaterTest`**: Test error handling - processor failure causes transaction rollback
+
+## Phase 5: Integration and Final Verification
+- [ ] **Test**: Create integration test showing sync and async processors working together
+- [ ] **Test**: Test performance impact when no sync processors are configured
+- [ ] **Test**: Run full test suite to ensure no regressions: `./gradlew test`
