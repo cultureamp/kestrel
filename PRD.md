@@ -21,13 +21,13 @@ just for the part where it filters down based on event-type - not all event-proc
 Granular plan:
 
 ## Phase 1: EventStore Hook Enhancement
-- [ ] Update `RelationalDatabaseEventStore` constructor to accept `endOfSinkTransactionHook` parameter
-- [ ] Add `endOfSinkTransactionHook` parameter to companion `create()` method with default empty implementation
-- [ ] **Test**: Update `RelationalDatabaseEventStoreTest` - verify backward compatibility with existing tests
-- [ ] Modify `sink()` method to call new hook WITHIN the database transaction (before commit)
-- [ ] **Test**: Verify `endOfSinkTransactionHook` called within transaction and before `afterSinkHook`
-- [ ] Add error handling for hook failures - wrap in try-catch to allow transaction rollback
-- [ ] **Test**: Verify transaction rollback when `endOfSinkTransactionHook` throws exception
+- [x] Update `RelationalDatabaseEventStore` constructor to accept `endOfSinkTransactionHook` parameter
+- [x] Add `endOfSinkTransactionHook` parameter to companion `create()` method with default empty implementation
+- [x] **Test**: Update `RelationalDatabaseEventStoreTest` - verify backward compatibility with existing tests
+- [x] Modify `sink()` method to call new hook WITHIN the database transaction (before commit)
+- [x] **Test**: Verify `endOfSinkTransactionHook` called within transaction and before `afterSinkHook`
+- [x] Add error handling for hook failures - wrap in try-catch to allow transaction rollback
+- [x] **Test**: Verify transaction rollback when `endOfSinkTransactionHook` throws exception
 
 ## Phase 2: Event Filtering and Processor Structure
 - [ ] Create new `BlockingSyncEventProcessorUpdater` class accepting list of `BookmarkedEventProcessor<M>`
