@@ -1,12 +1,5 @@
 package com.cultureamp.eventsourcing
 
-import com.fasterxml.jackson.core.JsonProcessingException
-import com.fasterxml.jackson.databind.ObjectMapper
-import com.fasterxml.jackson.databind.PropertyNamingStrategies
-import com.fasterxml.jackson.databind.SerializationFeature.WRITE_DATES_AS_TIMESTAMPS
-import com.fasterxml.jackson.datatype.joda.JodaModule
-import com.fasterxml.jackson.module.kotlin.KotlinFeature
-import com.fasterxml.jackson.module.kotlin.kotlinModule
 import org.jetbrains.exposed.exceptions.ExposedSQLException
 import org.jetbrains.exposed.sql.Column
 import org.jetbrains.exposed.sql.Database
@@ -22,15 +15,23 @@ import org.jetbrains.exposed.sql.select
 import org.jetbrains.exposed.sql.transactions.transaction
 import org.jetbrains.exposed.sql.vendors.H2Dialect
 import org.jetbrains.exposed.sql.vendors.PostgreSQLDialect
+import tools.jackson.core.JacksonException
+import tools.jackson.databind.ObjectMapper
+import tools.jackson.databind.PropertyNamingStrategies
+import tools.jackson.databind.cfg.DateTimeFeature
+import tools.jackson.datatype.joda.JodaModule
+import tools.jackson.module.kotlin.jsonMapper
+import tools.jackson.module.kotlin.kotlinModule
 import java.sql.SQLException
 import java.util.UUID
 import kotlin.reflect.KClass
 
-val defaultObjectMapper = ObjectMapper()
-    .registerModule(kotlinModule { enable(KotlinFeature.SingletonSupport) })
-    .registerModule(JodaModule())
-    .configure(WRITE_DATES_AS_TIMESTAMPS, false)
-    .setPropertyNamingStrategy(PropertyNamingStrategies.SNAKE_CASE)
+val defaultObjectMapper = jsonMapper {
+    addModule(kotlinModule())
+    addModule(JodaModule())
+    disable(DateTimeFeature.WRITE_DATES_AS_TIMESTAMPS)
+    propertyNamingStrategy(PropertyNamingStrategies.SNAKE_CASE)
+}
 
 val defaultEventsTableName = "events"
 val defaultEventTypeResolver = CanonicalNameEventTypeResolver
@@ -129,13 +130,13 @@ class RelationalDatabaseEventStore<M : EventMetadata>(
         // prove that json body can be deserialized, which catches invalid fields types, e.g. interfaces
         try {
             objectMapper.readValue(body, domainEventClass)
-        } catch (e: JsonProcessingException) {
+        } catch (e: JacksonException) {
             throw EventBodySerializationException(e)
         }
 
         try {
             objectMapper.readValue(metadata, metadataClass)
-        } catch (e: JsonProcessingException) {
+        } catch (e: JacksonException) {
             throw EventMetadataSerializationException(e)
         }
     }
