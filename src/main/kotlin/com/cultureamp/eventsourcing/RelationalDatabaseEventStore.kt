@@ -44,6 +44,7 @@ class RelationalDatabaseEventStore<M : EventMetadata>(
     private val objectMapper: ObjectMapper,
     private val eventTypeResolver: EventTypeResolver,
     private val blockingLockUntilTransactionEnd: Transaction.() -> CommandError? = { null },
+    private val endOfSinkTransactionHook: (List<SequencedEvent<M>>) -> Unit = { },
     private val afterSinkHook: (List<SequencedEvent<M>>) -> Unit = { },
     private val eventsSinkTable: Events = events,
 ) : EventStore<M> {
@@ -53,6 +54,7 @@ class RelationalDatabaseEventStore<M : EventMetadata>(
             db: Database,
             objectMapper: ObjectMapper = defaultObjectMapper,
             eventsTableName: String = defaultEventsTableName,
+            noinline endOfSinkTransactionHook: (List<SequencedEvent<M>>) -> Unit = { },
             noinline afterSinkHook: (List<SequencedEvent<M>>) -> Unit = { },
             eventTypeResolver: EventTypeResolver = defaultEventTypeResolver,
             eventsSequenceStats: EventsSequenceStats? = RelationalDatabaseEventsSequenceStats(db, eventTypeResolver, defaultEventsSequenceStatsTableName).also { it.createSchemaIfNotExists() },
@@ -72,7 +74,7 @@ class RelationalDatabaseEventStore<M : EventMetadata>(
                 }
             },
         ): RelationalDatabaseEventStore<M> {
-            return RelationalDatabaseEventStore(db, Events(eventsTableName, jsonBody), eventsSequenceStats, M::class.java, objectMapper, eventTypeResolver, blockingLockUntilTransactionEnd, afterSinkHook)
+            return RelationalDatabaseEventStore(db, Events(eventsTableName, jsonBody), eventsSequenceStats, M::class.java, objectMapper, eventTypeResolver, blockingLockUntilTransactionEnd, endOfSinkTransactionHook, afterSinkHook)
         }
     }
 
@@ -110,7 +112,10 @@ class RelationalDatabaseEventStore<M : EventMetadata>(
                             eventsSequenceStats?.save(event.domainEvent::class, insertedSequence)
                             SequencedEvent(event, insertedSequence)
                         }
-                    }.let { Right(it) }
+                    }.let { sequencedEvents ->
+                        endOfSinkTransactionHook(sequencedEvents)
+                        Right(sequencedEvents)
+                    }
                 }
             }
         } catch (e: ExposedSQLException) {

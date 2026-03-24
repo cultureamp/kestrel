@@ -4,3 +4,4 @@ out/
 build/
 .idea/
 kotlin-cqrs-eventsourcing.iml
+.claude/settings.local.json
