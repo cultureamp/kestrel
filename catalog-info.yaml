@@ -1,0 +1,20 @@
+apiVersion: backstage.io/v1alpha1
+kind: Component
+metadata:
+  name: kestrel
+  description: Kotlin framework for building event-sourced, CQRS services.
+  links:
+    - title: Source
+      url: https://github.com/cultureamp/kestrel
+  tags:
+    - asset-criticality-moderate
+    - camp-performance
+    - data-classification-none
+  annotations:
+    github.com/project-slug: cultureamp/kestrel
+    github.com/team-slug: cultureamp/develop
+    buildkite.com/project-slug: culture-amp/kestrel
+spec:
+  type: library
+  lifecycle: production
+  owner: develop
