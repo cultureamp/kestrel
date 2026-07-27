@@ -13,7 +13,7 @@ metadata:
   annotations:
     github.com/project-slug: cultureamp/kestrel
     github.com/team-slug: cultureamp/develop
-    buildkite.com/project-slug: culture-amp/kestrel
+    buildkite.com/project-slug: culture-amp/kotlin-eventsourcing
 spec:
   type: library
   lifecycle: production
