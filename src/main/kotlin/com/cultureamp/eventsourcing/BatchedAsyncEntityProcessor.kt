@@ -82,9 +82,8 @@ class BatchedAsyncEntityProcessor<E>(
         ) { index, (_, bookmark), positionedEntity ->
             validateProgress(bookmark.position, positionedEntity.position)
             processEntity(positionedEntity)
-            val updatedBookmark = bookmark.copy(position = positionedEntity.position)
-            bookmarkStore.save(updatedBookmark)
-            index + 1 to updatedBookmark
+            bookmarkStore.save(bookmarkName, positionedEntity.position)
+            index + 1 to bookmark.copy(position = positionedEntity.position)
         }
 
         endLog(count, finalBookmark)

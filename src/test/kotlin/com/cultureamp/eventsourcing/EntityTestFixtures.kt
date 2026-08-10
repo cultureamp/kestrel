@@ -16,12 +16,11 @@ import java.util.UUID
  *     parent_goal_id    uuid NOT NULL,
  *     account_id        uuid NOT NULL,
  *     created_at        timestamp without time zone NOT NULL,
+ *     updated_at        timestamp without time zone NOT NULL,
  *     deleted_at        timestamp without time zone,
  *     cascading_weight  numeric(5,4) DEFAULT 0 NOT NULL
  * );
  * ```
- *
- * Note that it has no `updated_at`, so the tests poll it by `created_at`.
  */
 class GoalRelationshipsTable(tableName: String = "goal_relationships") : Table(tableName) {
     val id = uuid("id")
@@ -29,6 +28,7 @@ class GoalRelationshipsTable(tableName: String = "goal_relationships") : Table(t
     val parentGoalId = uuid("parent_goal_id")
     val accountId = uuid("account_id")
     val createdAt = datetime("created_at")
+    val updatedAt = datetime("updated_at")
     val deletedAt = datetime("deleted_at").nullable()
     val cascadingWeight = decimal("cascading_weight", precision = 5, scale = 4).default(BigDecimal("0.0000"))
     override val primaryKey = PrimaryKey(id)
@@ -40,10 +40,11 @@ data class GoalRelationship(
     val parentGoalId: UUID,
     val accountId: UUID,
     val createdAt: DateTime,
+    val updatedAt: DateTime,
     val deletedAt: DateTime? = null,
     val cascadingWeight: BigDecimal = BigDecimal("0.0000"),
 ) {
-    val position = EntityPosition(createdAt, id)
+    val position = EntityPosition(updatedAt, id)
 }
 
 class InMemoryEntityBookmarkStore(private val lockObtainable: Boolean = true) : EntityBookmarkStore {
@@ -54,9 +55,9 @@ class InMemoryEntityBookmarkStore(private val lockObtainable: Boolean = true) : 
 
     override fun bookmarksFor(bookmarkNames: Set<String>) = bookmarkNames.map { bookmarkFor(it) }.toSet()
 
-    override fun save(bookmark: EntityBookmark) {
-        positions[bookmark.name] = bookmark.position ?: throw IllegalArgumentException("Cannot save ${bookmark.name} with no position")
-        saved += bookmark
+    override fun save(bookmarkName: String, position: EntityPosition) {
+        positions[bookmarkName] = position
+        saved += EntityBookmark(bookmarkName, position)
     }
 
     override fun checkoutBookmark(bookmarkName: String): Either<LockNotObtained, EntityBookmark> =

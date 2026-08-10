@@ -20,17 +20,16 @@ class BatchedAsyncEntityProcessorIntegrationTest : DescribeSpec({
     val accountId = UUID.randomUUID()
     val bookmarkName = "GoalRelationshipProjector"
 
-    // the real table has no updated_at, so it is polled by created_at
     val entitySource = RelationalDatabaseEntitySource(
         db = db,
         table = goalRelationships,
-        updatedAtColumn = goalRelationships.createdAt,
+        updatedAtColumn = goalRelationships.updatedAt,
         idColumn = goalRelationships.id,
         rowToEntity = { it[goalRelationships.id] },
     )
 
-    fun insertGoalRelationship(createdAt: DateTime): GoalRelationship {
-        val relationship = GoalRelationship(UUID.randomUUID(), UUID.randomUUID(), UUID.randomUUID(), accountId, createdAt)
+    fun insertGoalRelationship(updatedAt: DateTime): GoalRelationship {
+        val relationship = GoalRelationship(UUID.randomUUID(), UUID.randomUUID(), UUID.randomUUID(), accountId, baseTime, updatedAt)
         transaction(db) {
             goalRelationships.insert {
                 it[goalRelationships.id] = relationship.id
@@ -38,16 +37,17 @@ class BatchedAsyncEntityProcessorIntegrationTest : DescribeSpec({
                 it[goalRelationships.parentGoalId] = relationship.parentGoalId
                 it[goalRelationships.accountId] = relationship.accountId
                 it[goalRelationships.createdAt] = relationship.createdAt
+                it[goalRelationships.updatedAt] = relationship.updatedAt
                 it[goalRelationships.cascadingWeight] = relationship.cascadingWeight
             }
         }
         return relationship
     }
 
-    fun touchGoalRelationship(relationship: GoalRelationship, createdAt: DateTime) {
+    fun touchGoalRelationship(relationship: GoalRelationship, updatedAt: DateTime) {
         transaction(db) {
             goalRelationships.update({ goalRelationships.id eq relationship.id }) {
-                it[goalRelationships.createdAt] = createdAt
+                it[goalRelationships.updatedAt] = updatedAt
             }
         }
     }
@@ -95,7 +95,7 @@ class BatchedAsyncEntityProcessorIntegrationTest : DescribeSpec({
             processor.processOneBatch() shouldBe Action.Wait
             processed shouldBe listOf(first.id, second.id, third.id)
 
-            // a row whose polled column moves forward is picked up again
+            // a row that gets touched is picked up again
             touchGoalRelationship(first, baseTime.plusSeconds(4))
             processor.processOneBatch() shouldBe Action.Wait
             processed shouldBe listOf(first.id, second.id, third.id, first.id)

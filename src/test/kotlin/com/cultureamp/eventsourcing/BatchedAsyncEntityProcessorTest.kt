@@ -13,7 +13,7 @@ class BatchedAsyncEntityProcessorTest : DescribeSpec({
     val accountId = UUID.randomUUID()
 
     fun goalRelationship(secondsAfterBase: Int, id: UUID = UUID.randomUUID()) =
-        GoalRelationship(id, UUID.randomUUID(), UUID.randomUUID(), accountId, baseTime.plusSeconds(secondsAfterBase))
+        GoalRelationship(id, UUID.randomUUID(), UUID.randomUUID(), accountId, createdAt = baseTime, updatedAt = baseTime.plusSeconds(secondsAfterBase))
 
     fun positioned(goalRelationship: GoalRelationship) = PositionedEntity(goalRelationship, goalRelationship.position)
 
@@ -38,7 +38,7 @@ class BatchedAsyncEntityProcessorTest : DescribeSpec({
     )
 
     describe("processOneBatch") {
-        it("processes rows in created-at order and bookmarks each one") {
+        it("processes rows in updated-at order and bookmarks each one") {
             val first = goalRelationship(1)
             val second = goalRelationship(2)
             val third = goalRelationship(3)
@@ -59,14 +59,14 @@ class BatchedAsyncEntityProcessorTest : DescribeSpec({
             val second = goalRelationship(2)
             val processed = mutableListOf<GoalRelationship>()
             val bookmarkStore = InMemoryEntityBookmarkStore()
-            bookmarkStore.save(EntityBookmark("goal-relationships", first.position))
+            bookmarkStore.save("goal-relationships", first.position)
 
             processorFor(listOf(first, second), processed, bookmarkStore).processOneBatch()
 
             processed shouldBe listOf(second)
         }
 
-        it("tiebreaks on id so that rows sharing a created-at are each processed exactly once across batches") {
+        it("tiebreaks on id so that rows sharing an updated-at are each processed exactly once across batches") {
             val sameSecond = (1..5).map { goalRelationship(1) }
             val processed = mutableListOf<GoalRelationship>()
             val bookmarkStore = InMemoryEntityBookmarkStore()
@@ -86,14 +86,14 @@ class BatchedAsyncEntityProcessorTest : DescribeSpec({
             val fresh = goalRelationship(10)
             val processed = mutableListOf<GoalRelationship>()
             val bookmarkStore = InMemoryEntityBookmarkStore()
-            var now = fresh.createdAt.plusMillis(500)
+            var now = fresh.updatedAt.plusMillis(500)
 
             val processor = processorFor(listOf(old, fresh), processed, bookmarkStore, timestampDelayMs = 1000, clock = { now })
 
             processor.processOneBatch()
             processed shouldBe listOf(old)
 
-            now = fresh.createdAt.plusMillis(1500)
+            now = fresh.updatedAt.plusMillis(1500)
             processor.processOneBatch()
             processed shouldBe listOf(old, fresh)
         }
@@ -120,10 +120,10 @@ class BatchedAsyncEntityProcessorTest : DescribeSpec({
         it("fails loudly when the source re-returns the row the bookmark is already at") {
             val stuck = goalRelationship(1)
             val bookmarkStore = InMemoryEntityBookmarkStore()
-            bookmarkStore.save(EntityBookmark("goal-relationships", stuck.position))
+            bookmarkStore.save("goal-relationships", stuck.position)
             val processor = BatchedAsyncEntityProcessor(
                 entitySource = EntitySource.from { _, _, _ -> listOf(PositionedEntity(stuck, stuck.position)) },
-                entityUpdatedAtStats = EntityUpdatedAtStats.from { stuck.createdAt },
+                entityUpdatedAtStats = EntityUpdatedAtStats.from { stuck.updatedAt },
                 bookmarkStore = bookmarkStore,
                 bookmarkName = "goal-relationships",
                 entityProcessor = EntityProcessor.from { _: GoalRelationship -> },
@@ -142,7 +142,7 @@ class BatchedAsyncEntityProcessorTest : DescribeSpec({
                 entitySource = EntitySource.from { _, _, _ ->
                     listOf(PositionedEntity(later, later.position), PositionedEntity(earlier, earlier.position))
                 },
-                entityUpdatedAtStats = EntityUpdatedAtStats.from { later.createdAt },
+                entityUpdatedAtStats = EntityUpdatedAtStats.from { later.updatedAt },
                 bookmarkStore = InMemoryEntityBookmarkStore(),
                 bookmarkName = "goal-relationships",
                 entityProcessor = EntityProcessor.from { _: GoalRelationship -> },

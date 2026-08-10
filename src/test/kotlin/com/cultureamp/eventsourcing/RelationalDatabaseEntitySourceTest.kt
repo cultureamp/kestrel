@@ -17,17 +17,16 @@ class RelationalDatabaseEntitySourceTest : DescribeSpec({
     val distantFuture = baseTime.plusYears(1)
     val accountId = UUID.randomUUID()
 
-    // the real table has no updated_at, so it is polled by created_at
     val entitySource = RelationalDatabaseEntitySource(
         db = db,
         table = goalRelationships,
-        updatedAtColumn = goalRelationships.createdAt,
+        updatedAtColumn = goalRelationships.updatedAt,
         idColumn = goalRelationships.id,
         rowToEntity = { it[goalRelationships.id] },
     )
 
-    fun insertGoalRelationship(createdAt: DateTime, deletedAt: DateTime? = null): GoalRelationship {
-        val relationship = GoalRelationship(UUID.randomUUID(), UUID.randomUUID(), UUID.randomUUID(), accountId, createdAt, deletedAt)
+    fun insertGoalRelationship(updatedAt: DateTime, deletedAt: DateTime? = null): GoalRelationship {
+        val relationship = GoalRelationship(UUID.randomUUID(), UUID.randomUUID(), UUID.randomUUID(), accountId, baseTime, updatedAt, deletedAt)
         transaction(db) {
             goalRelationships.insert {
                 it[goalRelationships.id] = relationship.id
@@ -35,6 +34,7 @@ class RelationalDatabaseEntitySourceTest : DescribeSpec({
                 it[goalRelationships.parentGoalId] = relationship.parentGoalId
                 it[goalRelationships.accountId] = relationship.accountId
                 it[goalRelationships.createdAt] = relationship.createdAt
+                it[goalRelationships.updatedAt] = relationship.updatedAt
                 it[goalRelationships.deletedAt] = relationship.deletedAt
                 it[goalRelationships.cascadingWeight] = relationship.cascadingWeight
             }
@@ -55,7 +55,7 @@ class RelationalDatabaseEntitySourceTest : DescribeSpec({
     }
 
     describe("getAfter") {
-        it("returns rows in created-at order from the beginning when there is no position") {
+        it("returns rows in updated-at order from the beginning when there is no position") {
             val third = insertGoalRelationship(baseTime.plusSeconds(3))
             val first = insertGoalRelationship(baseTime.plusSeconds(1))
             val second = insertGoalRelationship(baseTime.plusSeconds(2))
@@ -71,16 +71,16 @@ class RelationalDatabaseEntitySourceTest : DescribeSpec({
             entitySource.getAfter(second.position, distantFuture).map { it.entity } shouldBe listOf(third.id)
         }
 
-        it("positions each row by its own created-at and id") {
+        it("positions each row by its own updated-at and id") {
             val only = insertGoalRelationship(baseTime.plusSeconds(1))
 
             val read = entitySource.getAfter(null, distantFuture).single()
 
             read.position.id shouldBe only.id
-            read.position.updatedAt.millis shouldBe only.createdAt.millis
+            read.position.updatedAt.millis shouldBe only.updatedAt.millis
         }
 
-        it("excludes rows created after the upTo cutoff") {
+        it("excludes rows updated after the upTo cutoff") {
             val old = insertGoalRelationship(baseTime.plusSeconds(1))
             insertGoalRelationship(baseTime.plusSeconds(30))
 
@@ -93,7 +93,7 @@ class RelationalDatabaseEntitySourceTest : DescribeSpec({
             entitySource.getAfter(null, distantFuture, batchSize = 2).map { it.entity } shouldBe inserted.take(2).map { it.id }
         }
 
-        it("uses the id as a tiebreaker so rows sharing a created-at are each returned exactly once") {
+        it("uses the id as a tiebreaker so rows sharing an updated-at are each returned exactly once") {
             val sharedTimestamp = baseTime.plusSeconds(1)
             val inserted = (1..5).map { insertGoalRelationship(sharedTimestamp) }
 
@@ -116,7 +116,7 @@ class RelationalDatabaseEntitySourceTest : DescribeSpec({
             val liveOnly = RelationalDatabaseEntitySource(
                 db = db,
                 table = goalRelationships,
-                updatedAtColumn = goalRelationships.createdAt,
+                updatedAtColumn = goalRelationships.updatedAt,
                 idColumn = goalRelationships.id,
                 filter = { goalRelationships.deletedAt.isNull() },
                 rowToEntity = { it[goalRelationships.id] },
@@ -131,7 +131,7 @@ class RelationalDatabaseEntitySourceTest : DescribeSpec({
             entitySource.lastUpdatedAt() shouldBe null
         }
 
-        it("returns the newest created-at in the table") {
+        it("returns the newest updated-at in the table") {
             insertGoalRelationship(baseTime.plusSeconds(1))
             insertGoalRelationship(baseTime.plusSeconds(30))
             insertGoalRelationship(baseTime.plusSeconds(2))
@@ -145,7 +145,7 @@ class RelationalDatabaseEntitySourceTest : DescribeSpec({
             val liveOnly = RelationalDatabaseEntitySource(
                 db = db,
                 table = goalRelationships,
-                updatedAtColumn = goalRelationships.createdAt,
+                updatedAtColumn = goalRelationships.updatedAt,
                 idColumn = goalRelationships.id,
                 filter = { goalRelationships.deletedAt.isNull() },
                 rowToEntity = { it[goalRelationships.id] },
@@ -162,7 +162,7 @@ class RelationalDatabaseEntitySourceTest : DescribeSpec({
             val unfiltered = RelationalDatabaseEntitySource(
                 db = db,
                 table = goalRelationships,
-                updatedAtColumn = goalRelationships.createdAt,
+                updatedAtColumn = goalRelationships.updatedAt,
                 idColumn = goalRelationships.id,
                 filter = { Op.TRUE },
                 rowToEntity = { it[goalRelationships.id] },
@@ -178,7 +178,7 @@ class RelationalDatabaseEntitySourceTest : DescribeSpec({
             val wholeRows = RelationalDatabaseEntitySource(
                 db = db,
                 table = goalRelationships,
-                updatedAtColumn = goalRelationships.createdAt,
+                updatedAtColumn = goalRelationships.updatedAt,
                 idColumn = goalRelationships.id,
                 rowToEntity = {
                     GoalRelationship(
@@ -187,6 +187,7 @@ class RelationalDatabaseEntitySourceTest : DescribeSpec({
                         parentGoalId = it[goalRelationships.parentGoalId],
                         accountId = it[goalRelationships.accountId],
                         createdAt = it[goalRelationships.createdAt],
+                        updatedAt = it[goalRelationships.updatedAt],
                         deletedAt = it[goalRelationships.deletedAt],
                         cascadingWeight = it[goalRelationships.cascadingWeight],
                     )
@@ -200,6 +201,7 @@ class RelationalDatabaseEntitySourceTest : DescribeSpec({
             read.parentGoalId shouldBe inserted.parentGoalId
             read.accountId shouldBe inserted.accountId
             read.createdAt.millis shouldBe inserted.createdAt.millis
+            read.updatedAt.millis shouldBe inserted.updatedAt.millis
             read.deletedAt?.millis shouldBe inserted.deletedAt?.millis
             read.cascadingWeight.compareTo(inserted.cascadingWeight) shouldBe 0
         }

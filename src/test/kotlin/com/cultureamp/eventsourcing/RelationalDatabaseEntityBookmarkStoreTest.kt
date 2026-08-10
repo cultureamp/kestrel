@@ -1,6 +1,5 @@
 package com.cultureamp.eventsourcing
 
-import io.kotest.assertions.throwables.shouldThrow
 import io.kotest.core.spec.style.DescribeSpec
 import io.kotest.matchers.shouldBe
 import org.jetbrains.exposed.sql.Database
@@ -27,8 +26,8 @@ class RelationalDatabaseEntityBookmarkStoreTest : DescribeSpec({
     describe("RelationalDatabaseEntityBookmarkStore") {
         it("sets and retrieves a bookmark position") {
             val position = EntityPosition(baseTime, UUID.randomUUID())
-            store.save(EntityBookmark("new-bookmark", position))
-            store.save(EntityBookmark("other-bookmark", EntityPosition(baseTime.plusSeconds(1), UUID.randomUUID())))
+            store.save("new-bookmark", position)
+            store.save("other-bookmark", EntityPosition(baseTime.plusSeconds(1), UUID.randomUUID()))
 
             store.bookmarkFor("new-bookmark") shouldBe EntityBookmark("new-bookmark", position)
         }
@@ -40,24 +39,18 @@ class RelationalDatabaseEntityBookmarkStoreTest : DescribeSpec({
         it("updates the position if the bookmark already exists") {
             val first = EntityPosition(baseTime, UUID.randomUUID())
             val second = EntityPosition(baseTime.plusHours(1), UUID.randomUUID())
-            store.save(EntityBookmark("update-bookmark", first))
-            store.save(EntityBookmark("other-bookmark", EntityPosition(baseTime, UUID.randomUUID())))
-            store.save(EntityBookmark("update-bookmark", second))
+            store.save("update-bookmark", first)
+            store.save("other-bookmark", EntityPosition(baseTime, UUID.randomUUID()))
+            store.save("update-bookmark", second)
 
             store.bookmarkFor("update-bookmark") shouldBe EntityBookmark("update-bookmark", second)
-        }
-
-        it("rejects saving a bookmark with no position, since a stored bookmark always sits on a row") {
-            shouldThrow<IllegalArgumentException> { store.save(EntityBookmark("unstarted-bookmark", null)) }
-
-            store.bookmarkFor("unstarted-bookmark") shouldBe EntityBookmark("unstarted-bookmark", null)
         }
 
         it("can fetch bookmarks in bulk") {
             val position = EntityPosition(baseTime, UUID.randomUUID())
             val otherPosition = EntityPosition(baseTime.plusSeconds(1), UUID.randomUUID())
-            store.save(EntityBookmark("new-bookmark", position))
-            store.save(EntityBookmark("other-bookmark", otherPosition))
+            store.save("new-bookmark", position)
+            store.save("other-bookmark", otherPosition)
 
             val bookmarks = store.bookmarksFor(setOf("new-bookmark", "other-bookmark", "unknown-bookmark"))
 
@@ -70,7 +63,7 @@ class RelationalDatabaseEntityBookmarkStoreTest : DescribeSpec({
 
         it("checks out a bookmark, obtaining the lock") {
             val position = EntityPosition(baseTime, UUID.randomUUID())
-            store.save(EntityBookmark("checkout-bookmark", position))
+            store.save("checkout-bookmark", position)
 
             val checkedOut = store.checkoutBookmark("checkout-bookmark")
 

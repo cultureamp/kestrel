@@ -22,11 +22,11 @@ interface EntityBookmarkStore {
     fun bookmarksFor(bookmarkNames: Set<String>): Set<EntityBookmark>
 
     /**
-     * Records progress for a bookmark. The bookmark's position must be non-null: a stored bookmark always sits on a
-     * row it has processed, and "nothing processed yet" is the absence of a bookmark rather than a bookmark with no
-     * position.
+     * Records progress for a bookmark. Takes a position rather than an [EntityBookmark] because a stored bookmark
+     * always sits on a row it has processed: "nothing processed yet" is the absence of a bookmark, so there is nothing
+     * to save.
      */
-    fun save(bookmark: EntityBookmark)
+    fun save(bookmarkName: String, position: EntityPosition)
 
     /**
      * Finds the bookmark given by bookmarkName and attempts to lock it.
@@ -61,20 +61,17 @@ class RelationalDatabaseEntityBookmarkStore(
         foundBookmarks + emptyBookmarks
     }
 
-    override fun save(bookmark: EntityBookmark): Unit = transaction(db) {
-        val position = bookmark.position ?: throw IllegalArgumentException(
-            "Cannot save bookmark ${bookmark.name} with no position: a stored bookmark always sits on a row it has processed",
-        )
-        if (!isExists(bookmark.name)) {
+    override fun save(bookmarkName: String, position: EntityPosition): Unit = transaction(db) {
+        if (!isExists(bookmarkName)) {
             table.insert {
-                it[name] = bookmark.name
+                it[name] = bookmarkName
                 it[lastUpdatedAt] = position.updatedAt
                 it[lastId] = position.id
                 it[createdAt] = DateTime.now()
                 it[updatedAt] = DateTime.now()
             }
         } else {
-            table.update({ table.name eq bookmark.name }) {
+            table.update({ table.name eq bookmarkName }) {
                 it[lastUpdatedAt] = position.updatedAt
                 it[lastId] = position.id
                 it[updatedAt] = DateTime.now()

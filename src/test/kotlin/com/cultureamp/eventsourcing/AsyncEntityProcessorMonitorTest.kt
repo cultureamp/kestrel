@@ -10,7 +10,7 @@ class AsyncEntityProcessorMonitorTest : DescribeSpec({
     val accountId = UUID.randomUUID()
 
     fun goalRelationship(secondsAfterBase: Int) =
-        GoalRelationship(UUID.randomUUID(), UUID.randomUUID(), UUID.randomUUID(), accountId, baseTime.plusSeconds(secondsAfterBase))
+        GoalRelationship(UUID.randomUUID(), UUID.randomUUID(), UUID.randomUUID(), accountId, createdAt = baseTime, updatedAt = baseTime.plusSeconds(secondsAfterBase))
 
     fun monitoredProcessor(
         goalRelationships: List<GoalRelationship>,
