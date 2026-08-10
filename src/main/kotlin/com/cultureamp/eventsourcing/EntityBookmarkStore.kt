@@ -20,6 +20,12 @@ val defaultEntityBookmarksTableName = "entity_bookmarks"
 interface EntityBookmarkStore {
     fun bookmarkFor(bookmarkName: String): EntityBookmark
     fun bookmarksFor(bookmarkNames: Set<String>): Set<EntityBookmark>
+
+    /**
+     * Records progress for a bookmark. The bookmark's position must be non-null: a stored bookmark always sits on a
+     * row it has processed, and "nothing processed yet" is the absence of a bookmark rather than a bookmark with no
+     * position.
+     */
     fun save(bookmark: EntityBookmark)
 
     /**
@@ -51,23 +57,26 @@ class RelationalDatabaseEntityBookmarkStore(
     override fun bookmarksFor(bookmarkNames: Set<String>): Set<EntityBookmark> = transaction(db) {
         val matchingRows = rowsForBookmarks(bookmarkNames)
         val foundBookmarks = matchingRows.map { EntityBookmark(it[table.name], it.toPosition()) }.toSet()
-        val emptyBookmarks = (bookmarkNames - foundBookmarks.map { it.name }.toSet()).map { EntityBookmark(it, EntityPosition.beginning) }.toSet()
+        val emptyBookmarks = (bookmarkNames - foundBookmarks.map { it.name }.toSet()).map { EntityBookmark(it, null) }.toSet()
         foundBookmarks + emptyBookmarks
     }
 
     override fun save(bookmark: EntityBookmark): Unit = transaction(db) {
+        val position = bookmark.position ?: throw IllegalArgumentException(
+            "Cannot save bookmark ${bookmark.name} with no position: a stored bookmark always sits on a row it has processed",
+        )
         if (!isExists(bookmark.name)) {
             table.insert {
                 it[name] = bookmark.name
-                it[lastUpdatedAt] = bookmark.position.updatedAt
-                it[lastId] = bookmark.position.id
+                it[lastUpdatedAt] = position.updatedAt
+                it[lastId] = position.id
                 it[createdAt] = DateTime.now()
                 it[updatedAt] = DateTime.now()
             }
         } else {
             table.update({ table.name eq bookmark.name }) {
-                it[lastUpdatedAt] = bookmark.position.updatedAt
-                it[lastId] = bookmark.position.id
+                it[lastUpdatedAt] = position.updatedAt
+                it[lastId] = position.id
                 it[updatedAt] = DateTime.now()
             }
         }
@@ -95,7 +104,10 @@ class EntityBookmarks(tableName: String = defaultEntityBookmarksTableName) : Tab
 }
 
 /**
- * A [position] of [EntityPosition.beginning] means nothing has been processed yet, i.e. the processor will start from
- * the beginning of the table, just as a [Bookmark] with sequence `0` does.
+ * A null [position] means no bookmark was found for this name, so nothing has been processed yet and the processor will
+ * start from the beginning of the table. It is the equivalent of a [Bookmark] with sequence `0`.
+ *
+ * Note that the stored columns are not nullable: a bookmark row only ever exists once a row has been processed, so the
+ * null lives in this type rather than in the table.
  */
-data class EntityBookmark(val name: String, val position: EntityPosition)
+data class EntityBookmark(val name: String, val position: EntityPosition?)

@@ -98,7 +98,8 @@ class BatchedAsyncEntityProcessor<E>(
      * advancing, so fail loudly instead. The most likely cause is an `updated_at` column with sub-millisecond
      * precision being truncated on its way into a joda `DateTime`.
      */
-    private fun validateProgress(previous: EntityPosition, next: EntityPosition) {
+    private fun validateProgress(previous: EntityPosition?, next: EntityPosition) {
+        if (previous == null) return
         if (next == previous) {
             throw EntitySourceStalledException(
                 "Entity-source for $bookmarkName returned the row at position $next that its bookmark is already at. " +

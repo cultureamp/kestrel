@@ -7,14 +7,13 @@ import org.joda.time.DateTime
  * [EntityPosition] equivalent of [EventsSequenceStats], and exists so that [AsyncEntityProcessorMonitor] can work out
  * how far behind the head a processor's bookmark is.
  *
- * An empty table reports [EntityPosition.beginning]'s instant, in the same way [EventsSequenceStats.lastSequence]
- * reports `0` when there are no events.
+ * Returns null when the table has no rows at all.
  */
 interface EntityUpdatedAtStats {
-    fun lastUpdatedAt(): DateTime
+    fun lastUpdatedAt(): DateTime?
 
     companion object {
-        fun from(fetch: () -> DateTime) = object : EntityUpdatedAtStats {
+        fun from(fetch: () -> DateTime?) = object : EntityUpdatedAtStats {
             override fun lastUpdatedAt() = fetch()
         }
     }

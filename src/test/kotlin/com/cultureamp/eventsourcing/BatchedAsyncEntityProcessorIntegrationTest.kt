@@ -13,37 +13,41 @@ import java.util.UUID
 
 class BatchedAsyncEntityProcessorIntegrationTest : DescribeSpec({
     val db = PgTestConfig.db ?: Database.connect(url = "jdbc:h2:mem:test;MODE=MySQL;DB_CLOSE_DELAY=-1;", driver = "org.h2.Driver")
+    val goalRelationships = GoalRelationshipsTable()
     val bookmarksTable = EntityBookmarks("entity_bookmarks_integration")
     val bookmarkStore = RelationalDatabaseEntityBookmarkStore(db, bookmarksTable)
     val baseTime = DateTime(2026, 8, 10, 9, 0, 0, 0)
-    val goalRelationships = GoalRelationshipsTable()
-    val bookmarkName = "GoalRelationshipNames"
+    val accountId = UUID.randomUUID()
+    val bookmarkName = "GoalRelationshipProjector"
 
+    // the real table has no updated_at, so it is polled by created_at
     val entitySource = RelationalDatabaseEntitySource(
         db = db,
         table = goalRelationships,
-        updatedAtColumn = goalRelationships.updatedAt,
+        updatedAtColumn = goalRelationships.createdAt,
         idColumn = goalRelationships.id,
-        rowToEntity = { GoalRelationship(it[goalRelationships.id], it[goalRelationships.name], it[goalRelationships.updatedAt]) },
+        rowToEntity = { it[goalRelationships.id] },
     )
 
-    fun insertGoalRelationship(name: String, updatedAt: DateTime): GoalRelationship {
-        val relationshipId = UUID.randomUUID()
+    fun insertGoalRelationship(createdAt: DateTime): GoalRelationship {
+        val relationship = GoalRelationship(UUID.randomUUID(), UUID.randomUUID(), UUID.randomUUID(), accountId, createdAt)
         transaction(db) {
             goalRelationships.insert {
-                it[id] = relationshipId
-                it[goalRelationships.name] = name
-                it[retired] = false
-                it[goalRelationships.updatedAt] = updatedAt
+                it[goalRelationships.id] = relationship.id
+                it[goalRelationships.childGoalId] = relationship.childGoalId
+                it[goalRelationships.parentGoalId] = relationship.parentGoalId
+                it[goalRelationships.accountId] = relationship.accountId
+                it[goalRelationships.createdAt] = relationship.createdAt
+                it[goalRelationships.cascadingWeight] = relationship.cascadingWeight
             }
         }
-        return GoalRelationship(relationshipId, name, updatedAt)
+        return relationship
     }
 
-    fun touchGoalRelationship(relationship: GoalRelationship, updatedAt: DateTime) {
+    fun touchGoalRelationship(relationship: GoalRelationship, createdAt: DateTime) {
         transaction(db) {
             goalRelationships.update({ goalRelationships.id eq relationship.id }) {
-                it[goalRelationships.updatedAt] = updatedAt
+                it[goalRelationships.createdAt] = createdAt
             }
         }
     }
@@ -64,60 +68,60 @@ class BatchedAsyncEntityProcessorIntegrationTest : DescribeSpec({
 
     describe("BatchedAsyncEntityProcessor against a real table") {
         it("processes a table, persists its position, and resumes from it") {
-            val processed = mutableListOf<String>()
+            val processed = mutableListOf<UUID>()
             val processor = BatchedAsyncEntityProcessor(
                 entitySource = entitySource,
                 entityUpdatedAtStats = entitySource,
                 bookmarkStore = bookmarkStore,
                 bookmarkName = bookmarkName,
-                entityProcessor = EntityProcessor.from { relationship: GoalRelationship -> processed += relationship.name },
+                entityProcessor = EntityProcessor.from { id: UUID -> processed += id },
                 batchSize = 2,
                 clock = { baseTime.plusHours(1) },
             )
-            val first = insertGoalRelationship("first", baseTime.plusSeconds(1))
-            insertGoalRelationship("second", baseTime.plusSeconds(2))
-            insertGoalRelationship("third", baseTime.plusSeconds(3))
+            val first = insertGoalRelationship(baseTime.plusSeconds(1))
+            val second = insertGoalRelationship(baseTime.plusSeconds(2))
+            val third = insertGoalRelationship(baseTime.plusSeconds(3))
 
-            bookmarkStore.bookmarkFor(bookmarkName) shouldBe EntityBookmark(bookmarkName, EntityPosition.beginning)
+            bookmarkStore.bookmarkFor(bookmarkName) shouldBe EntityBookmark(bookmarkName, null)
 
             processor.processOneBatch() shouldBe Action.Continue
-            processed shouldBe listOf("first", "second")
-            bookmarkStore.bookmarkFor(bookmarkName).position.updatedAt.millis shouldBe baseTime.plusSeconds(2).millis
+            processed shouldBe listOf(first.id, second.id)
+            bookmarkStore.bookmarkFor(bookmarkName).position shouldBe second.position
 
             processor.processOneBatch() shouldBe Action.Wait
-            processed shouldBe listOf("first", "second", "third")
+            processed shouldBe listOf(first.id, second.id, third.id)
 
             // nothing new to do, and crucially the persisted position round-trips well enough not to re-read the last row
             processor.processOneBatch() shouldBe Action.Wait
-            processed shouldBe listOf("first", "second", "third")
+            processed shouldBe listOf(first.id, second.id, third.id)
 
-            // a row that gets touched is picked up again
+            // a row whose polled column moves forward is picked up again
             touchGoalRelationship(first, baseTime.plusSeconds(4))
             processor.processOneBatch() shouldBe Action.Wait
-            processed shouldBe listOf("first", "second", "third", "first")
+            processed shouldBe listOf(first.id, second.id, third.id, first.id)
         }
 
         it("does not read rows that are within the timestamp delay of now") {
-            val processed = mutableListOf<String>()
+            val processed = mutableListOf<UUID>()
             var now = baseTime.plusSeconds(10)
             val processor = BatchedAsyncEntityProcessor(
                 entitySource = entitySource,
                 entityUpdatedAtStats = entitySource,
                 bookmarkStore = bookmarkStore,
                 bookmarkName = bookmarkName,
-                entityProcessor = EntityProcessor.from { relationship: GoalRelationship -> processed += relationship.name },
+                entityProcessor = EntityProcessor.from { id: UUID -> processed += id },
                 timestampDelayMs = 5_000,
                 clock = { now },
             )
-            insertGoalRelationship("settled", baseTime.plusSeconds(1))
-            insertGoalRelationship("in-flight", baseTime.plusSeconds(9))
+            val settled = insertGoalRelationship(baseTime.plusSeconds(1))
+            val inFlight = insertGoalRelationship(baseTime.plusSeconds(9))
 
             processor.processOneBatch()
-            processed shouldBe listOf("settled")
+            processed shouldBe listOf(settled.id)
 
             now = baseTime.plusSeconds(20)
             processor.processOneBatch()
-            processed shouldBe listOf("settled", "in-flight")
+            processed shouldBe listOf(settled.id, inFlight.id)
         }
 
         it("reports lag against the head of the table") {
@@ -126,14 +130,17 @@ class BatchedAsyncEntityProcessorIntegrationTest : DescribeSpec({
                 entityUpdatedAtStats = entitySource,
                 bookmarkStore = bookmarkStore,
                 bookmarkName = bookmarkName,
-                entityProcessor = EntityProcessor.from { _: GoalRelationship -> },
+                entityProcessor = EntityProcessor.from { _: UUID -> },
                 batchSize = 1,
                 clock = { baseTime.plusHours(1) },
             )
-            insertGoalRelationship("first", baseTime.plusSeconds(1))
-            insertGoalRelationship("second", baseTime.plusSeconds(11))
+            insertGoalRelationship(baseTime.plusSeconds(1))
+            insertGoalRelationship(baseTime.plusSeconds(11))
             var lag: EntityLag? = null
             val monitor = AsyncEntityProcessorMonitor(listOf(processor), { lag = it }, clock = { baseTime.plusSeconds(31) })
+
+            monitor.run()
+            lag!!.hasStarted shouldBe false
 
             processor.processOneBatch()
             monitor.run()

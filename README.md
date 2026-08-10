@@ -452,7 +452,7 @@ Kestrel mirrors the whole event-processor stack for that case, reading rows in `
 
 | Event stream               | Entity table                       | Notes                                                        |
 |----------------------------|------------------------------------|--------------------------------------------------------------|
-| `sequence: Long`           | `EntityPosition(updatedAt, id)`    | Total ordering, with the id as the tiebreaker. `EntityPosition.beginning` is the equivalent of sequence `0` |
+| `sequence: Long`           | `EntityPosition(updatedAt, id)`    | Total ordering, with the id as the tiebreaker. A null position is the equivalent of sequence `0` |
 | `SequencedEvent`           | `PositionedEntity`                 |                                                              |
 | `EventSource`              | `EntitySource`                     | A repository call: "give me rows after this position"         |
 | `EventProcessor`           | `EntityProcessor`                  |                                                              |
@@ -477,9 +477,12 @@ val entitySource = RelationalDatabaseEntitySource(
     table = GoalRelationships,
     updatedAtColumn = GoalRelationships.updatedAt,
     idColumn = GoalRelationships.id,
-    rowToEntity = { GoalRelationship(it[GoalRelationships.id], it[GoalRelationships.name], it[GoalRelationships.updatedAt]) },
+    rowToEntity = { GoalRelationship(it[GoalRelationships.id], it[GoalRelationships.childGoalId], it[GoalRelationships.updatedAt]) },
 )
 ```
+
+The polled column doesn't have to be called `updated_at`; it just has to move forward every time a row changes. See
+[choosing the polled column](#things-to-watch-out-for) below, because getting this wrong silently misses updates.
 
 Wiring it up then looks just like an `AsyncEventProcessor`:
 
@@ -514,6 +517,11 @@ keeps growing when a processor is stuck even if nothing new is being written.
 
 #### Things to watch out for
 
+- **Choosing the polled column.** Whatever you pass as `updatedAtColumn` has to advance on *every* change you care
+  about, because that column is the only thing the processor watches. Polling a `created_at` works fine for
+  insert-only tables, but if rows are later mutated — soft-deleted by stamping a `deleted_at`, say — those changes are
+  invisible, since `created_at` doesn't move. A table without a real `updated_at` needs one adding, or a trigger to
+  maintain it, before a processor over it can see updates rather than just inserts.
 - **`timestampDelayMs`.** An `updated_at` is usually stamped when a transaction *starts*, but the row only becomes
   visible when it *commits*, so a row can appear with an `updated_at` earlier than a bookmark we've already moved past.
   The processor only reads rows where `updated_at <= now - timestampDelayMs` to avoid this, equivalent to the JDBC

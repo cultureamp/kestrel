@@ -3,34 +3,59 @@ package com.cultureamp.eventsourcing
 import org.jetbrains.exposed.sql.Table
 import org.jetbrains.exposed.sql.jodatime.datetime
 import org.joda.time.DateTime
+import java.math.BigDecimal
 import java.util.UUID
 
-data class GoalRelationship(val id: UUID, val name: String, val updatedAt: DateTime) {
-    val position = EntityPosition(updatedAt, id)
-}
-
+/**
+ * Mirrors the real table:
+ *
+ * ```
+ * CREATE TABLE public.goal_relationships (
+ *     id                uuid NOT NULL,
+ *     child_goal_id     uuid NOT NULL,
+ *     parent_goal_id    uuid NOT NULL,
+ *     account_id        uuid NOT NULL,
+ *     created_at        timestamp without time zone NOT NULL,
+ *     deleted_at        timestamp without time zone,
+ *     cascading_weight  numeric(5,4) DEFAULT 0 NOT NULL
+ * );
+ * ```
+ *
+ * Note that it has no `updated_at`, so the tests poll it by `created_at`.
+ */
 class GoalRelationshipsTable(tableName: String = "goal_relationships") : Table(tableName) {
     val id = uuid("id")
-    val name = varchar("name", 100)
-    val retired = bool("retired")
-    val updatedAt = datetime("updated_at")
+    val childGoalId = uuid("child_goal_id")
+    val parentGoalId = uuid("parent_goal_id")
+    val accountId = uuid("account_id")
+    val createdAt = datetime("created_at")
+    val deletedAt = datetime("deleted_at").nullable()
+    val cascadingWeight = decimal("cascading_weight", precision = 5, scale = 4).default(BigDecimal("0.0000"))
     override val primaryKey = PrimaryKey(id)
+}
 
-    init {
-        index(false, updatedAt, id)
-    }
+data class GoalRelationship(
+    val id: UUID,
+    val childGoalId: UUID,
+    val parentGoalId: UUID,
+    val accountId: UUID,
+    val createdAt: DateTime,
+    val deletedAt: DateTime? = null,
+    val cascadingWeight: BigDecimal = BigDecimal("0.0000"),
+) {
+    val position = EntityPosition(createdAt, id)
 }
 
 class InMemoryEntityBookmarkStore(private val lockObtainable: Boolean = true) : EntityBookmarkStore {
     private val positions = mutableMapOf<String, EntityPosition>()
     val saved = mutableListOf<EntityBookmark>()
 
-    override fun bookmarkFor(bookmarkName: String) = EntityBookmark(bookmarkName, positions[bookmarkName] ?: EntityPosition.beginning)
+    override fun bookmarkFor(bookmarkName: String) = EntityBookmark(bookmarkName, positions[bookmarkName])
 
     override fun bookmarksFor(bookmarkNames: Set<String>) = bookmarkNames.map { bookmarkFor(it) }.toSet()
 
     override fun save(bookmark: EntityBookmark) {
-        positions[bookmark.name] = bookmark.position
+        positions[bookmark.name] = bookmark.position ?: throw IllegalArgumentException("Cannot save ${bookmark.name} with no position")
         saved += bookmark
     }
 
@@ -42,10 +67,10 @@ class InMemoryEntityBookmarkStore(private val lockObtainable: Boolean = true) : 
  * A well-behaved [EntitySource] over a fixed list of rows, honouring the ordering, `after` and `upTo` contract.
  */
 class InMemoryEntitySource<E>(private val rows: List<PositionedEntity<E>>) : EntitySource<E>, EntityUpdatedAtStats {
-    override fun getAfter(after: EntityPosition, upTo: DateTime, batchSize: Int) = rows
+    override fun getAfter(after: EntityPosition?, upTo: DateTime, batchSize: Int) = rows
         .sortedBy { it.position }
-        .filter { it.position > after && !it.position.updatedAt.isAfter(upTo) }
+        .filter { (after == null || it.position > after) && !it.position.updatedAt.isAfter(upTo) }
         .take(batchSize)
 
-    override fun lastUpdatedAt() = rows.maxByOrNull { it.position }?.position?.updatedAt ?: EntityPosition.beginning.updatedAt
+    override fun lastUpdatedAt() = rows.maxByOrNull { it.position }?.position?.updatedAt
 }

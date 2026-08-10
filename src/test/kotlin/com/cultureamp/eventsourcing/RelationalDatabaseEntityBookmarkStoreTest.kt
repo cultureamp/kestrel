@@ -1,5 +1,6 @@
 package com.cultureamp.eventsourcing
 
+import io.kotest.assertions.throwables.shouldThrow
 import io.kotest.core.spec.style.DescribeSpec
 import io.kotest.matchers.shouldBe
 import org.jetbrains.exposed.sql.Database
@@ -32,8 +33,8 @@ class RelationalDatabaseEntityBookmarkStoreTest : DescribeSpec({
             store.bookmarkFor("new-bookmark") shouldBe EntityBookmark("new-bookmark", position)
         }
 
-        it("returns the beginning of the table for an unknown bookmark") {
-            store.bookmarkFor("other-new-bookmark") shouldBe EntityBookmark("other-new-bookmark", EntityPosition.beginning)
+        it("returns a null position for an unknown bookmark") {
+            store.bookmarkFor("other-new-bookmark") shouldBe EntityBookmark("other-new-bookmark", null)
         }
 
         it("updates the position if the bookmark already exists") {
@@ -46,23 +47,24 @@ class RelationalDatabaseEntityBookmarkStoreTest : DescribeSpec({
             store.bookmarkFor("update-bookmark") shouldBe EntityBookmark("update-bookmark", second)
         }
 
-        it("round-trips a bookmark that has not processed anything yet") {
-            store.save(EntityBookmark("unstarted-bookmark", EntityPosition.beginning))
+        it("rejects saving a bookmark with no position, since a stored bookmark always sits on a row") {
+            shouldThrow<IllegalArgumentException> { store.save(EntityBookmark("unstarted-bookmark", null)) }
 
-            store.bookmarkFor("unstarted-bookmark") shouldBe EntityBookmark("unstarted-bookmark", EntityPosition.beginning)
+            store.bookmarkFor("unstarted-bookmark") shouldBe EntityBookmark("unstarted-bookmark", null)
         }
 
         it("can fetch bookmarks in bulk") {
             val position = EntityPosition(baseTime, UUID.randomUUID())
+            val otherPosition = EntityPosition(baseTime.plusSeconds(1), UUID.randomUUID())
             store.save(EntityBookmark("new-bookmark", position))
-            store.save(EntityBookmark("other-bookmark", EntityPosition.beginning))
+            store.save(EntityBookmark("other-bookmark", otherPosition))
 
             val bookmarks = store.bookmarksFor(setOf("new-bookmark", "other-bookmark", "unknown-bookmark"))
 
             bookmarks shouldBe setOf(
                 EntityBookmark("new-bookmark", position),
-                EntityBookmark("other-bookmark", EntityPosition.beginning),
-                EntityBookmark("unknown-bookmark", EntityPosition.beginning),
+                EntityBookmark("other-bookmark", otherPosition),
+                EntityBookmark("unknown-bookmark", null),
             )
         }
 
