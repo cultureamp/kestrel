@@ -55,3 +55,16 @@ Notable upgrade steps, all of which apply to consuming code too:
 The one Kestrel API signature this changes is the lock hook: `blockingLockUntilTransactionEnd`
 and `pgAdvisoryXactLock` are now extensions on `JdbcTransaction` rather than `Transaction`,
 because `exec` moved to the JDBC-specific transaction type.
+
+# Unreleased
+
+## New features
+
+Adds an entity-processor stack, mirroring the event-processor stack for the case where the thing you want to project
+from is rows in a table rather than an event stream. Rows are read in `updated_at` order and tiebroken on a `uuid` id,
+as the Confluent JDBC source connector does in its "timestamp+incrementing" mode: see `EntitySource`,
+`EntityProcessor`, `EntityBookmarkStore`, `BatchedAsyncEntityProcessor` and `AsyncEntityProcessorMonitor`, and the
+[README](README.md#entity-processors-projecting-from-a-table-rather-than-an-event-stream) for how they fit together.
+
+No breaking changes. `BookmarkLock` gains a `tryLock(bookmarkName: String)` overload, which has a default
+implementation delegating to the existing `tryLock(bookmark: Bookmark)`, so existing implementations are unaffected.

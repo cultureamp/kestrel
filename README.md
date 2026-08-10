@@ -122,6 +122,11 @@ update a "bookmark" representing the sequence number of the last processed event
 - [**AsyncEventProcessorMonitor**](https://github.com/cultureamp/kotlin-eventsourcing/blob/master/src/main/kotlin/com/cultureamp/eventsourcing/AsyncEventProcessorMonitor.kt) -
 *Provides a mechanism to establish how far `EventProcessor` bookmarks/processing is lagging behind the head of the event
 stream.*
+- [**EntitySource**](https://github.com/cultureamp/kotlin-eventsourcing/blob/master/src/main/kotlin/com/cultureamp/eventsourcing/EntitySource.kt) -
+*Like an `EventSource`, but reads rows from a table in `updated_at` order (tiebreaking on the row's `uuid` id) rather
+than events in sequence order. Along with `EntityProcessor`, `EntityBookmarkStore` and `BatchedAsyncEntityProcessor`,
+this lets you build a projector over a table you don't own. See
+[Entity-processors](#entity-processors-projecting-from-a-table-rather-than-an-event-stream).*
 
 ## Getting Started
 
@@ -436,6 +441,93 @@ thread(start = true, isDaemon = false, name = "eventProcessorMonitor") {
     }
 }
 ```
+
+### Entity-processors (projecting from a table rather than an event stream)
+
+Sometimes the data you want to project isn't an event stream at all — it's rows in a table owned by some other system.
+Kestrel mirrors the whole event-processor stack for that case, reading rows in `updated_at` order and tiebreaking on a
+`uuid` id, the same way the
+[Confluent JDBC source connector](https://docs.confluent.io/kafka-connectors/jdbc/current/overview.html) does in its
+"timestamp+incrementing" mode. Each event-sourcing piece has an entity equivalent:
+
+| Event stream               | Entity table                       | Notes                                                        |
+|----------------------------|------------------------------------|--------------------------------------------------------------|
+| `sequence: Long`           | `EntityPosition(updatedAt, id)`    | Total ordering, with the id as the tiebreaker                |
+| `SequencedEvent`           | `PositionedEntity`                 |                                                              |
+| `EventSource`              | `EntitySource`                     | A repository call: "give me rows after this position"         |
+| `EventProcessor`           | `EntityProcessor`                  |                                                              |
+| `BookmarkStore`            | `EntityBookmarkStore`              | Bookmarks store `(last_updated_at, last_id)` instead of a sequence |
+| `BatchedAsyncEventProcessor` | `BatchedAsyncEntityProcessor`    |                                                              |
+| `EventsSequenceStats`      | `EntityUpdatedAtStats`             | The head of the stream, i.e. the newest `updated_at`         |
+| `AsyncEventProcessorMonitor` | `AsyncEntityProcessorMonitor`    | Reports lag in milliseconds rather than in sequence numbers   |
+| `Lag`                      | `EntityLag`                        |                                                              |
+
+The source can be any function that takes a position, an upper bound on `updated_at`, and a batch size:
+
+```kotlin
+val entitySource = EntitySource.from { after, upTo, batchSize -> widgetRepository.updatedAfter(after, upTo, batchSize) }
+```
+
+Or, for an [Exposed](https://github.com/JetBrains/Exposed) table, use the provided implementation, which doubles as the
+`EntityUpdatedAtStats` used for lag monitoring:
+
+```kotlin
+val entitySource = RelationalDatabaseEntitySource(
+    db = database,
+    table = Widgets,
+    updatedAtColumn = Widgets.updatedAt,
+    idColumn = Widgets.id,
+    rowToEntity = { Widget(it[Widgets.id], it[Widgets.name], it[Widgets.updatedAt]) },
+)
+```
+
+Wiring it up then looks just like an `AsyncEventProcessor`:
+
+```kotlin
+val bookmarkStore = RelationalDatabaseEntityBookmarkStore(database).also { it.createSchemaIfNotExists() }
+val asyncEntityProcessor = BatchedAsyncEntityProcessor(
+    entitySource = entitySource,
+    entityUpdatedAtStats = entitySource,
+    bookmarkStore = bookmarkStore,
+    bookmarkName = "WidgetNames",
+    entityProcessor = EntityProcessor.from(widgetProjector::project),
+    timestampDelayMs = 1_000,
+)
+thread(start = true, isDaemon = false, name = asyncEntityProcessor.bookmarkName) {
+    ExponentialBackoff(onFailure = { e, _ -> println(e) }).run {
+        asyncEntityProcessor.processOneBatch()
+    }
+}
+```
+
+And monitoring works the same way, with lag expressed in milliseconds:
+
+```kotlin
+val entityProcessorMonitor = AsyncEntityProcessorMonitor(asyncEntityProcessors) {
+    println("msg='Lag calculation for entity-processor' name='${it.name}' lagMs=${it.lagMs} latencyMs=${it.latencyMs}")
+}
+```
+
+`EntityLag` exposes two numbers, because they fail differently: `lagMs` is how far the bookmark is behind the newest row
+in the table, and `latencyMs` is how stale the bookmark is in wall-clock terms. Prefer alerting on `latencyMs`, since it
+keeps growing when a processor is stuck even if nothing new is being written.
+
+#### Things to watch out for
+
+- **`timestampDelayMs`.** An `updated_at` is usually stamped when a transaction *starts*, but the row only becomes
+  visible when it *commits*, so a row can appear with an `updated_at` earlier than a bookmark we've already moved past.
+  The processor only reads rows where `updated_at <= now - timestampDelayMs` to avoid this, equivalent to the JDBC
+  connector's `timestamp.delay.interval.ms`. Set it comfortably longer than the longest transaction writing to the
+  table; you're trading that much processing latency for not silently skipping rows.
+- **Timestamp precision.** Positions are joda `DateTime`s, which are millisecond-precision, so if your `updated_at`
+  column is a Postgres `timestamp` (microseconds) then the value read into a bookmark is truncated and that row will
+  keep being re-selected. `BatchedAsyncEntityProcessor` detects this and throws `EntitySourceStalledException` rather
+  than silently spinning; the fix is to store `updated_at` with millisecond precision, or to truncate the column in
+  your `EntitySource`.
+- **You only ever see current state.** Unlike an event stream, a table exposes the latest version of each row. A row
+  updated twice in quick succession may only be processed once, rows are seen in `updated_at` order rather than
+  creation order, and deletes aren't visible at all unless they're soft deletes. Entity-processors need to be
+  idempotent for the same reasons event-processors do.
 
 ## Resources
 
