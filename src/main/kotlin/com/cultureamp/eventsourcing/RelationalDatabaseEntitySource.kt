@@ -36,13 +36,9 @@ class RelationalDatabaseEntitySource<E>(
     private val rowToEntity: (ResultRow) -> E,
 ) : EntitySource<E>, EntityUpdatedAtStats {
 
-    override fun getAfter(after: EntityPosition?, upTo: DateTime, batchSize: Int): List<PositionedEntity<E>> {
+    override fun getAfter(after: EntityPosition, upTo: DateTime, batchSize: Int): List<PositionedEntity<E>> {
         val afterPosition = SqlExpressionBuilder.run {
-            if (after != null) {
-                (updatedAtColumn greater after.updatedAt) or ((updatedAtColumn eq after.updatedAt) and (idColumn greater after.id))
-            } else {
-                Op.TRUE
-            }
+            (updatedAtColumn greater after.updatedAt) or ((updatedAtColumn eq after.updatedAt) and (idColumn greater after.id))
         }
         val predicate = SqlExpressionBuilder.run { afterPosition and (updatedAtColumn lessEq upTo) and SqlExpressionBuilder.filter() }
         return transaction(db) {
@@ -54,7 +50,7 @@ class RelationalDatabaseEntitySource<E>(
         }
     }
 
-    override fun lastUpdatedAt(): DateTime? {
+    override fun lastUpdatedAt(): DateTime {
         return transaction(db) {
             table
                 .slice(updatedAtColumn)
@@ -62,7 +58,7 @@ class RelationalDatabaseEntitySource<E>(
                 .orderBy(updatedAtColumn, SortOrder.DESC)
                 .limit(1)
                 .map { row -> row[updatedAtColumn] }
-                .firstOrNull()
+                .firstOrNull() ?: EntityPosition.beginning.updatedAt
         }
     }
 }

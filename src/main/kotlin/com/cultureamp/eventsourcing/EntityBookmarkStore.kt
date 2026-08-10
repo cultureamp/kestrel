@@ -51,7 +51,7 @@ class RelationalDatabaseEntityBookmarkStore(
     override fun bookmarksFor(bookmarkNames: Set<String>): Set<EntityBookmark> = transaction(db) {
         val matchingRows = rowsForBookmarks(bookmarkNames)
         val foundBookmarks = matchingRows.map { EntityBookmark(it[table.name], it.toPosition()) }.toSet()
-        val emptyBookmarks = (bookmarkNames - foundBookmarks.map { it.name }.toSet()).map { EntityBookmark(it, null) }.toSet()
+        val emptyBookmarks = (bookmarkNames - foundBookmarks.map { it.name }.toSet()).map { EntityBookmark(it, EntityPosition.beginning) }.toSet()
         foundBookmarks + emptyBookmarks
     }
 
@@ -59,15 +59,15 @@ class RelationalDatabaseEntityBookmarkStore(
         if (!isExists(bookmark.name)) {
             table.insert {
                 it[name] = bookmark.name
-                it[lastUpdatedAt] = bookmark.position?.updatedAt
-                it[lastId] = bookmark.position?.id
+                it[lastUpdatedAt] = bookmark.position.updatedAt
+                it[lastId] = bookmark.position.id
                 it[createdAt] = DateTime.now()
                 it[updatedAt] = DateTime.now()
             }
         } else {
             table.update({ table.name eq bookmark.name }) {
-                it[lastUpdatedAt] = bookmark.position?.updatedAt
-                it[lastId] = bookmark.position?.id
+                it[lastUpdatedAt] = bookmark.position.updatedAt
+                it[lastId] = bookmark.position.id
                 it[updatedAt] = DateTime.now()
             }
         }
@@ -79,11 +79,7 @@ class RelationalDatabaseEntityBookmarkStore(
         }
     }
 
-    private fun ResultRow.toPosition(): EntityPosition? {
-        val lastUpdatedAt = this[table.lastUpdatedAt]
-        val lastId = this[table.lastId]
-        return if (lastUpdatedAt != null && lastId != null) EntityPosition(lastUpdatedAt, lastId) else null
-    }
+    private fun ResultRow.toPosition() = EntityPosition(this[table.lastUpdatedAt], this[table.lastId])
 
     private fun rowsForBookmarks(bookmarkNames: Set<String>) = table.select { table.name.inList(bookmarkNames) }
     private fun isExists(bookmarkName: String) = !rowsForBookmarks(setOf(bookmarkName)).empty()
@@ -91,15 +87,15 @@ class RelationalDatabaseEntityBookmarkStore(
 
 class EntityBookmarks(tableName: String = defaultEntityBookmarksTableName) : Table(tableName) {
     val name = varchar("name", 160)
-    val lastUpdatedAt = datetime("last_updated_at").nullable()
-    val lastId = uuid("last_id").nullable()
+    val lastUpdatedAt = datetime("last_updated_at")
+    val lastId = uuid("last_id")
     val createdAt = datetime("created_at")
     val updatedAt = datetime("updated_at")
     override val primaryKey = PrimaryKey(name)
 }
 
 /**
- * A null [position] means nothing has been processed yet, i.e. the processor will start from the beginning of the
- * table. It is the [EntityBookmark] equivalent of a [Bookmark] with sequence `0`.
+ * A [position] of [EntityPosition.beginning] means nothing has been processed yet, i.e. the processor will start from
+ * the beginning of the table, just as a [Bookmark] with sequence `0` does.
  */
-data class EntityBookmark(val name: String, val position: EntityPosition?)
+data class EntityBookmark(val name: String, val position: EntityPosition)

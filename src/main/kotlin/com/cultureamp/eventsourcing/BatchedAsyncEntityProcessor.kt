@@ -74,6 +74,7 @@ class BatchedAsyncEntityProcessor<E>(
 
         startLog(startBookmark)
 
+        // hold back rows younger than the delay, so that a row committing late can't slip in behind the bookmark
         val upTo = clock().minus(timestampDelayMs)
 
         val (count, finalBookmark) = entitySource.getAfter(startBookmark.position, upTo, batchSize).foldIndexed(
@@ -97,8 +98,7 @@ class BatchedAsyncEntityProcessor<E>(
      * advancing, so fail loudly instead. The most likely cause is an `updated_at` column with sub-millisecond
      * precision being truncated on its way into a joda `DateTime`.
      */
-    private fun validateProgress(previous: EntityPosition?, next: EntityPosition) {
-        if (previous == null) return
+    private fun validateProgress(previous: EntityPosition, next: EntityPosition) {
         if (next == previous) {
             throw EntitySourceStalledException(
                 "Entity-source for $bookmarkName returned the row at position $next that its bookmark is already at. " +

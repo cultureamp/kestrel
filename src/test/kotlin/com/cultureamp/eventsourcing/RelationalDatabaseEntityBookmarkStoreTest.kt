@@ -32,8 +32,8 @@ class RelationalDatabaseEntityBookmarkStoreTest : DescribeSpec({
             store.bookmarkFor("new-bookmark") shouldBe EntityBookmark("new-bookmark", position)
         }
 
-        it("returns a null position for an unknown bookmark") {
-            store.bookmarkFor("other-new-bookmark") shouldBe EntityBookmark("other-new-bookmark", null)
+        it("returns the beginning of the table for an unknown bookmark") {
+            store.bookmarkFor("other-new-bookmark") shouldBe EntityBookmark("other-new-bookmark", EntityPosition.beginning)
         }
 
         it("updates the position if the bookmark already exists") {
@@ -46,22 +46,24 @@ class RelationalDatabaseEntityBookmarkStoreTest : DescribeSpec({
             store.bookmarkFor("update-bookmark") shouldBe EntityBookmark("update-bookmark", second)
         }
 
-        it("can store a bookmark that has not processed anything yet") {
-            store.save(EntityBookmark("unstarted-bookmark", null))
+        it("round-trips a bookmark that has not processed anything yet") {
+            store.save(EntityBookmark("unstarted-bookmark", EntityPosition.beginning))
 
-            store.bookmarkFor("unstarted-bookmark") shouldBe EntityBookmark("unstarted-bookmark", null)
+            store.bookmarkFor("unstarted-bookmark") shouldBe EntityBookmark("unstarted-bookmark", EntityPosition.beginning)
         }
 
         it("can fetch bookmarks in bulk") {
             val position = EntityPosition(baseTime, UUID.randomUUID())
             store.save(EntityBookmark("new-bookmark", position))
-            store.save(EntityBookmark("other-bookmark", null))
+            store.save(EntityBookmark("other-bookmark", EntityPosition.beginning))
 
             val bookmarks = store.bookmarksFor(setOf("new-bookmark", "other-bookmark", "unknown-bookmark"))
 
-            bookmarks.map { it.name }.toSet() shouldBe setOf("new-bookmark", "other-bookmark", "unknown-bookmark")
-            bookmarks.first { it.name == "new-bookmark" }.position?.id shouldBe position.id
-            bookmarks.filter { it.position == null }.map { it.name }.toSet() shouldBe setOf("other-bookmark", "unknown-bookmark")
+            bookmarks shouldBe setOf(
+                EntityBookmark("new-bookmark", position),
+                EntityBookmark("other-bookmark", EntityPosition.beginning),
+                EntityBookmark("unknown-bookmark", EntityPosition.beginning),
+            )
         }
 
         it("checks out a bookmark, obtaining the lock") {
@@ -70,7 +72,7 @@ class RelationalDatabaseEntityBookmarkStoreTest : DescribeSpec({
 
             val checkedOut = store.checkoutBookmark("checkout-bookmark")
 
-            (checkedOut as Right).value.position?.id shouldBe position.id
+            (checkedOut as Right).value shouldBe EntityBookmark("checkout-bookmark", position)
         }
     }
 })

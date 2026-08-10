@@ -452,7 +452,7 @@ Kestrel mirrors the whole event-processor stack for that case, reading rows in `
 
 | Event stream               | Entity table                       | Notes                                                        |
 |----------------------------|------------------------------------|--------------------------------------------------------------|
-| `sequence: Long`           | `EntityPosition(updatedAt, id)`    | Total ordering, with the id as the tiebreaker                |
+| `sequence: Long`           | `EntityPosition(updatedAt, id)`    | Total ordering, with the id as the tiebreaker. `EntityPosition.beginning` is the equivalent of sequence `0` |
 | `SequencedEvent`           | `PositionedEntity`                 |                                                              |
 | `EventSource`              | `EntitySource`                     | A repository call: "give me rows after this position"         |
 | `EventProcessor`           | `EntityProcessor`                  |                                                              |
@@ -465,7 +465,7 @@ Kestrel mirrors the whole event-processor stack for that case, reading rows in `
 The source can be any function that takes a position, an upper bound on `updated_at`, and a batch size:
 
 ```kotlin
-val entitySource = EntitySource.from { after, upTo, batchSize -> widgetRepository.updatedAfter(after, upTo, batchSize) }
+val entitySource = EntitySource.from { after, upTo, batchSize -> goalRelationshipRepository.updatedAfter(after, upTo, batchSize) }
 ```
 
 Or, for an [Exposed](https://github.com/JetBrains/Exposed) table, use the provided implementation, which doubles as the
@@ -474,10 +474,10 @@ Or, for an [Exposed](https://github.com/JetBrains/Exposed) table, use the provid
 ```kotlin
 val entitySource = RelationalDatabaseEntitySource(
     db = database,
-    table = Widgets,
-    updatedAtColumn = Widgets.updatedAt,
-    idColumn = Widgets.id,
-    rowToEntity = { Widget(it[Widgets.id], it[Widgets.name], it[Widgets.updatedAt]) },
+    table = GoalRelationships,
+    updatedAtColumn = GoalRelationships.updatedAt,
+    idColumn = GoalRelationships.id,
+    rowToEntity = { GoalRelationship(it[GoalRelationships.id], it[GoalRelationships.name], it[GoalRelationships.updatedAt]) },
 )
 ```
 
@@ -489,8 +489,8 @@ val asyncEntityProcessor = BatchedAsyncEntityProcessor(
     entitySource = entitySource,
     entityUpdatedAtStats = entitySource,
     bookmarkStore = bookmarkStore,
-    bookmarkName = "WidgetNames",
-    entityProcessor = EntityProcessor.from(widgetProjector::project),
+    bookmarkName = "GoalRelationshipNames",
+    entityProcessor = EntityProcessor.from(goalRelationshipProjector::project),
     timestampDelayMs = 1_000,
 )
 thread(start = true, isDaemon = false, name = asyncEntityProcessor.bookmarkName) {

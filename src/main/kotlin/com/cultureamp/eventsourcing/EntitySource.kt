@@ -31,6 +31,18 @@ data class EntityPosition(val updatedAt: DateTime, val id: UUID) : Comparable<En
     override fun equals(other: Any?) = other is EntityPosition && updatedAt.millis == other.updatedAt.millis && id == other.id
 
     override fun hashCode() = 31 * updatedAt.millis.hashCode() + id.hashCode()
+
+    companion object {
+        /**
+         * The position before any row, i.e. "start from the beginning of the table". It is the [EntityPosition]
+         * equivalent of a [Bookmark] with sequence `0`, and is what an [EntityBookmarkStore] hands back for a bookmark
+         * it has never seen before.
+         *
+         * The instant is the unix epoch and the id is the nil UUID, so a row would have to predate 1970 to be missed
+         * by it.
+         */
+        val beginning = EntityPosition(DateTime(0), UUID(0, 0))
+    }
 }
 
 private fun UUID.compareUnsigned(other: UUID): Int {
@@ -51,8 +63,8 @@ data class PositionedEntity<out E>(val entity: E, val position: EntityPosition)
  * skipping or infinitely reprocessing rows:
  *
  * 1. Return only rows strictly after [after] in `(updatedAt, id)` order, i.e.
- *    `updated_at > after.updatedAt OR (updated_at = after.updatedAt AND id > after.id)`. A null [after] means "from
- *    the very beginning".
+ *    `updated_at > after.updatedAt OR (updated_at = after.updatedAt AND id > after.id)`. [EntityPosition.beginning]
+ *    means "from the very beginning".
  * 2. Return only rows with `updated_at <= upTo`.
  * 3. Return rows ordered ascending by `(updated_at, id)`, at most [batchSize] of them.
  *
@@ -63,22 +75,22 @@ data class PositionedEntity<out E>(val entity: E, val position: EntityPosition)
  * [BatchedAsyncEntityProcessor] detects the resulting stall and fails loudly rather than spinning silently.
  */
 interface EntitySource<out E> {
-    fun getAfter(after: EntityPosition?, upTo: DateTime, batchSize: Int = 100): List<PositionedEntity<E>>
+    fun getAfter(after: EntityPosition, upTo: DateTime, batchSize: Int = 100): List<PositionedEntity<E>>
 
     companion object {
         /**
          * Builds an [EntitySource] from a repository function that already knows how to position its rows.
          */
-        fun <E> from(fetch: (EntityPosition?, DateTime, Int) -> List<PositionedEntity<E>>) = object : EntitySource<E> {
-            override fun getAfter(after: EntityPosition?, upTo: DateTime, batchSize: Int) = fetch(after, upTo, batchSize)
+        fun <E> from(fetch: (EntityPosition, DateTime, Int) -> List<PositionedEntity<E>>) = object : EntitySource<E> {
+            override fun getAfter(after: EntityPosition, upTo: DateTime, batchSize: Int) = fetch(after, upTo, batchSize)
         }
 
         /**
          * Builds an [EntitySource] from a repository function that returns plain entities, deriving each row's
          * position from the entity itself via [positionOf].
          */
-        fun <E> from(positionOf: (E) -> EntityPosition, fetch: (EntityPosition?, DateTime, Int) -> List<E>) = object : EntitySource<E> {
-            override fun getAfter(after: EntityPosition?, upTo: DateTime, batchSize: Int) =
+        fun <E> from(positionOf: (E) -> EntityPosition, fetch: (EntityPosition, DateTime, Int) -> List<E>) = object : EntitySource<E> {
+            override fun getAfter(after: EntityPosition, upTo: DateTime, batchSize: Int) =
                 fetch(after, upTo, batchSize).map { PositionedEntity(it, positionOf(it)) }
         }
     }
