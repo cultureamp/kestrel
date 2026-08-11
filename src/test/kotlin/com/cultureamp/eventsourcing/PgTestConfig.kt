@@ -1,6 +1,6 @@
 package com.cultureamp.eventsourcing
 
-import org.jetbrains.exposed.sql.Database
+import org.jetbrains.exposed.v1.jdbc.Database
 
 // H2 is the default database. To use this, you need to input your database details
 object PgTestConfig {

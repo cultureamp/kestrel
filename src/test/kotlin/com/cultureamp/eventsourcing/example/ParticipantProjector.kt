@@ -3,10 +3,11 @@ package com.cultureamp.eventsourcing.example
 import com.cultureamp.eventsourcing.DomainEventProcessor
 import com.cultureamp.eventsourcing.example.ParticipantTable.invitationId
 import com.cultureamp.eventsourcing.example.ParticipantTable.invitedAt
-import org.jetbrains.exposed.sql.*
-import org.jetbrains.exposed.sql.SqlExpressionBuilder.eq
-import org.jetbrains.exposed.sql.jodatime.datetime
-import org.jetbrains.exposed.sql.transactions.transaction
+import org.jetbrains.exposed.v1.core.*
+import org.jetbrains.exposed.v1.core.java.javaUUID
+import org.jetbrains.exposed.v1.jdbc.*
+import org.jetbrains.exposed.v1.jdbc.transactions.transaction
+import org.jetbrains.exposed.v1.jodatime.datetime
 import java.util.*
 
 
@@ -30,7 +31,7 @@ class ParticipantProjector(private val database: Database): DomainEventProcessor
     }
 
     fun isInvited(invitationId: UUID): Boolean = transaction(database) {
-        ParticipantTable.select { (ParticipantTable.invitationId eq invitationId) and (ParticipantTable.invitedAt neq null) }.firstOrNull() != null
+        ParticipantTable.selectAll().where { (ParticipantTable.invitationId eq invitationId) and (ParticipantTable.invitedAt neq null) }.firstOrNull() != null
     }
 
     init {
@@ -42,9 +43,9 @@ class ParticipantProjector(private val database: Database): DomainEventProcessor
 }
 
 object ParticipantTable : Table() {
-    val invitationId = uuid("invitation_id")
-    val surveyPeriodId = uuid("account_id")
-    val employeeId = uuid("employee_id")
+    val invitationId = javaUUID("invitation_id")
+    val surveyPeriodId = javaUUID("account_id")
+    val employeeId = javaUUID("employee_id")
     val invitedAt = datetime("invited_at").nullable()
     override val primaryKey = PrimaryKey(invitationId)
 }

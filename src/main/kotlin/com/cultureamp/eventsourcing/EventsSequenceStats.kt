@@ -1,13 +1,14 @@
 package com.cultureamp.eventsourcing
 
-import org.jetbrains.exposed.sql.Database
-import org.jetbrains.exposed.sql.Op
-import org.jetbrains.exposed.sql.SchemaUtils
-import org.jetbrains.exposed.sql.Table
-import org.jetbrains.exposed.sql.max
-import org.jetbrains.exposed.sql.select
-import org.jetbrains.exposed.sql.transactions.transaction
-import org.jetbrains.exposed.sql.upsert
+import org.jetbrains.exposed.v1.core.Op
+import org.jetbrains.exposed.v1.core.Table
+import org.jetbrains.exposed.v1.core.inList
+import org.jetbrains.exposed.v1.core.max
+import org.jetbrains.exposed.v1.jdbc.Database
+import org.jetbrains.exposed.v1.jdbc.SchemaUtils
+import org.jetbrains.exposed.v1.jdbc.select
+import org.jetbrains.exposed.v1.jdbc.transactions.transaction
+import org.jetbrains.exposed.v1.jdbc.upsert
 import kotlin.reflect.KClass
 
 val defaultEventsSequenceStatsTableName = "events_sequence_stats"
@@ -41,8 +42,8 @@ class RelationalDatabaseEventsSequenceStats(
     override fun lastSequence(eventClasses: List<KClass<out DomainEvent>>): Long = transaction(db) {
         val maxSequence = table.sequence.max()
         table
-            .slice(maxSequence)
-            .select {
+            .select(maxSequence)
+            .where {
                 if (eventClasses.isNotEmpty()) {
                     val eventTypeDefinitions = eventClasses.map { eventTypeResolver.serialize(it.java) }
                     val eventTypes = eventTypeDefinitions.eventTypes()

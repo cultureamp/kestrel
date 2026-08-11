@@ -1,9 +1,9 @@
 package com.cultureamp.eventsourcing
 
-import org.jetbrains.exposed.sql.Column
-import org.jetbrains.exposed.sql.StringColumnType
-import org.jetbrains.exposed.sql.Table
-import org.jetbrains.exposed.sql.statements.api.PreparedStatementApi
+import org.jetbrains.exposed.v1.core.Column
+import org.jetbrains.exposed.v1.core.StringColumnType
+import org.jetbrains.exposed.v1.core.Table
+import org.jetbrains.exposed.v1.core.statements.api.PreparedStatementApi
 import org.postgresql.util.PGobject
 
 fun Table.jsonb(name: String): Column<String> =
@@ -17,13 +17,13 @@ private class Jsonb : StringColumnType() {
             val pgObject = PGobject()
             pgObject.type = "jsonb"
             pgObject.value = value
-            stmt[index] = pgObject
+            stmt.set(index, pgObject, this)
         } else {
-            stmt[index] = value!!
+            stmt.set(index, value!!, this)
         }
     }
 
-    override fun valueFromDB(value: Any): Any {
+    override fun valueFromDB(value: Any): String {
         return if (value is PGobject) {
             value.value!!
         } else {

@@ -1,14 +1,15 @@
 package com.cultureamp.eventsourcing.example
 
 import com.cultureamp.eventsourcing.DomainEventProcessor
-import org.jetbrains.exposed.sql.Database
-import org.jetbrains.exposed.sql.SchemaUtils
-import org.jetbrains.exposed.sql.SqlExpressionBuilder.eq
-import org.jetbrains.exposed.sql.Table
-import org.jetbrains.exposed.sql.deleteWhere
-import org.jetbrains.exposed.sql.insert
-import org.jetbrains.exposed.sql.transactions.transaction
-import org.jetbrains.exposed.sql.update
+import org.jetbrains.exposed.v1.core.Table
+import org.jetbrains.exposed.v1.core.eq
+import org.jetbrains.exposed.v1.core.java.javaUUID
+import org.jetbrains.exposed.v1.jdbc.Database
+import org.jetbrains.exposed.v1.jdbc.SchemaUtils
+import org.jetbrains.exposed.v1.jdbc.deleteWhere
+import org.jetbrains.exposed.v1.jdbc.insert
+import org.jetbrains.exposed.v1.jdbc.transactions.transaction
+import org.jetbrains.exposed.v1.jdbc.update
 import java.util.*
 
 class SurveyNamesCommandProjector(private val database: Database) : DomainEventProcessor<SurveyEvent> {
@@ -44,8 +45,8 @@ class SurveyNamesCommandProjector(private val database: Database) : DomainEventP
 }
 
 object SurveyNames : Table() {
-    val surveyId = uuid("survey_id")
-    val accountId = uuid("account_id")
+    val surveyId = javaUUID("survey_id")
+    val accountId = javaUUID("account_id")
     val locale = enumerationByName("locale", 10, Locale::class)
     val name = text("name").index()
 }
