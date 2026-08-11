@@ -1,16 +1,19 @@
 package com.cultureamp.eventsourcing
 
-import org.jetbrains.exposed.sql.Column
-import org.jetbrains.exposed.sql.Database
-import org.jetbrains.exposed.sql.Op
-import org.jetbrains.exposed.sql.ResultRow
-import org.jetbrains.exposed.sql.SortOrder
-import org.jetbrains.exposed.sql.SqlExpressionBuilder
-import org.jetbrains.exposed.sql.Table
-import org.jetbrains.exposed.sql.and
-import org.jetbrains.exposed.sql.or
-import org.jetbrains.exposed.sql.select
-import org.jetbrains.exposed.sql.transactions.transaction
+import org.jetbrains.exposed.v1.core.Column
+import org.jetbrains.exposed.v1.core.Op
+import org.jetbrains.exposed.v1.core.ResultRow
+import org.jetbrains.exposed.v1.core.SortOrder
+import org.jetbrains.exposed.v1.core.Table
+import org.jetbrains.exposed.v1.core.and
+import org.jetbrains.exposed.v1.core.eq
+import org.jetbrains.exposed.v1.core.greater
+import org.jetbrains.exposed.v1.core.lessEq
+import org.jetbrains.exposed.v1.core.or
+import org.jetbrains.exposed.v1.jdbc.Database
+import org.jetbrains.exposed.v1.jdbc.select
+import org.jetbrains.exposed.v1.jdbc.selectAll
+import org.jetbrains.exposed.v1.jdbc.transactions.transaction
 import org.joda.time.DateTime
 import java.util.UUID
 
@@ -32,22 +35,21 @@ class RelationalDatabaseEntitySource<E>(
     private val table: Table,
     private val updatedAtColumn: Column<DateTime>,
     private val idColumn: Column<UUID>,
-    private val filter: SqlExpressionBuilder.() -> Op<Boolean> = { Op.TRUE },
+    private val filter: () -> Op<Boolean> = { Op.TRUE },
     private val rowToEntity: (ResultRow) -> E,
 ) : EntitySource<E>, EntityUpdatedAtStats {
 
     override fun getAfter(after: EntityPosition?, upTo: DateTime, batchSize: Int): List<PositionedEntity<E>> {
-        val afterPosition = SqlExpressionBuilder.run {
-            if (after != null) {
-                (updatedAtColumn greater after.updatedAt) or ((updatedAtColumn eq after.updatedAt) and (idColumn greater after.id))
-            } else {
-                Op.TRUE
-            }
+        val afterPosition = if (after != null) {
+            (updatedAtColumn greater after.updatedAt) or ((updatedAtColumn eq after.updatedAt) and (idColumn greater after.id))
+        } else {
+            Op.TRUE
         }
-        val predicate = SqlExpressionBuilder.run { afterPosition and (updatedAtColumn lessEq upTo) and SqlExpressionBuilder.filter() }
+        val predicate = afterPosition and (updatedAtColumn lessEq upTo) and filter()
         return transaction(db) {
             table
-                .select(predicate)
+                .selectAll()
+                .where(predicate)
                 .orderBy(updatedAtColumn to SortOrder.ASC, idColumn to SortOrder.ASC)
                 .limit(batchSize)
                 .map { row -> PositionedEntity(rowToEntity(row), EntityPosition(row[updatedAtColumn], row[idColumn])) }
@@ -57,8 +59,8 @@ class RelationalDatabaseEntitySource<E>(
     override fun lastUpdatedAt(): DateTime? {
         return transaction(db) {
             table
-                .slice(updatedAtColumn)
-                .select(SqlExpressionBuilder.filter())
+                .select(updatedAtColumn)
+                .where(filter())
                 .orderBy(updatedAtColumn, SortOrder.DESC)
                 .limit(1)
                 .map { row -> row[updatedAtColumn] }

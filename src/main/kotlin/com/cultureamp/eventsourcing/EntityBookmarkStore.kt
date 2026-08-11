@@ -1,15 +1,18 @@
 package com.cultureamp.eventsourcing
 
-import org.jetbrains.exposed.sql.Database
-import org.jetbrains.exposed.sql.ResultRow
-import org.jetbrains.exposed.sql.SchemaUtils
-import org.jetbrains.exposed.sql.Table
-import org.jetbrains.exposed.sql.insert
-import org.jetbrains.exposed.sql.jodatime.datetime
-import org.jetbrains.exposed.sql.select
-import org.jetbrains.exposed.sql.transactions.transaction
-import org.jetbrains.exposed.sql.update
-import org.jetbrains.exposed.sql.vendors.PostgreSQLDialect
+import org.jetbrains.exposed.v1.core.ResultRow
+import org.jetbrains.exposed.v1.core.Table
+import org.jetbrains.exposed.v1.core.eq
+import org.jetbrains.exposed.v1.core.inList
+import org.jetbrains.exposed.v1.core.java.javaUUID
+import org.jetbrains.exposed.v1.core.vendors.PostgreSQLDialect
+import org.jetbrains.exposed.v1.jdbc.Database
+import org.jetbrains.exposed.v1.jdbc.SchemaUtils
+import org.jetbrains.exposed.v1.jdbc.insert
+import org.jetbrains.exposed.v1.jdbc.selectAll
+import org.jetbrains.exposed.v1.jdbc.transactions.transaction
+import org.jetbrains.exposed.v1.jdbc.update
+import org.jetbrains.exposed.v1.jodatime.datetime
 import org.joda.time.DateTime
 
 val defaultEntityBookmarksTableName = "entity_bookmarks"
@@ -87,14 +90,14 @@ class RelationalDatabaseEntityBookmarkStore(
 
     private fun ResultRow.toPosition() = EntityPosition(this[table.lastUpdatedAt], this[table.lastId])
 
-    private fun rowsForBookmarks(bookmarkNames: Set<String>) = table.select { table.name.inList(bookmarkNames) }
+    private fun rowsForBookmarks(bookmarkNames: Set<String>) = table.selectAll().where { table.name.inList(bookmarkNames) }
     private fun isExists(bookmarkName: String) = !rowsForBookmarks(setOf(bookmarkName)).empty()
 }
 
 class EntityBookmarks(tableName: String = defaultEntityBookmarksTableName) : Table(tableName) {
     val name = varchar("name", 160)
     val lastUpdatedAt = datetime("last_updated_at")
-    val lastId = uuid("last_id")
+    val lastId = javaUUID("last_id")
     val createdAt = datetime("created_at")
     val updatedAt = datetime("updated_at")
     override val primaryKey = PrimaryKey(name)

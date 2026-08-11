@@ -1,7 +1,8 @@
 package com.cultureamp.eventsourcing
 
-import org.jetbrains.exposed.sql.Table
-import org.jetbrains.exposed.sql.jodatime.datetime
+import org.jetbrains.exposed.v1.core.Table
+import org.jetbrains.exposed.v1.core.java.javaUUID
+import org.jetbrains.exposed.v1.jodatime.datetime
 import org.joda.time.DateTime
 import java.math.BigDecimal
 import java.util.UUID
@@ -23,10 +24,10 @@ import java.util.UUID
  * ```
  */
 class GoalRelationshipsTable(tableName: String = "goal_relationships") : Table(tableName) {
-    val id = uuid("id")
-    val childGoalId = uuid("child_goal_id")
-    val parentGoalId = uuid("parent_goal_id")
-    val accountId = uuid("account_id")
+    val id = javaUUID("id")
+    val childGoalId = javaUUID("child_goal_id")
+    val parentGoalId = javaUUID("parent_goal_id")
+    val accountId = javaUUID("account_id")
     val createdAt = datetime("created_at")
     val updatedAt = datetime("updated_at")
     val deletedAt = datetime("deleted_at").nullable()
