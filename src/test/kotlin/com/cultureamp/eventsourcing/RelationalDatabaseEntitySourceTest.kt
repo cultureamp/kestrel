@@ -8,13 +8,13 @@ import org.jetbrains.exposed.v1.jdbc.Database
 import org.jetbrains.exposed.v1.jdbc.SchemaUtils
 import org.jetbrains.exposed.v1.jdbc.insert
 import org.jetbrains.exposed.v1.jdbc.transactions.transaction
-import org.joda.time.DateTime
+import java.time.LocalDateTime
 import java.util.UUID
 
 class RelationalDatabaseEntitySourceTest : DescribeSpec({
     val db = PgTestConfig.db ?: Database.connect(url = "jdbc:h2:mem:test;MODE=MySQL;DB_CLOSE_DELAY=-1;", driver = "org.h2.Driver")
     val goalRelationships = GoalRelationshipsTable()
-    val baseTime = DateTime(2026, 8, 10, 9, 0, 0, 0)
+    val baseTime = LocalDateTime.of(2026, 8, 10, 9, 0, 0, 0)
     val distantFuture = baseTime.plusYears(1)
     val accountId = UUID.randomUUID()
 
@@ -26,7 +26,7 @@ class RelationalDatabaseEntitySourceTest : DescribeSpec({
         rowToEntity = { it[goalRelationships.id] },
     )
 
-    fun insertGoalRelationship(updatedAt: DateTime, deletedAt: DateTime? = null): GoalRelationship {
+    fun insertGoalRelationship(updatedAt: LocalDateTime, deletedAt: LocalDateTime? = null): GoalRelationship {
         val relationship = GoalRelationship(UUID.randomUUID(), UUID.randomUUID(), UUID.randomUUID(), accountId, baseTime, updatedAt, deletedAt)
         transaction(db) {
             goalRelationships.insert {
@@ -78,7 +78,7 @@ class RelationalDatabaseEntitySourceTest : DescribeSpec({
             val read = entitySource.getAfter(null, distantFuture).single()
 
             read.position.id shouldBe only.id
-            read.position.updatedAt.millis shouldBe only.updatedAt.millis
+            read.position.updatedAt shouldBe only.updatedAt
         }
 
         it("excludes rows updated after the upTo cutoff") {
@@ -89,7 +89,7 @@ class RelationalDatabaseEntitySourceTest : DescribeSpec({
         }
 
         it("returns at most batchSize rows") {
-            val inserted = (1..5).map { insertGoalRelationship(baseTime.plusSeconds(it)) }
+            val inserted = (1..5).map { insertGoalRelationship(baseTime.plusSeconds(it.toLong())) }
 
             entitySource.getAfter(null, distantFuture, batchSize = 2).map { it.entity } shouldBe inserted.take(2).map { it.id }
         }
@@ -137,7 +137,7 @@ class RelationalDatabaseEntitySourceTest : DescribeSpec({
             insertGoalRelationship(baseTime.plusSeconds(30))
             insertGoalRelationship(baseTime.plusSeconds(2))
 
-            entitySource.lastUpdatedAt()?.millis shouldBe baseTime.plusSeconds(30).millis
+            entitySource.lastUpdatedAt() shouldBe baseTime.plusSeconds(30)
         }
 
         it("respects the filter when finding the newest row") {
@@ -152,7 +152,7 @@ class RelationalDatabaseEntitySourceTest : DescribeSpec({
                 rowToEntity = { it[goalRelationships.id] },
             )
 
-            liveOnly.lastUpdatedAt()?.millis shouldBe baseTime.plusSeconds(1).millis
+            liveOnly.lastUpdatedAt() shouldBe baseTime.plusSeconds(1)
         }
     }
 
@@ -201,9 +201,9 @@ class RelationalDatabaseEntitySourceTest : DescribeSpec({
             read.childGoalId shouldBe inserted.childGoalId
             read.parentGoalId shouldBe inserted.parentGoalId
             read.accountId shouldBe inserted.accountId
-            read.createdAt.millis shouldBe inserted.createdAt.millis
-            read.updatedAt.millis shouldBe inserted.updatedAt.millis
-            read.deletedAt?.millis shouldBe inserted.deletedAt?.millis
+            read.createdAt shouldBe inserted.createdAt
+            read.updatedAt shouldBe inserted.updatedAt
+            read.deletedAt shouldBe inserted.deletedAt
             read.cascadingWeight.compareTo(inserted.cascadingWeight) shouldBe 0
         }
     }

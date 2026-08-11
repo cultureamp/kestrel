@@ -1,7 +1,8 @@
 package com.cultureamp.eventsourcing
 
 import com.cultureamp.common.Action
-import org.joda.time.DateTime
+import java.time.Duration
+import java.time.LocalDateTime
 import kotlin.random.Random
 
 interface BookmarkedEntityProcessor<E> {
@@ -41,7 +42,8 @@ interface AsyncEntityProcessor<E> : BookmarkedEntityProcessor<E> {
  * after we have already moved the bookmark past it. Only rows with `updated_at <= now - timestampDelayMs` are read,
  * which trades this much processing latency for not silently skipping those rows. Set it comfortably longer than the
  * longest transaction that writes to the table.
- * @param clock the source of "now", exposed for testing.
+ * @param clock the source of "now", exposed for testing. It must read the same wall-clock that stamps the source's
+ * `updated_at` column, since [timestampDelayMs] is subtracted from it and compared against that column directly.
  */
 class BatchedAsyncEntityProcessor<E>(
     override val entitySource: EntitySource<E>,
@@ -51,7 +53,7 @@ class BatchedAsyncEntityProcessor<E>(
     override val entityProcessor: EntityProcessor<E>,
     private val batchSize: Int = 1000,
     private val timestampDelayMs: Long = 1000,
-    private val clock: () -> DateTime = DateTime::now,
+    private val clock: () -> LocalDateTime = LocalDateTime::now,
     private val startLog: (EntityBookmark) -> Unit = { bookmark ->
         System.out.println("Polling for entities for ${bookmark.name} from position ${bookmark.position}")
     },
@@ -75,7 +77,7 @@ class BatchedAsyncEntityProcessor<E>(
         startLog(startBookmark)
 
         // hold back rows younger than the delay, so that a row committing late can't slip in behind the bookmark
-        val upTo = clock().minus(timestampDelayMs)
+        val upTo = clock().minus(Duration.ofMillis(timestampDelayMs))
 
         val (count, finalBookmark) = entitySource.getAfter(startBookmark.position, upTo, batchSize).foldIndexed(
             0 to startBookmark,
@@ -94,19 +96,18 @@ class BatchedAsyncEntityProcessor<E>(
     /**
      * The source is contractually required to return rows strictly after the given position, in ascending order. If it
      * doesn't we would either silently skip rows or, worse, reprocess the same row forever without the bookmark ever
-     * advancing, so fail loudly instead. The most likely cause is an `updated_at` column with sub-millisecond
-     * precision being truncated on its way into a joda `DateTime`.
+     * advancing, so fail loudly instead. A position round-trips exactly, so a source that respects its `after`
+     * predicate cannot trip these; they guard against one that doesn't.
      */
     private fun validateProgress(previous: EntityPosition?, next: EntityPosition) {
         if (previous == null) return
         if (next == previous) {
             throw EntitySourceStalledException(
-                "Entity-source for $bookmarkName returned the row at position $next that its bookmark is already at. " +
-                    "If the source's updated-at column has sub-millisecond precision, its value is being truncated and " +
-                    "this row will be re-read forever.",
+                "Entity-source for $bookmarkName returned the row at position $next that its bookmark is already at, " +
+                    "rather than only rows strictly after it, so this row would be re-read forever.",
             )
         }
-        if (next.updatedAt.millis < previous.updatedAt.millis) {
+        if (next.updatedAt < previous.updatedAt) {
             throw EntitySourceOrderingException(
                 "Entity-source for $bookmarkName returned the row at position $next after the row at position $previous, " +
                     "but rows must be returned in ascending updated-at order.",

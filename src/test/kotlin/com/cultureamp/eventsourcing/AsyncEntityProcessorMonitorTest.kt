@@ -2,15 +2,15 @@ package com.cultureamp.eventsourcing
 
 import io.kotest.core.spec.style.DescribeSpec
 import io.kotest.matchers.shouldBe
-import org.joda.time.DateTime
+import java.time.LocalDateTime
 import java.util.UUID
 
 class AsyncEntityProcessorMonitorTest : DescribeSpec({
-    val baseTime = DateTime(2026, 8, 10, 9, 0, 0, 0)
+    val baseTime = LocalDateTime.of(2026, 8, 10, 9, 0, 0, 0)
     val accountId = UUID.randomUUID()
 
     fun goalRelationship(secondsAfterBase: Int) =
-        GoalRelationship(UUID.randomUUID(), UUID.randomUUID(), UUID.randomUUID(), accountId, createdAt = baseTime, updatedAt = baseTime.plusSeconds(secondsAfterBase))
+        GoalRelationship(UUID.randomUUID(), UUID.randomUUID(), UUID.randomUUID(), accountId, createdAt = baseTime, updatedAt = baseTime.plusSeconds(secondsAfterBase.toLong()))
 
     fun monitoredProcessor(
         goalRelationships: List<GoalRelationship>,
@@ -42,7 +42,7 @@ class AsyncEntityProcessorMonitorTest : DescribeSpec({
 
             lag!!.name shouldBe "goal-relationships"
             lag!!.hasStarted shouldBe false
-            lag!!.lastUpdatedAt?.millis shouldBe baseTime.plusSeconds(61).millis
+            lag!!.lastUpdatedAt shouldBe baseTime.plusSeconds(61)
             lag!!.lagMs shouldBe null
             lag!!.latencyMs shouldBe null
         }
@@ -57,7 +57,7 @@ class AsyncEntityProcessorMonitorTest : DescribeSpec({
             monitor.run()
 
             lag!!.hasStarted shouldBe true
-            lag!!.bookmarkUpdatedAt?.millis shouldBe baseTime.plusSeconds(1).millis
+            lag!!.bookmarkUpdatedAt shouldBe baseTime.plusSeconds(1)
             lag!!.lagMs shouldBe 60_000
             lag!!.latencyMs shouldBe 119_000
         }

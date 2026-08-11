@@ -9,7 +9,7 @@ import org.jetbrains.exposed.v1.jdbc.SchemaUtils
 import org.jetbrains.exposed.v1.jdbc.insert
 import org.jetbrains.exposed.v1.jdbc.transactions.transaction
 import org.jetbrains.exposed.v1.jdbc.update
-import org.joda.time.DateTime
+import java.time.LocalDateTime
 import java.util.UUID
 
 class BatchedAsyncEntityProcessorIntegrationTest : DescribeSpec({
@@ -17,7 +17,7 @@ class BatchedAsyncEntityProcessorIntegrationTest : DescribeSpec({
     val goalRelationships = GoalRelationshipsTable()
     val bookmarksTable = EntityBookmarks("entity_bookmarks_integration")
     val bookmarkStore = RelationalDatabaseEntityBookmarkStore(db, bookmarksTable)
-    val baseTime = DateTime(2026, 8, 10, 9, 0, 0, 0)
+    val baseTime = LocalDateTime.of(2026, 8, 10, 9, 0, 0, 0)
     val accountId = UUID.randomUUID()
     val bookmarkName = "GoalRelationshipProjector"
 
@@ -29,7 +29,7 @@ class BatchedAsyncEntityProcessorIntegrationTest : DescribeSpec({
         rowToEntity = { it[goalRelationships.id] },
     )
 
-    fun insertGoalRelationship(updatedAt: DateTime): GoalRelationship {
+    fun insertGoalRelationship(updatedAt: LocalDateTime): GoalRelationship {
         val relationship = GoalRelationship(UUID.randomUUID(), UUID.randomUUID(), UUID.randomUUID(), accountId, baseTime, updatedAt)
         transaction(db) {
             goalRelationships.insert {
@@ -45,7 +45,7 @@ class BatchedAsyncEntityProcessorIntegrationTest : DescribeSpec({
         return relationship
     }
 
-    fun touchGoalRelationship(relationship: GoalRelationship, updatedAt: DateTime) {
+    fun touchGoalRelationship(relationship: GoalRelationship, updatedAt: LocalDateTime) {
         transaction(db) {
             goalRelationships.update({ goalRelationships.id eq relationship.id }) {
                 it[goalRelationships.updatedAt] = updatedAt
@@ -100,6 +100,28 @@ class BatchedAsyncEntityProcessorIntegrationTest : DescribeSpec({
             touchGoalRelationship(first, baseTime.plusSeconds(4))
             processor.processOneBatch() shouldBe Action.Wait
             processed shouldBe listOf(first.id, second.id, third.id, first.id)
+        }
+
+        it("round-trips a sub-millisecond updated-at exactly, so the bookmarked row is not re-read") {
+            val processed = mutableListOf<UUID>()
+            val processor = BatchedAsyncEntityProcessor(
+                entitySource = entitySource,
+                entityUpdatedAtStats = entitySource,
+                bookmarkStore = bookmarkStore,
+                bookmarkName = bookmarkName,
+                entityProcessor = EntityProcessor.from { id: UUID -> processed += id },
+                clock = { baseTime.plusHours(1) },
+            )
+            // 123.456ms past the second: representable in a Postgres `timestamp`, but truncated to 123ms by a
+            // millisecond-precision type, which would leave the bookmark behind the row and re-select it forever
+            val subMillisecond = insertGoalRelationship(baseTime.plusSeconds(1).withNano(123_456_000))
+
+            processor.processOneBatch()
+            processed shouldBe listOf(subMillisecond.id)
+            bookmarkStore.bookmarkFor(bookmarkName).position shouldBe subMillisecond.position
+
+            processor.processOneBatch() shouldBe Action.Wait
+            processed shouldBe listOf(subMillisecond.id)
         }
 
         it("does not read rows that are within the timestamp delay of now") {

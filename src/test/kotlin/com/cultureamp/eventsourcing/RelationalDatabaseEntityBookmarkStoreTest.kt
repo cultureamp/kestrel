@@ -5,13 +5,13 @@ import io.kotest.matchers.shouldBe
 import org.jetbrains.exposed.v1.jdbc.Database
 import org.jetbrains.exposed.v1.jdbc.SchemaUtils
 import org.jetbrains.exposed.v1.jdbc.transactions.transaction
-import org.joda.time.DateTime
+import java.time.LocalDateTime
 import java.util.UUID
 
 class RelationalDatabaseEntityBookmarkStoreTest : DescribeSpec({
     val db = PgTestConfig.db ?: Database.connect(url = "jdbc:h2:mem:test;MODE=MySQL;DB_CLOSE_DELAY=-1;", driver = "org.h2.Driver")
     val store = RelationalDatabaseEntityBookmarkStore(db)
-    val baseTime = DateTime(2026, 8, 10, 9, 0, 0, 0)
+    val baseTime = LocalDateTime.of(2026, 8, 10, 9, 0, 0, 0)
 
     beforeTest {
         store.createSchemaIfNotExists()

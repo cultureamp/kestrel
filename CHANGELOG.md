@@ -66,5 +66,16 @@ as the Confluent JDBC source connector does in its "timestamp+incrementing" mode
 `EntityProcessor`, `EntityBookmarkStore`, `BatchedAsyncEntityProcessor` and `AsyncEntityProcessorMonitor`, and the
 [README](README.md#entity-processors-projecting-from-a-table-rather-than-an-event-stream) for how they fit together.
 
+This stack uses `java.time.LocalDateTime` rather than joda `DateTime`, so it needs `exposed-java-time` alongside the
+`exposed-jodatime` that the event-sourcing side continues to use. An `EntityPosition` is a cursor into a table rather
+than a moment in time: it holds whatever a naive `timestamp` column holds, and is only ever compared against other
+values from that same column. A zoned type has to be reinterpreted against a time-zone on the way through
+`exposed-jodatime`, which leaves `upTo = now - timestampDelayMs` skewed by the JVM's offset from UTC — silently
+cancelling the hold-back east of UTC, and stalling reads for hours west of it, while the bookmark round-trip still
+looks correct because reads and writes share the mapping. `LocalDateTime` has no zone to reinterpret, and being
+nanosecond-precision it round-trips a `timestamp` exactly, so bookmarks no longer need the column to be
+millisecond-precision to avoid re-reading a row forever. `EntitySourceStalledException` and
+`EntitySourceOrderingException` remain as guards against a source that ignores its `after` predicate.
+
 No breaking changes. `BookmarkLock` gains a `tryLock(bookmarkName: String)` overload, which has a default
 implementation delegating to the existing `tryLock(bookmark: Bookmark)`, so existing implementations are unaffected.

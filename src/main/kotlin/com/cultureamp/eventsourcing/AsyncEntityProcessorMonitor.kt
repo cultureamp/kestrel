@@ -1,6 +1,7 @@
 package com.cultureamp.eventsourcing
 
-import org.joda.time.DateTime
+import java.time.Duration
+import java.time.LocalDateTime
 
 /**
  * Reports how far each [AsyncEntityProcessor] is lagging behind the head of its entity table, analogous to
@@ -10,7 +11,7 @@ import org.joda.time.DateTime
 class AsyncEntityProcessorMonitor(
     private val asyncEntityProcessors: List<AsyncEntityProcessor<*>>,
     private val metrics: (EntityLag) -> Unit,
-    private val clock: () -> DateTime = DateTime::now,
+    private val clock: () -> LocalDateTime = LocalDateTime::now,
 ) {
     fun run() {
         val lags = asyncEntityProcessors.map {
@@ -40,11 +41,11 @@ class AsyncEntityProcessorMonitor(
 data class EntityLag(
     val name: String,
     val bookmarkPosition: EntityPosition?,
-    val lastUpdatedAt: DateTime?,
-    val now: DateTime,
+    val lastUpdatedAt: LocalDateTime?,
+    val now: LocalDateTime,
 ) {
     val hasStarted: Boolean = bookmarkPosition != null
-    val bookmarkUpdatedAt: DateTime? = bookmarkPosition?.updatedAt
-    val lagMs: Long? = if (bookmarkUpdatedAt != null && lastUpdatedAt != null) lastUpdatedAt.millis - bookmarkUpdatedAt.millis else null
-    val latencyMs: Long? = bookmarkUpdatedAt?.let { now.millis - it.millis }
+    val bookmarkUpdatedAt: LocalDateTime? = bookmarkPosition?.updatedAt
+    val lagMs: Long? = if (bookmarkUpdatedAt != null && lastUpdatedAt != null) Duration.between(bookmarkUpdatedAt, lastUpdatedAt).toMillis() else null
+    val latencyMs: Long? = bookmarkUpdatedAt?.let { Duration.between(it, now).toMillis() }
 }

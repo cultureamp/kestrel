@@ -2,9 +2,9 @@ package com.cultureamp.eventsourcing
 
 import org.jetbrains.exposed.v1.core.Table
 import org.jetbrains.exposed.v1.core.java.javaUUID
-import org.jetbrains.exposed.v1.jodatime.datetime
-import org.joda.time.DateTime
+import org.jetbrains.exposed.v1.javatime.datetime
 import java.math.BigDecimal
+import java.time.LocalDateTime
 import java.util.UUID
 
 /**
@@ -40,9 +40,9 @@ data class GoalRelationship(
     val childGoalId: UUID,
     val parentGoalId: UUID,
     val accountId: UUID,
-    val createdAt: DateTime,
-    val updatedAt: DateTime,
-    val deletedAt: DateTime? = null,
+    val createdAt: LocalDateTime,
+    val updatedAt: LocalDateTime,
+    val deletedAt: LocalDateTime? = null,
     val cascadingWeight: BigDecimal = BigDecimal("0.0000"),
 ) {
     val position = EntityPosition(updatedAt, id)
@@ -69,7 +69,7 @@ class InMemoryEntityBookmarkStore(private val lockObtainable: Boolean = true) : 
  * A well-behaved [EntitySource] over a fixed list of rows, honouring the ordering, `after` and `upTo` contract.
  */
 class InMemoryEntitySource<E>(private val rows: List<PositionedEntity<E>>) : EntitySource<E>, EntityUpdatedAtStats {
-    override fun getAfter(after: EntityPosition?, upTo: DateTime, batchSize: Int) = rows
+    override fun getAfter(after: EntityPosition?, upTo: LocalDateTime, batchSize: Int) = rows
         .sortedBy { it.position }
         .filter { (after == null || it.position > after) && !it.position.updatedAt.isAfter(upTo) }
         .take(batchSize)

@@ -6,14 +6,14 @@ import org.jetbrains.exposed.v1.core.eq
 import org.jetbrains.exposed.v1.core.inList
 import org.jetbrains.exposed.v1.core.java.javaUUID
 import org.jetbrains.exposed.v1.core.vendors.PostgreSQLDialect
+import org.jetbrains.exposed.v1.javatime.datetime
 import org.jetbrains.exposed.v1.jdbc.Database
 import org.jetbrains.exposed.v1.jdbc.SchemaUtils
 import org.jetbrains.exposed.v1.jdbc.insert
 import org.jetbrains.exposed.v1.jdbc.selectAll
 import org.jetbrains.exposed.v1.jdbc.transactions.transaction
 import org.jetbrains.exposed.v1.jdbc.update
-import org.jetbrains.exposed.v1.jodatime.datetime
-import org.joda.time.DateTime
+import java.time.LocalDateTime
 
 val defaultEntityBookmarksTableName = "entity_bookmarks"
 
@@ -70,14 +70,14 @@ class RelationalDatabaseEntityBookmarkStore(
                 it[name] = bookmarkName
                 it[lastUpdatedAt] = position.updatedAt
                 it[lastId] = position.id
-                it[createdAt] = DateTime.now()
-                it[updatedAt] = DateTime.now()
+                it[createdAt] = LocalDateTime.now()
+                it[updatedAt] = LocalDateTime.now()
             }
         } else {
             table.update({ table.name eq bookmarkName }) {
                 it[lastUpdatedAt] = position.updatedAt
                 it[lastId] = position.id
-                it[updatedAt] = DateTime.now()
+                it[updatedAt] = LocalDateTime.now()
             }
         }
     }

@@ -14,7 +14,7 @@ import org.jetbrains.exposed.v1.jdbc.Database
 import org.jetbrains.exposed.v1.jdbc.select
 import org.jetbrains.exposed.v1.jdbc.selectAll
 import org.jetbrains.exposed.v1.jdbc.transactions.transaction
-import org.joda.time.DateTime
+import java.time.LocalDateTime
 import java.util.UUID
 
 /**
@@ -33,13 +33,13 @@ import java.util.UUID
 class RelationalDatabaseEntitySource<E>(
     private val db: Database,
     private val table: Table,
-    private val updatedAtColumn: Column<DateTime>,
+    private val updatedAtColumn: Column<LocalDateTime>,
     private val idColumn: Column<UUID>,
     private val filter: () -> Op<Boolean> = { Op.TRUE },
     private val rowToEntity: (ResultRow) -> E,
 ) : EntitySource<E>, EntityUpdatedAtStats {
 
-    override fun getAfter(after: EntityPosition?, upTo: DateTime, batchSize: Int): List<PositionedEntity<E>> {
+    override fun getAfter(after: EntityPosition?, upTo: LocalDateTime, batchSize: Int): List<PositionedEntity<E>> {
         val afterPosition = if (after != null) {
             (updatedAtColumn greater after.updatedAt) or ((updatedAtColumn eq after.updatedAt) and (idColumn greater after.id))
         } else {
@@ -56,7 +56,7 @@ class RelationalDatabaseEntitySource<E>(
         }
     }
 
-    override fun lastUpdatedAt(): DateTime? {
+    override fun lastUpdatedAt(): LocalDateTime? {
         return transaction(db) {
             table
                 .select(updatedAtColumn)

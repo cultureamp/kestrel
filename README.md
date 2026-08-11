@@ -468,6 +468,11 @@ The source can be any function that takes a position, an upper bound on `updated
 val entitySource = EntitySource.from { after, upTo, batchSize -> goalRelationshipRepository.updatedAfter(after, upTo, batchSize) }
 ```
 
+Writing one by hand means honouring the contract documented on `EntitySource`: return only rows strictly after `after`
+and no newer than `upTo`, in ascending `(updated_at, id)` order. A source that returns a row its bookmark is already on,
+or returns rows out of order, would silently skip rows or reprocess one forever, so `BatchedAsyncEntityProcessor`
+checks each row as it goes and throws `EntitySourceStalledException` or `EntitySourceOrderingException` instead.
+
 Or, for an [Exposed](https://github.com/JetBrains/Exposed) table, use the provided implementation, which doubles as the
 `EntityUpdatedAtStats` used for lag monitoring:
 
@@ -527,11 +532,13 @@ keeps growing when a processor is stuck even if nothing new is being written.
   The processor only reads rows where `updated_at <= now - timestampDelayMs` to avoid this, equivalent to the JDBC
   connector's `timestamp.delay.interval.ms`. Set it comfortably longer than the longest transaction writing to the
   table; you're trading that much processing latency for not silently skipping rows.
-- **Timestamp precision.** Positions are joda `DateTime`s, which are millisecond-precision, so if your `updated_at`
-  column is a Postgres `timestamp` (microseconds) then the value read into a bookmark is truncated and that row will
-  keep being re-selected. `BatchedAsyncEntityProcessor` detects this and throws `EntitySourceStalledException` rather
-  than silently spinning; the fix is to store `updated_at` with millisecond precision, or to truncate the column in
-  your `EntitySource`.
+- **Positions are `java.time.LocalDateTime`, not joda `DateTime`.** Note that this is the opposite of the
+  event-sourcing side, which is joda throughout. A position is a cursor into a table rather than a moment in time: it
+  holds whatever the naive `timestamp` column holds and is only ever compared against other values from that same
+  column, so it deliberately carries no time-zone. That also means the `clock` you give a
+  `BatchedAsyncEntityProcessor` has to read the same wall-clock that stamps `updated_at`, since `timestampDelayMs` is
+  subtracted from it and compared against that column directly. Being nanosecond-precision, a `LocalDateTime`
+  round-trips a `timestamp` exactly, so there is no precision requirement on the column.
 - **You only ever see current state.** Unlike an event stream, a table exposes the latest version of each row. A row
   updated twice in quick succession may only be processed once, rows are seen in `updated_at` order rather than
   creation order, and deletes aren't visible at all unless they're soft deletes. Entity-processors need to be

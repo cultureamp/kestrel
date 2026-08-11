@@ -4,16 +4,17 @@ import com.cultureamp.common.Action
 import io.kotest.assertions.throwables.shouldThrow
 import io.kotest.core.spec.style.DescribeSpec
 import io.kotest.matchers.shouldBe
-import org.joda.time.DateTime
+import java.time.Duration
+import java.time.LocalDateTime
 import java.util.UUID
 
 class BatchedAsyncEntityProcessorTest : DescribeSpec({
-    val baseTime = DateTime(2026, 8, 10, 9, 0, 0, 0)
+    val baseTime = LocalDateTime.of(2026, 8, 10, 9, 0, 0, 0)
     val wellAfterAnyRow = { baseTime.plusHours(1) }
     val accountId = UUID.randomUUID()
 
     fun goalRelationship(secondsAfterBase: Int, id: UUID = UUID.randomUUID()) =
-        GoalRelationship(id, UUID.randomUUID(), UUID.randomUUID(), accountId, createdAt = baseTime, updatedAt = baseTime.plusSeconds(secondsAfterBase))
+        GoalRelationship(id, UUID.randomUUID(), UUID.randomUUID(), accountId, createdAt = baseTime, updatedAt = baseTime.plusSeconds(secondsAfterBase.toLong()))
 
     fun positioned(goalRelationship: GoalRelationship) = PositionedEntity(goalRelationship, goalRelationship.position)
 
@@ -23,7 +24,7 @@ class BatchedAsyncEntityProcessorTest : DescribeSpec({
         bookmarkStore: EntityBookmarkStore,
         batchSize: Int = 1000,
         timestampDelayMs: Long = 1000,
-        clock: () -> DateTime = wellAfterAnyRow,
+        clock: () -> LocalDateTime = wellAfterAnyRow,
     ) = BatchedAsyncEntityProcessor(
         entitySource = InMemoryEntitySource(goalRelationships.map(::positioned)),
         entityUpdatedAtStats = InMemoryEntitySource(goalRelationships.map(::positioned)),
@@ -86,14 +87,14 @@ class BatchedAsyncEntityProcessorTest : DescribeSpec({
             val fresh = goalRelationship(10)
             val processed = mutableListOf<GoalRelationship>()
             val bookmarkStore = InMemoryEntityBookmarkStore()
-            var now = fresh.updatedAt.plusMillis(500)
+            var now = fresh.updatedAt.plus(Duration.ofMillis(500))
 
             val processor = processorFor(listOf(old, fresh), processed, bookmarkStore, timestampDelayMs = 1000, clock = { now })
 
             processor.processOneBatch()
             processed shouldBe listOf(old)
 
-            now = fresh.updatedAt.plusMillis(1500)
+            now = fresh.updatedAt.plus(Duration.ofMillis(1500))
             processor.processOneBatch()
             processed shouldBe listOf(old, fresh)
         }

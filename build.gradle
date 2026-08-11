@@ -163,7 +163,8 @@ dependencies {
     implementation "org.jetbrains.kotlin:kotlin-reflect:$kotlin_version"
     implementation "org.jetbrains.exposed:exposed-core:$exposed_version"
     implementation "org.jetbrains.exposed:exposed-jdbc:$exposed_version"
-    implementation "org.jetbrains.exposed:exposed-jodatime:$exposed_version"
+    implementation "org.jetbrains.exposed:exposed-jodatime:$exposed_version" // event-sourcing side, which is joda
+    implementation "org.jetbrains.exposed:exposed-java-time:$exposed_version" // entity-processor side, which is java.time
     implementation "org.jetbrains.exposed:exposed-json:$exposed_version"
     implementation "io.github.microutils:kotlin-logging:2.0.11"
     implementation "org.postgresql:postgresql:42.7.3" // needed for driver in DemonstrateEventSequenceIdGaps.kt
