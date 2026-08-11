@@ -16,8 +16,8 @@ import com.cultureamp.eventsourcing.SimpleAggregate
 import com.cultureamp.eventsourcing.SimpleAggregateConstructor
 import com.cultureamp.eventsourcing.UpdateCommand
 import com.cultureamp.eventsourcing.UpdateEvent
-import org.jetbrains.exposed.sql.Database
-import org.jetbrains.exposed.sql.transactions.transaction
+import org.jetbrains.exposed.v1.jdbc.Database
+import org.jetbrains.exposed.v1.jdbc.transactions.transaction
 import java.lang.RuntimeException
 import java.util.*
 import java.util.concurrent.atomic.AtomicBoolean

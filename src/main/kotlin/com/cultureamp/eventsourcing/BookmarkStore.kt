@@ -1,9 +1,10 @@
 package com.cultureamp.eventsourcing
 
-import org.jetbrains.exposed.sql.*
-import org.jetbrains.exposed.sql.jodatime.datetime
-import org.jetbrains.exposed.sql.transactions.transaction
-import org.jetbrains.exposed.sql.vendors.PostgreSQLDialect
+import org.jetbrains.exposed.v1.core.*
+import org.jetbrains.exposed.v1.core.vendors.PostgreSQLDialect
+import org.jetbrains.exposed.v1.jdbc.*
+import org.jetbrains.exposed.v1.jdbc.transactions.transaction
+import org.jetbrains.exposed.v1.jodatime.datetime
 import org.joda.time.DateTime
 import java.io.Closeable
 import java.sql.Connection
@@ -64,7 +65,7 @@ class RelationalDatabaseBookmarkStore(
         }
     }
 
-    private fun rowsForBookmarks(bookmarkNames: Set<String>) = table.select { table.name.inList(bookmarkNames) }
+    private fun rowsForBookmarks(bookmarkNames: Set<String>) = table.selectAll().where { table.name.inList(bookmarkNames) }
     private fun isExists(bookmarkName: String) = !rowsForBookmarks(setOf(bookmarkName)).empty()
 }
 

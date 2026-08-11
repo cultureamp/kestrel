@@ -100,26 +100,48 @@ events (
 ## Technology Stack
 
 ### Core Technologies
-- **Kotlin 1.9.23** with Java 17 target
-- **PostgreSQL** (production) / **H2** (testing) for event storage
-- **Jetbrains Exposed 0.49.0** - Kotlin SQL DSL for database access
-- **Jackson 2.18.1** - JSON serialization with snake_case naming
+- **Kotlin 2.2.21** with Java 17 target
+- **PostgreSQL** (production) / **H2 2.x** (testing) for event storage
+- **Jetbrains Exposed 1.3.1** - Kotlin SQL DSL for database access
+- **Jackson 3.1.0** - JSON serialization with snake_case naming
 - **Joda-Time** - Date/time handling (not java.time)
 - **Kotest 4.6.2** - Testing framework with assertions
 - **Testcontainers** - PostgreSQL integration testing
 
+Versions live in `gradle.properties` (`kotlin_version`, `exposed_version`, `jackson_version`);
+the rest are declared inline in `build.gradle`.
+
 ### Important Dependencies
 ```kotlin
 // Database
-exposed-core, exposed-jdbc, exposed-jodatime, exposed-json
+exposed-core, exposed-jdbc, exposed-jodatime, exposed-json  // 1.3.1
 postgresql:42.7.3
 
 // Serialization
-jackson-module-kotlin, jackson-datatype-joda
+jackson-module-kotlin, jackson-datatype-joda  // 3.1.0
 
 // Testing
-kotest-runner-junit5-jvm, testcontainers:postgresql
+kotest-runner-junit5-jvm:4.6.2, testcontainers:postgresql:1.19.4, h2:2.3.232
 ```
+
+Two version constraints are coupled and not freely changeable:
+- Exposed 1.3.1 is published with Kotlin 2.3 metadata. Kotlin 2.1 cannot read it; 2.2 can,
+  because the compiler reads metadata up to one minor version ahead. 2.2.21 is the lowest
+  version that builds, chosen so Kestrel imposes no floor beyond the Kotlin 2.2 that Exposed
+  1.3.1 already requires of consumers.
+- Exposed 1.x rejects H2 1.4 at runtime with `Unsupported H2 version`, so tests need H2 2.x.
+
+### Jackson and Exposed package notes
+- Jackson 3 lives under `tools.jackson.*`, **not** `com.fasterxml.jackson.*`.
+- Exposed 1.x lives under `org.jetbrains.exposed.v1.*`, split into `v1.core` (`Table`, `Column`,
+  `ResultRow`, expressions, and the top-level `eq`/`inList`/`greater` operators) and `v1.jdbc`
+  (`Database`, `SchemaUtils`, `transaction`, `JdbcTransaction`, and statements like
+  `insert`/`update`/`upsert`/`selectAll`).
+- Query idioms differ from 0.49: use `selectAll().where { ... }` (there is no `select { predicate }`)
+  and `select(columns).where { ... }` (there is no `slice(...)`). `where { }` does **not** have
+  `SqlExpressionBuilder` as its receiver.
+- Use `javaUUID("col")` for `java.util.UUID` columns. Plain `uuid(...)` now maps to
+  `kotlin.uuid.Uuid`, which would change the column's Kotlin type.
 
 ## Development Patterns
 
@@ -194,7 +216,7 @@ asyncProcessor.start(ExponentialBackoff())
 - Advisory locks ensure bookmark coordination across processor instances
 - 500ms delay between automatic retries
 
-### Current Development Context
-- Main branch: `master`
-- Current branch: `wb/sequence_number_for_event_processors`
-- Recent work focuses on table lock timeout configuration and event type filtering
+### Repository Context
+- Main branch: `master` (PRs target this)
+- Check `git log` and `CHANGELOG.md` for recent work rather than relying on notes here,
+  which go stale quickly.

@@ -6,7 +6,7 @@ import com.cultureamp.eventsourcing.example.Renamed
 import com.cultureamp.eventsourcing.example.Restored
 import io.kotest.core.spec.style.DescribeSpec
 import io.kotest.matchers.shouldBe
-import org.jetbrains.exposed.sql.Database
+import org.jetbrains.exposed.v1.jdbc.Database
 import org.testcontainers.containers.PostgreSQLContainer
 import kotlin.reflect.KClass
 

@@ -1,20 +1,24 @@
 package com.cultureamp.eventsourcing
 
-import org.jetbrains.exposed.exceptions.ExposedSQLException
-import org.jetbrains.exposed.sql.Column
-import org.jetbrains.exposed.sql.Database
-import org.jetbrains.exposed.sql.Op
-import org.jetbrains.exposed.sql.ResultRow
-import org.jetbrains.exposed.sql.SchemaUtils
-import org.jetbrains.exposed.sql.Table
-import org.jetbrains.exposed.sql.Transaction
-import org.jetbrains.exposed.sql.and
-import org.jetbrains.exposed.sql.insert
-import org.jetbrains.exposed.sql.jodatime.datetime
-import org.jetbrains.exposed.sql.select
-import org.jetbrains.exposed.sql.transactions.transaction
-import org.jetbrains.exposed.sql.vendors.H2Dialect
-import org.jetbrains.exposed.sql.vendors.PostgreSQLDialect
+import org.jetbrains.exposed.v1.core.Column
+import org.jetbrains.exposed.v1.core.Op
+import org.jetbrains.exposed.v1.core.ResultRow
+import org.jetbrains.exposed.v1.core.Table
+import org.jetbrains.exposed.v1.core.and
+import org.jetbrains.exposed.v1.core.eq
+import org.jetbrains.exposed.v1.core.greater
+import org.jetbrains.exposed.v1.core.inList
+import org.jetbrains.exposed.v1.core.java.javaUUID
+import org.jetbrains.exposed.v1.core.vendors.H2Dialect
+import org.jetbrains.exposed.v1.core.vendors.PostgreSQLDialect
+import org.jetbrains.exposed.v1.exceptions.ExposedSQLException
+import org.jetbrains.exposed.v1.jdbc.Database
+import org.jetbrains.exposed.v1.jdbc.JdbcTransaction
+import org.jetbrains.exposed.v1.jdbc.SchemaUtils
+import org.jetbrains.exposed.v1.jdbc.insert
+import org.jetbrains.exposed.v1.jdbc.selectAll
+import org.jetbrains.exposed.v1.jdbc.transactions.transaction
+import org.jetbrains.exposed.v1.jodatime.datetime
 import tools.jackson.core.JacksonException
 import tools.jackson.databind.ObjectMapper
 import tools.jackson.databind.PropertyNamingStrategies
@@ -43,7 +47,7 @@ class RelationalDatabaseEventStore<M : EventMetadata>(
     private val metadataClass: Class<M>,
     private val objectMapper: ObjectMapper,
     private val eventTypeResolver: EventTypeResolver,
-    private val blockingLockUntilTransactionEnd: Transaction.() -> CommandError? = { null },
+    private val blockingLockUntilTransactionEnd: JdbcTransaction.() -> CommandError? = { null },
     private val afterSinkHook: (List<SequencedEvent<M>>) -> Unit = { },
     private val eventsSinkTable: Events = events,
 ) : EventStore<M> {
@@ -57,7 +61,7 @@ class RelationalDatabaseEventStore<M : EventMetadata>(
             eventTypeResolver: EventTypeResolver = defaultEventTypeResolver,
             eventsSequenceStats: EventsSequenceStats? = RelationalDatabaseEventsSequenceStats(db, eventTypeResolver, defaultEventsSequenceStatsTableName).also { it.createSchemaIfNotExists() },
             lockTimeoutMs: Int = 10_000,
-            noinline blockingLockUntilTransactionEnd: Transaction.() -> CommandError? = {
+            noinline blockingLockUntilTransactionEnd: JdbcTransaction.() -> CommandError? = {
                 when (db.dialect) {
                     is H2Dialect -> null
                     is PostgreSQLDialect -> pgAdvisoryXactLock(lockTimeoutMs)
@@ -163,7 +167,8 @@ class RelationalDatabaseEventStore<M : EventMetadata>(
     override fun getAfter(sequence: Long, eventClasses: List<KClass<out DomainEvent>>, batchSize: Int): List<SequencedEvent<M>> {
         return transaction(db) {
             events
-                .select {
+                .selectAll()
+                .where {
                     val eventTypeMatches = if (eventClasses.isNotEmpty()) {
                         val eventTypeDefinitions = eventClasses.map { eventTypeResolver.serialize(it.java) }
                         val eventTypes = eventTypeDefinitions.eventTypes()
@@ -185,7 +190,8 @@ class RelationalDatabaseEventStore<M : EventMetadata>(
     override fun eventsFor(aggregateId: UUID): List<Event<M>> {
         return transaction(db) {
             events
-                .select { events.aggregateId eq aggregateId }
+                .selectAll()
+                .where { events.aggregateId eq aggregateId }
                 .orderBy(events.sequence)
                 .map(::rowToSequencedEvent)
                 .map { it.event }
@@ -205,9 +211,9 @@ internal fun <T> String.asClass(): Class<out T>? {
 class Events(tableName: String = defaultEventsTableName, jsonb: Table.(String) -> Column<String> = Table::jsonb) :
     Table(tableName) {
     val sequence = long("sequence").autoIncrement()
-    val eventId = uuid("id")
+    val eventId = javaUUID("id")
     val aggregateSequence = long("aggregate_sequence")
-    val aggregateId = uuid("aggregate_id")
+    val aggregateId = javaUUID("aggregate_id")
     val aggregateType = varchar("aggregate_type", 128)
     val eventType = varchar("event_type", 256)
     val createdAt = datetime("created_at")
@@ -227,7 +233,7 @@ private fun Table.nonUniqueIndex(vararg columns: Column<*>) = index(false, *colu
 object ConcurrencyError : RetriableError
 object LockingError : CommandError
 
-fun Transaction.pgAdvisoryXactLock(lockTimeoutMs: Int = 10_000): CommandError? {
+fun JdbcTransaction.pgAdvisoryXactLock(lockTimeoutMs: Int = 10_000): CommandError? {
     if (lockTimeoutMs == 0) {
         // Non-blocking
         val gotLock = exec("SELECT pg_try_advisory_xact_lock(-1)") { rs ->
