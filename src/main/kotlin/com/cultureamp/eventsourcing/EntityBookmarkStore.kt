@@ -6,14 +6,15 @@ import org.jetbrains.exposed.v1.core.eq
 import org.jetbrains.exposed.v1.core.inList
 import org.jetbrains.exposed.v1.core.java.javaUUID
 import org.jetbrains.exposed.v1.core.vendors.PostgreSQLDialect
-import org.jetbrains.exposed.v1.javatime.datetime
+import org.jetbrains.exposed.v1.javatime.timestampWithTimeZone
 import org.jetbrains.exposed.v1.jdbc.Database
 import org.jetbrains.exposed.v1.jdbc.SchemaUtils
 import org.jetbrains.exposed.v1.jdbc.insert
 import org.jetbrains.exposed.v1.jdbc.selectAll
 import org.jetbrains.exposed.v1.jdbc.transactions.transaction
 import org.jetbrains.exposed.v1.jdbc.update
-import java.time.LocalDateTime
+import java.time.Instant
+import java.time.ZoneOffset
 
 val defaultEntityBookmarksTableName = "entity_bookmarks"
 
@@ -68,16 +69,16 @@ class RelationalDatabaseEntityBookmarkStore(
         if (!isExists(bookmarkName)) {
             table.insert {
                 it[name] = bookmarkName
-                it[lastUpdatedAt] = position.updatedAt
+                it[lastUpdatedAt] = position.updatedAt.atOffset(ZoneOffset.UTC)
                 it[lastId] = position.id
-                it[createdAt] = LocalDateTime.now()
-                it[updatedAt] = LocalDateTime.now()
+                it[createdAt] = Instant.now().atOffset(ZoneOffset.UTC)
+                it[updatedAt] = Instant.now().atOffset(ZoneOffset.UTC)
             }
         } else {
             table.update({ table.name eq bookmarkName }) {
-                it[lastUpdatedAt] = position.updatedAt
+                it[lastUpdatedAt] = position.updatedAt.atOffset(ZoneOffset.UTC)
                 it[lastId] = position.id
-                it[updatedAt] = LocalDateTime.now()
+                it[updatedAt] = Instant.now().atOffset(ZoneOffset.UTC)
             }
         }
     }
@@ -88,7 +89,7 @@ class RelationalDatabaseEntityBookmarkStore(
         }
     }
 
-    private fun ResultRow.toPosition() = EntityPosition(this[table.lastUpdatedAt], this[table.lastId])
+    private fun ResultRow.toPosition() = EntityPosition(this[table.lastUpdatedAt].toInstant(), this[table.lastId])
 
     private fun rowsForBookmarks(bookmarkNames: Set<String>) = table.selectAll().where { table.name.inList(bookmarkNames) }
     private fun isExists(bookmarkName: String) = !rowsForBookmarks(setOf(bookmarkName)).empty()
@@ -96,10 +97,16 @@ class RelationalDatabaseEntityBookmarkStore(
 
 class EntityBookmarks(tableName: String = defaultEntityBookmarksTableName) : Table(tableName) {
     val name = varchar("name", 160)
-    val lastUpdatedAt = datetime("last_updated_at")
+
+    /**
+     * `timestamp with time zone`, matching the source column an [EntityPosition] is read from. Storing a position in a
+     * naive column would mean choosing a zone to render it in, which is exactly the ambiguity [EntityPosition] exists
+     * to avoid.
+     */
+    val lastUpdatedAt = timestampWithTimeZone("last_updated_at")
     val lastId = javaUUID("last_id")
-    val createdAt = datetime("created_at")
-    val updatedAt = datetime("updated_at")
+    val createdAt = timestampWithTimeZone("created_at")
+    val updatedAt = timestampWithTimeZone("updated_at")
     override val primaryKey = PrimaryKey(name)
 }
 

@@ -2,11 +2,11 @@ package com.cultureamp.eventsourcing
 
 import io.kotest.core.spec.style.DescribeSpec
 import io.kotest.matchers.shouldBe
-import java.time.LocalDateTime
+import java.time.Instant
 import java.util.UUID
 
 class EntityPositionTest : DescribeSpec({
-    val baseTime = LocalDateTime.of(2026, 8, 10, 9, 0, 0, 0)
+    val baseTime = Instant.parse("2026-08-10T09:00:00Z")
     val id = UUID.randomUUID()
 
     describe("compareTo") {
@@ -18,8 +18,8 @@ class EntityPositionTest : DescribeSpec({
         }
 
         it("distinguishes positions differing only below the millisecond") {
-            val earlier = EntityPosition(baseTime.withNano(123_000_000), id)
-            val later = EntityPosition(baseTime.withNano(123_456_000), id)
+            val earlier = EntityPosition(baseTime.plusNanos(123_000_000), id)
+            val later = EntityPosition(baseTime.plusNanos(123_456_000), id)
 
             (earlier < later) shouldBe true
             earlier shouldBe earlier.copy()
@@ -44,8 +44,8 @@ class EntityPositionTest : DescribeSpec({
 
     describe("equality") {
         it("agrees with compareTo, which is what bookmark comparisons rely on") {
-            val position = EntityPosition(baseTime.withNano(123_456_000), id)
-            val same = EntityPosition(baseTime.withNano(123_456_000), id)
+            val position = EntityPosition(baseTime.plusNanos(123_456_000), id)
+            val same = EntityPosition(baseTime.plusNanos(123_456_000), id)
 
             position shouldBe same
             position.compareTo(same) shouldBe 0

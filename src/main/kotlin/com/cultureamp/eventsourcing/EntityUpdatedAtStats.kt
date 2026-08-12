@@ -1,6 +1,6 @@
 package com.cultureamp.eventsourcing
 
-import java.time.LocalDateTime
+import java.time.Instant
 
 /**
  * Reports the head of an entity table's "updated-at stream", i.e. the largest `updated_at` of any row. This is the
@@ -10,10 +10,10 @@ import java.time.LocalDateTime
  * Returns null when the table has no rows at all.
  */
 interface EntityUpdatedAtStats {
-    fun lastUpdatedAt(): LocalDateTime?
+    fun lastUpdatedAt(): Instant?
 
     companion object {
-        fun from(fetch: () -> LocalDateTime?) = object : EntityUpdatedAtStats {
+        fun from(fetch: () -> Instant?) = object : EntityUpdatedAtStats {
             override fun lastUpdatedAt() = fetch()
         }
     }

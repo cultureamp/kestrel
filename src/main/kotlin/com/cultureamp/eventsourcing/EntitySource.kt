@@ -1,6 +1,6 @@
 package com.cultureamp.eventsourcing
 
-import java.time.LocalDateTime
+import java.time.Instant
 import java.util.UUID
 
 /**
@@ -10,10 +10,11 @@ import java.util.UUID
  * Because an `updated_at` column is not unique, the entity `id` is used as a tiebreaker, giving a total ordering of
  * `(updatedAt, id)`. This mirrors the "timestamp+incrementing" mode of the Confluent JDBC source connector.
  *
- * A position is a cursor into a table rather than a moment in time, which is why [updatedAt] is a [LocalDateTime]: it
- * is whatever the naive timestamp column holds, carried around without being reinterpreted against a time-zone, and
- * compared against other values from that same column. Its natural equality agrees with [compareTo], which matters
- * because this is what bookmarks are compared on.
+ * [updatedAt] is an [Instant], which requires the source column to be a `timestamp with time zone`. That makes a
+ * position an absolute moment rather than a wall-clock reading, so comparing two positions — or a position against
+ * "now" — is meaningful without reference to any time-zone, and there is no way to accidentally compare readings taken
+ * from clocks in different zones. Its natural equality agrees with [compareTo], which matters because this is what
+ * bookmarks are compared on.
  *
  * Note on ordering: [compareTo] compares `updatedAt`, then compares `id` as an *unsigned* 128-bit value, which matches
  * how Postgres orders the `uuid` type. Some other databases (H2, for example) order UUIDs using signed comparison, so
@@ -21,7 +22,7 @@ import java.util.UUID
  * always the database's responsibility (see [EntitySource]); this ordering is only used for the "has a processor caught
  * up?" style comparisons.
  */
-data class EntityPosition(val updatedAt: LocalDateTime, val id: UUID) : Comparable<EntityPosition> {
+data class EntityPosition(val updatedAt: Instant, val id: UUID) : Comparable<EntityPosition> {
     override fun compareTo(other: EntityPosition): Int {
         val byUpdatedAt = updatedAt.compareTo(other.updatedAt)
         return if (byUpdatedAt != 0) byUpdatedAt else id.compareUnsigned(other.id)
@@ -51,28 +52,28 @@ data class PositionedEntity<out E>(val entity: E, val position: EntityPosition)
  * 2. Return only rows with `updated_at <= upTo`.
  * 3. Return rows ordered ascending by `(updated_at, id)`, at most [batchSize] of them.
  *
- * A [LocalDateTime] round-trips a timestamp column exactly, down to nanoseconds, so a bookmark saved from a row selects
- * strictly past that row next time and there is no precision requirement on the column. A source that breaks the
- * contract above anyway will stall or skip rows, so [BatchedAsyncEntityProcessor] checks each row against the bookmark
- * it is advancing from and fails loudly rather than spinning silently.
+ * An [Instant] round-trips a `timestamp with time zone` column exactly, so a bookmark saved from a row selects strictly
+ * past that row next time and there is no precision requirement on the column. A source that breaks the contract above
+ * anyway will stall or skip rows, so [BatchedAsyncEntityProcessor] checks each row against the bookmark it is advancing
+ * from and fails loudly rather than spinning silently.
  */
 interface EntitySource<out E> {
-    fun getAfter(after: EntityPosition?, upTo: LocalDateTime, batchSize: Int = 100): List<PositionedEntity<E>>
+    fun getAfter(after: EntityPosition?, upTo: Instant, batchSize: Int = 100): List<PositionedEntity<E>>
 
     companion object {
         /**
          * Builds an [EntitySource] from a repository function that already knows how to position its rows.
          */
-        fun <E> from(fetch: (EntityPosition?, LocalDateTime, Int) -> List<PositionedEntity<E>>) = object : EntitySource<E> {
-            override fun getAfter(after: EntityPosition?, upTo: LocalDateTime, batchSize: Int) = fetch(after, upTo, batchSize)
+        fun <E> from(fetch: (EntityPosition?, Instant, Int) -> List<PositionedEntity<E>>) = object : EntitySource<E> {
+            override fun getAfter(after: EntityPosition?, upTo: Instant, batchSize: Int) = fetch(after, upTo, batchSize)
         }
 
         /**
          * Builds an [EntitySource] from a repository function that returns plain entities, deriving each row's
          * position from the entity itself via [positionOf].
          */
-        fun <E> from(positionOf: (E) -> EntityPosition, fetch: (EntityPosition?, LocalDateTime, Int) -> List<E>) = object : EntitySource<E> {
-            override fun getAfter(after: EntityPosition?, upTo: LocalDateTime, batchSize: Int) =
+        fun <E> from(positionOf: (E) -> EntityPosition, fetch: (EntityPosition?, Instant, Int) -> List<E>) = object : EntitySource<E> {
+            override fun getAfter(after: EntityPosition?, upTo: Instant, batchSize: Int) =
                 fetch(after, upTo, batchSize).map { PositionedEntity(it, positionOf(it)) }
         }
     }

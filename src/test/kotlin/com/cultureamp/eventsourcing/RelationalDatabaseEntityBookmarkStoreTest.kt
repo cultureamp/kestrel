@@ -5,13 +5,14 @@ import io.kotest.matchers.shouldBe
 import org.jetbrains.exposed.v1.jdbc.Database
 import org.jetbrains.exposed.v1.jdbc.SchemaUtils
 import org.jetbrains.exposed.v1.jdbc.transactions.transaction
-import java.time.LocalDateTime
+import java.time.Duration
+import java.time.Instant
 import java.util.UUID
 
 class RelationalDatabaseEntityBookmarkStoreTest : DescribeSpec({
     val db = PgTestConfig.db ?: Database.connect(url = "jdbc:h2:mem:test;MODE=MySQL;DB_CLOSE_DELAY=-1;", driver = "org.h2.Driver")
     val store = RelationalDatabaseEntityBookmarkStore(db)
-    val baseTime = LocalDateTime.of(2026, 8, 10, 9, 0, 0, 0)
+    val baseTime = Instant.parse("2026-08-10T09:00:00Z")
 
     beforeTest {
         store.createSchemaIfNotExists()
@@ -38,7 +39,7 @@ class RelationalDatabaseEntityBookmarkStoreTest : DescribeSpec({
 
         it("updates the position if the bookmark already exists") {
             val first = EntityPosition(baseTime, UUID.randomUUID())
-            val second = EntityPosition(baseTime.plusHours(1), UUID.randomUUID())
+            val second = EntityPosition(baseTime.plus(Duration.ofHours(1)), UUID.randomUUID())
             store.save("update-bookmark", first)
             store.save("other-bookmark", EntityPosition(baseTime, UUID.randomUUID()))
             store.save("update-bookmark", second)

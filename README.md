@@ -482,7 +482,7 @@ val entitySource = RelationalDatabaseEntitySource(
     table = GoalRelationships,
     updatedAtColumn = GoalRelationships.updatedAt,
     idColumn = GoalRelationships.id,
-    rowToEntity = { GoalRelationship(it[GoalRelationships.id], it[GoalRelationships.childGoalId], it[GoalRelationships.updatedAt]) },
+    rowToEntity = { GoalRelationship(it[GoalRelationships.id], it[GoalRelationships.childGoalId], it[GoalRelationships.updatedAt].toInstant()) },
 )
 ```
 
@@ -532,13 +532,13 @@ keeps growing when a processor is stuck even if nothing new is being written.
   The processor only reads rows where `updated_at <= now - timestampDelayMs` to avoid this, equivalent to the JDBC
   connector's `timestamp.delay.interval.ms`. Set it comfortably longer than the longest transaction writing to the
   table; you're trading that much processing latency for not silently skipping rows.
-- **Positions are `java.time.LocalDateTime`, not joda `DateTime`.** Note that this is the opposite of the
-  event-sourcing side, which is joda throughout. A position is a cursor into a table rather than a moment in time: it
-  holds whatever the naive `timestamp` column holds and is only ever compared against other values from that same
-  column, so it deliberately carries no time-zone. That also means the `clock` you give a
-  `BatchedAsyncEntityProcessor` has to read the same wall-clock that stamps `updated_at`, since `timestampDelayMs` is
-  subtracted from it and compared against that column directly. Being nanosecond-precision, a `LocalDateTime`
-  round-trips a `timestamp` exactly, so there is no precision requirement on the column.
+- **Positions are `java.time.Instant`, not joda `DateTime`.** Note that this is the opposite of the
+  event-sourcing side, which is joda throughout. An `EntityPosition` is an absolute moment, so the polled column must be
+  a `timestamp with time zone` — map it with Exposed's `timestampWithTimeZone`. That is deliberate: it means comparing
+  two positions, or a position against "now", is meaningful without assuming a time-zone anywhere, so there is no way to
+  accidentally compare readings taken from clocks in different zones. It also means `clock` has exactly one correct
+  value, and the `Instant::now` default is right for every caller. An `Instant` round-trips a `timestamp with time zone`
+  exactly, so there is no precision requirement on the column.
 - **You only ever see current state.** Unlike an event stream, a table exposes the latest version of each row. A row
   updated twice in quick succession may only be processed once, rows are seen in `updated_at` order rather than
   creation order, and deletes aren't visible at all unless they're soft deletes. Entity-processors need to be

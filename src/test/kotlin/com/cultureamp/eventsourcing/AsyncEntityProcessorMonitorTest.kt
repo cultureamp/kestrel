@@ -2,15 +2,16 @@ package com.cultureamp.eventsourcing
 
 import io.kotest.core.spec.style.DescribeSpec
 import io.kotest.matchers.shouldBe
-import java.time.LocalDateTime
+import java.time.Duration
+import java.time.Instant
 import java.util.UUID
 
 class AsyncEntityProcessorMonitorTest : DescribeSpec({
-    val baseTime = LocalDateTime.of(2026, 8, 10, 9, 0, 0, 0)
+    val baseTime = Instant.parse("2026-08-10T09:00:00Z")
     val accountId = UUID.randomUUID()
 
     fun goalRelationship(secondsAfterBase: Int) =
-        GoalRelationship(UUID.randomUUID(), UUID.randomUUID(), UUID.randomUUID(), accountId, createdAt = baseTime, updatedAt = baseTime.plusSeconds(secondsAfterBase.toLong()))
+        GoalRelationship(UUID.randomUUID(), UUID.randomUUID(), UUID.randomUUID(), accountId, createdAt = fixtureCreatedAt, updatedAt = baseTime.plusSeconds(secondsAfterBase.toLong()))
 
     fun monitoredProcessor(
         goalRelationships: List<GoalRelationship>,
@@ -25,7 +26,7 @@ class AsyncEntityProcessorMonitorTest : DescribeSpec({
             bookmarkName = "goal-relationships",
             entityProcessor = EntityProcessor.from { _: GoalRelationship -> },
             batchSize = batchSize,
-            clock = { baseTime.plusHours(1) },
+            clock = { baseTime.plus(Duration.ofHours(1)) },
             startLog = {},
             endLog = { _, _ -> },
         )

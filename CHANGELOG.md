@@ -18,6 +18,29 @@ The interface for `EventTypeResolver` has changed to support the event-store fil
 along side `event-type`. This will only affect codebases that provided a custom implementation of this interface.
 See `PackageRemovingEventTypeResolver` for an example of how to work with the new interface.
 
+# 0.31.0
+
+## Breaking changes
+
+The entity-processor API (added in 0.30.0) now carries positions as `java.time.Instant` rather than
+`java.time.LocalDateTime`, which requires the polled column — and `entity_bookmarks.last_updated_at` —
+to be a `timestamp with time zone` rather than a naive `timestamp`. Map it with Exposed's
+`timestampWithTimeZone`; `RelationalDatabaseEntitySource` now takes a `Column<OffsetDateTime>`.
+
+The motivation is that a naive column plus a zone-less type made the *units* of a position implicit:
+a position and the processor's `clock` had to be readings of the same wall-clock, and nothing in the
+types enforced it. Passing the default `LocalDateTime::now` against a column stamped in UTC compiled
+cleanly and silently offset the `timestampDelayMs` hold-back by the JVM's offset — cancelling it
+entirely east of UTC and stalling reads for hours west of it. With `Instant` there is one correct
+value for `clock`, the default is always right, and the mistake is unrepresentable rather than
+undetectable.
+
+`EntityLag.lastUpdatedAt`/`now`, `EntityUpdatedAtStats.lastUpdatedAt()` and `EntitySource.getAfter`'s
+`upTo` change type accordingly. The event-sourcing side is untouched and remains joda.
+
+Since entity-processors are new in 0.30.0 there is no deprecation path; existing entity_bookmarks
+tables (if any) need `last_updated_at`, `created_at` and `updated_at` altered to `timestamptz`.
+
 # 0.30.0
 
 ## Breaking changes

@@ -14,7 +14,9 @@ import org.jetbrains.exposed.v1.jdbc.Database
 import org.jetbrains.exposed.v1.jdbc.select
 import org.jetbrains.exposed.v1.jdbc.selectAll
 import org.jetbrains.exposed.v1.jdbc.transactions.transaction
-import java.time.LocalDateTime
+import java.time.Instant
+import java.time.OffsetDateTime
+import java.time.ZoneOffset
 import java.util.UUID
 
 /**
@@ -25,7 +27,10 @@ import java.util.UUID
  * For this to perform, the table wants an index on `(updatedAtColumn, idColumn)`.
  *
  * @param updatedAtColumn the column that advances whenever a row changes. Rows are read in `(updatedAt, id)` order, so
- * this column must never move backwards for a row that has already been read, or that update will be missed.
+ * this column must never move backwards for a row that has already been read, or that update will be missed. It must be
+ * a `timestamp with time zone`, so that a position is an absolute moment and no time-zone has to be assumed anywhere;
+ * map it with Exposed's `timestampWithTimeZone`. The [OffsetDateTime] it yields converts to and from the [Instant] of an
+ * [EntityPosition] losslessly, and the offset plays no part in ordering.
  * @param idColumn the tiebreaker column, used to give rows sharing an updated-at value a stable total ordering.
  * @param filter an optional additional predicate, applied to both reads and the [lastUpdatedAt] head calculation.
  * @param rowToEntity maps a row to whatever the [EntityProcessor] wants to consume.
@@ -33,38 +38,41 @@ import java.util.UUID
 class RelationalDatabaseEntitySource<E>(
     private val db: Database,
     private val table: Table,
-    private val updatedAtColumn: Column<LocalDateTime>,
+    private val updatedAtColumn: Column<OffsetDateTime>,
     private val idColumn: Column<UUID>,
     private val filter: () -> Op<Boolean> = { Op.TRUE },
     private val rowToEntity: (ResultRow) -> E,
 ) : EntitySource<E>, EntityUpdatedAtStats {
 
-    override fun getAfter(after: EntityPosition?, upTo: LocalDateTime, batchSize: Int): List<PositionedEntity<E>> {
+    override fun getAfter(after: EntityPosition?, upTo: Instant, batchSize: Int): List<PositionedEntity<E>> {
         val afterPosition = if (after != null) {
-            (updatedAtColumn greater after.updatedAt) or ((updatedAtColumn eq after.updatedAt) and (idColumn greater after.id))
+            val afterUpdatedAt = after.updatedAt.utc()
+            (updatedAtColumn greater afterUpdatedAt) or ((updatedAtColumn eq afterUpdatedAt) and (idColumn greater after.id))
         } else {
             Op.TRUE
         }
-        val predicate = afterPosition and (updatedAtColumn lessEq upTo) and filter()
+        val predicate = afterPosition and (updatedAtColumn lessEq upTo.utc()) and filter()
         return transaction(db) {
             table
                 .selectAll()
                 .where(predicate)
                 .orderBy(updatedAtColumn to SortOrder.ASC, idColumn to SortOrder.ASC)
                 .limit(batchSize)
-                .map { row -> PositionedEntity(rowToEntity(row), EntityPosition(row[updatedAtColumn], row[idColumn])) }
+                .map { row -> PositionedEntity(rowToEntity(row), EntityPosition(row[updatedAtColumn].toInstant(), row[idColumn])) }
         }
     }
 
-    override fun lastUpdatedAt(): LocalDateTime? {
+    override fun lastUpdatedAt(): Instant? {
         return transaction(db) {
             table
                 .select(updatedAtColumn)
                 .where(filter())
                 .orderBy(updatedAtColumn, SortOrder.DESC)
                 .limit(1)
-                .map { row -> row[updatedAtColumn] }
+                .map { row -> row[updatedAtColumn].toInstant() }
                 .firstOrNull()
         }
     }
 }
+
+private fun Instant.utc(): OffsetDateTime = atOffset(ZoneOffset.UTC)

@@ -2,7 +2,7 @@ package com.cultureamp.eventsourcing
 
 import com.cultureamp.common.Action
 import java.time.Duration
-import java.time.LocalDateTime
+import java.time.Instant
 import kotlin.random.Random
 
 interface BookmarkedEntityProcessor<E> {
@@ -42,8 +42,8 @@ interface AsyncEntityProcessor<E> : BookmarkedEntityProcessor<E> {
  * after we have already moved the bookmark past it. Only rows with `updated_at <= now - timestampDelayMs` are read,
  * which trades this much processing latency for not silently skipping those rows. Set it comfortably longer than the
  * longest transaction that writes to the table.
- * @param clock the source of "now", exposed for testing. It must read the same wall-clock that stamps the source's
- * `updated_at` column, since [timestampDelayMs] is subtracted from it and compared against that column directly.
+ * @param clock the source of "now", exposed for testing. Because positions are [Instant]s there is only one correct
+ * answer here, so the default is right for every caller: no time-zone can be got wrong.
  */
 class BatchedAsyncEntityProcessor<E>(
     override val entitySource: EntitySource<E>,
@@ -53,7 +53,7 @@ class BatchedAsyncEntityProcessor<E>(
     override val entityProcessor: EntityProcessor<E>,
     private val batchSize: Int = 1000,
     private val timestampDelayMs: Long = 1000,
-    private val clock: () -> LocalDateTime = LocalDateTime::now,
+    private val clock: () -> Instant = Instant::now,
     private val startLog: (EntityBookmark) -> Unit = { bookmark ->
         System.out.println("Polling for entities for ${bookmark.name} from position ${bookmark.position}")
     },

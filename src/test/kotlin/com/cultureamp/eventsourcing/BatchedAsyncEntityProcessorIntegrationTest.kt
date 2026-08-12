@@ -9,7 +9,10 @@ import org.jetbrains.exposed.v1.jdbc.SchemaUtils
 import org.jetbrains.exposed.v1.jdbc.insert
 import org.jetbrains.exposed.v1.jdbc.transactions.transaction
 import org.jetbrains.exposed.v1.jdbc.update
+import java.time.Duration
+import java.time.Instant
 import java.time.LocalDateTime
+import java.time.ZoneOffset
 import java.util.UUID
 
 class BatchedAsyncEntityProcessorIntegrationTest : DescribeSpec({
@@ -17,7 +20,10 @@ class BatchedAsyncEntityProcessorIntegrationTest : DescribeSpec({
     val goalRelationships = GoalRelationshipsTable()
     val bookmarksTable = EntityBookmarks("entity_bookmarks_integration")
     val bookmarkStore = RelationalDatabaseEntityBookmarkStore(db, bookmarksTable)
-    val baseTime = LocalDateTime.of(2026, 8, 10, 9, 0, 0, 0)
+    val baseTime = Instant.parse("2026-08-10T09:00:00Z")
+
+    // created_at is naive in the real table, so it needs its own non-instant value
+    val baseCreatedAt = LocalDateTime.of(2026, 8, 10, 9, 0, 0, 0)
     val accountId = UUID.randomUUID()
     val bookmarkName = "GoalRelationshipProjector"
 
@@ -29,8 +35,8 @@ class BatchedAsyncEntityProcessorIntegrationTest : DescribeSpec({
         rowToEntity = { it[goalRelationships.id] },
     )
 
-    fun insertGoalRelationship(updatedAt: LocalDateTime): GoalRelationship {
-        val relationship = GoalRelationship(UUID.randomUUID(), UUID.randomUUID(), UUID.randomUUID(), accountId, baseTime, updatedAt)
+    fun insertGoalRelationship(updatedAt: Instant): GoalRelationship {
+        val relationship = GoalRelationship(UUID.randomUUID(), UUID.randomUUID(), UUID.randomUUID(), accountId, baseCreatedAt, updatedAt)
         transaction(db) {
             goalRelationships.insert {
                 it[goalRelationships.id] = relationship.id
@@ -38,17 +44,17 @@ class BatchedAsyncEntityProcessorIntegrationTest : DescribeSpec({
                 it[goalRelationships.parentGoalId] = relationship.parentGoalId
                 it[goalRelationships.accountId] = relationship.accountId
                 it[goalRelationships.createdAt] = relationship.createdAt
-                it[goalRelationships.updatedAt] = relationship.updatedAt
+                it[goalRelationships.updatedAt] = relationship.updatedAt.atOffset(ZoneOffset.UTC)
                 it[goalRelationships.cascadingWeight] = relationship.cascadingWeight
             }
         }
         return relationship
     }
 
-    fun touchGoalRelationship(relationship: GoalRelationship, updatedAt: LocalDateTime) {
+    fun touchGoalRelationship(relationship: GoalRelationship, updatedAt: Instant) {
         transaction(db) {
             goalRelationships.update({ goalRelationships.id eq relationship.id }) {
-                it[goalRelationships.updatedAt] = updatedAt
+                it[goalRelationships.updatedAt] = updatedAt.atOffset(ZoneOffset.UTC)
             }
         }
     }
@@ -77,7 +83,7 @@ class BatchedAsyncEntityProcessorIntegrationTest : DescribeSpec({
                 bookmarkName = bookmarkName,
                 entityProcessor = EntityProcessor.from { id: UUID -> processed += id },
                 batchSize = 2,
-                clock = { baseTime.plusHours(1) },
+                clock = { baseTime.plus(Duration.ofHours(1)) },
             )
             val first = insertGoalRelationship(baseTime.plusSeconds(1))
             val second = insertGoalRelationship(baseTime.plusSeconds(2))
@@ -110,11 +116,11 @@ class BatchedAsyncEntityProcessorIntegrationTest : DescribeSpec({
                 bookmarkStore = bookmarkStore,
                 bookmarkName = bookmarkName,
                 entityProcessor = EntityProcessor.from { id: UUID -> processed += id },
-                clock = { baseTime.plusHours(1) },
+                clock = { baseTime.plus(Duration.ofHours(1)) },
             )
             // 123.456ms past the second: representable in a Postgres `timestamp`, but truncated to 123ms by a
             // millisecond-precision type, which would leave the bookmark behind the row and re-select it forever
-            val subMillisecond = insertGoalRelationship(baseTime.plusSeconds(1).withNano(123_456_000))
+            val subMillisecond = insertGoalRelationship(baseTime.plusSeconds(1).plusNanos(123_456_000))
 
             processor.processOneBatch()
             processed shouldBe listOf(subMillisecond.id)
@@ -155,7 +161,7 @@ class BatchedAsyncEntityProcessorIntegrationTest : DescribeSpec({
                 bookmarkName = bookmarkName,
                 entityProcessor = EntityProcessor.from { _: UUID -> },
                 batchSize = 1,
-                clock = { baseTime.plusHours(1) },
+                clock = { baseTime.plus(Duration.ofHours(1)) },
             )
             insertGoalRelationship(baseTime.plusSeconds(1))
             insertGoalRelationship(baseTime.plusSeconds(11))

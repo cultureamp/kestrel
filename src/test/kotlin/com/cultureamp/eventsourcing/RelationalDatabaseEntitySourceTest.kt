@@ -8,14 +8,20 @@ import org.jetbrains.exposed.v1.jdbc.Database
 import org.jetbrains.exposed.v1.jdbc.SchemaUtils
 import org.jetbrains.exposed.v1.jdbc.insert
 import org.jetbrains.exposed.v1.jdbc.transactions.transaction
+import java.time.Duration
+import java.time.Instant
 import java.time.LocalDateTime
+import java.time.ZoneOffset
 import java.util.UUID
 
 class RelationalDatabaseEntitySourceTest : DescribeSpec({
     val db = PgTestConfig.db ?: Database.connect(url = "jdbc:h2:mem:test;MODE=MySQL;DB_CLOSE_DELAY=-1;", driver = "org.h2.Driver")
     val goalRelationships = GoalRelationshipsTable()
-    val baseTime = LocalDateTime.of(2026, 8, 10, 9, 0, 0, 0)
-    val distantFuture = baseTime.plusYears(1)
+    val baseTime = Instant.parse("2026-08-10T09:00:00Z")
+
+    // created_at is naive in the real table, so it needs its own non-instant value
+    val baseCreatedAt = LocalDateTime.of(2026, 8, 10, 9, 0, 0, 0)
+    val distantFuture = baseTime.plus(Duration.ofDays(365))
     val accountId = UUID.randomUUID()
 
     val entitySource = RelationalDatabaseEntitySource(
@@ -26,8 +32,8 @@ class RelationalDatabaseEntitySourceTest : DescribeSpec({
         rowToEntity = { it[goalRelationships.id] },
     )
 
-    fun insertGoalRelationship(updatedAt: LocalDateTime, deletedAt: LocalDateTime? = null): GoalRelationship {
-        val relationship = GoalRelationship(UUID.randomUUID(), UUID.randomUUID(), UUID.randomUUID(), accountId, baseTime, updatedAt, deletedAt)
+    fun insertGoalRelationship(updatedAt: Instant, deletedAt: LocalDateTime? = null): GoalRelationship {
+        val relationship = GoalRelationship(UUID.randomUUID(), UUID.randomUUID(), UUID.randomUUID(), accountId, baseCreatedAt, updatedAt, deletedAt)
         transaction(db) {
             goalRelationships.insert {
                 it[goalRelationships.id] = relationship.id
@@ -35,7 +41,7 @@ class RelationalDatabaseEntitySourceTest : DescribeSpec({
                 it[goalRelationships.parentGoalId] = relationship.parentGoalId
                 it[goalRelationships.accountId] = relationship.accountId
                 it[goalRelationships.createdAt] = relationship.createdAt
-                it[goalRelationships.updatedAt] = relationship.updatedAt
+                it[goalRelationships.updatedAt] = relationship.updatedAt.atOffset(ZoneOffset.UTC)
                 it[goalRelationships.deletedAt] = relationship.deletedAt
                 it[goalRelationships.cascadingWeight] = relationship.cascadingWeight
             }
@@ -113,7 +119,7 @@ class RelationalDatabaseEntitySourceTest : DescribeSpec({
 
         it("applies an additional filter") {
             val live = insertGoalRelationship(baseTime.plusSeconds(1))
-            insertGoalRelationship(baseTime.plusSeconds(2), deletedAt = baseTime.plusSeconds(5))
+            insertGoalRelationship(baseTime.plusSeconds(2), deletedAt = baseCreatedAt.plusSeconds(5))
             val liveOnly = RelationalDatabaseEntitySource(
                 db = db,
                 table = goalRelationships,
@@ -142,7 +148,7 @@ class RelationalDatabaseEntitySourceTest : DescribeSpec({
 
         it("respects the filter when finding the newest row") {
             insertGoalRelationship(baseTime.plusSeconds(1))
-            insertGoalRelationship(baseTime.plusSeconds(30), deletedAt = baseTime.plusSeconds(40))
+            insertGoalRelationship(baseTime.plusSeconds(30), deletedAt = baseCreatedAt.plusSeconds(40))
             val liveOnly = RelationalDatabaseEntitySource(
                 db = db,
                 table = goalRelationships,
@@ -159,7 +165,7 @@ class RelationalDatabaseEntitySourceTest : DescribeSpec({
     describe("Op.TRUE default filter") {
         it("reads everything by default") {
             val live = insertGoalRelationship(baseTime.plusSeconds(1))
-            val deleted = insertGoalRelationship(baseTime.plusSeconds(2), deletedAt = baseTime.plusSeconds(5))
+            val deleted = insertGoalRelationship(baseTime.plusSeconds(2), deletedAt = baseCreatedAt.plusSeconds(5))
             val unfiltered = RelationalDatabaseEntitySource(
                 db = db,
                 table = goalRelationships,
@@ -175,7 +181,7 @@ class RelationalDatabaseEntitySourceTest : DescribeSpec({
 
     describe("mapping whole rows") {
         it("maps every column of the real table") {
-            val inserted = insertGoalRelationship(baseTime.plusSeconds(1), deletedAt = baseTime.plusSeconds(2))
+            val inserted = insertGoalRelationship(baseTime.plusSeconds(1), deletedAt = baseCreatedAt.plusSeconds(2))
             val wholeRows = RelationalDatabaseEntitySource(
                 db = db,
                 table = goalRelationships,
@@ -188,7 +194,7 @@ class RelationalDatabaseEntitySourceTest : DescribeSpec({
                         parentGoalId = it[goalRelationships.parentGoalId],
                         accountId = it[goalRelationships.accountId],
                         createdAt = it[goalRelationships.createdAt],
-                        updatedAt = it[goalRelationships.updatedAt],
+                        updatedAt = it[goalRelationships.updatedAt].toInstant(),
                         deletedAt = it[goalRelationships.deletedAt],
                         cascadingWeight = it[goalRelationships.cascadingWeight],
                     )

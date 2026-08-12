@@ -5,16 +5,16 @@ import io.kotest.assertions.throwables.shouldThrow
 import io.kotest.core.spec.style.DescribeSpec
 import io.kotest.matchers.shouldBe
 import java.time.Duration
-import java.time.LocalDateTime
+import java.time.Instant
 import java.util.UUID
 
 class BatchedAsyncEntityProcessorTest : DescribeSpec({
-    val baseTime = LocalDateTime.of(2026, 8, 10, 9, 0, 0, 0)
-    val wellAfterAnyRow = { baseTime.plusHours(1) }
+    val baseTime = Instant.parse("2026-08-10T09:00:00Z")
+    val wellAfterAnyRow = { baseTime.plus(Duration.ofHours(1)) }
     val accountId = UUID.randomUUID()
 
     fun goalRelationship(secondsAfterBase: Int, id: UUID = UUID.randomUUID()) =
-        GoalRelationship(id, UUID.randomUUID(), UUID.randomUUID(), accountId, createdAt = baseTime, updatedAt = baseTime.plusSeconds(secondsAfterBase.toLong()))
+        GoalRelationship(id, UUID.randomUUID(), UUID.randomUUID(), accountId, createdAt = fixtureCreatedAt, updatedAt = baseTime.plusSeconds(secondsAfterBase.toLong()))
 
     fun positioned(goalRelationship: GoalRelationship) = PositionedEntity(goalRelationship, goalRelationship.position)
 
@@ -24,7 +24,7 @@ class BatchedAsyncEntityProcessorTest : DescribeSpec({
         bookmarkStore: EntityBookmarkStore,
         batchSize: Int = 1000,
         timestampDelayMs: Long = 1000,
-        clock: () -> LocalDateTime = wellAfterAnyRow,
+        clock: () -> Instant = wellAfterAnyRow,
     ) = BatchedAsyncEntityProcessor(
         entitySource = InMemoryEntitySource(goalRelationships.map(::positioned)),
         entityUpdatedAtStats = InMemoryEntitySource(goalRelationships.map(::positioned)),

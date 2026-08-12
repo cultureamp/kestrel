@@ -3,7 +3,9 @@ package com.cultureamp.eventsourcing
 import org.jetbrains.exposed.v1.core.Table
 import org.jetbrains.exposed.v1.core.java.javaUUID
 import org.jetbrains.exposed.v1.javatime.datetime
+import org.jetbrains.exposed.v1.javatime.timestampWithTimeZone
 import java.math.BigDecimal
+import java.time.Instant
 import java.time.LocalDateTime
 import java.util.UUID
 
@@ -17,19 +19,25 @@ import java.util.UUID
  *     parent_goal_id    uuid NOT NULL,
  *     account_id        uuid NOT NULL,
  *     created_at        timestamp without time zone NOT NULL,
- *     updated_at        timestamp without time zone NOT NULL,
+ *     updated_at        timestamp with time zone NOT NULL,
  *     deleted_at        timestamp without time zone,
  *     cascading_weight  numeric(5,4) DEFAULT 0 NOT NULL
  * );
  * ```
+ *
+ * Only `updated_at` is zoned: it is the position column, so it has to be an absolute moment. The others are left naive
+ * to match the real table, which is also a reminder that the requirement applies to the position column alone.
  */
+/** A naive value for the fixture's non-position timestamp columns. */
+val fixtureCreatedAt: LocalDateTime = LocalDateTime.of(2026, 8, 10, 9, 0, 0, 0)
+
 class GoalRelationshipsTable(tableName: String = "goal_relationships") : Table(tableName) {
     val id = javaUUID("id")
     val childGoalId = javaUUID("child_goal_id")
     val parentGoalId = javaUUID("parent_goal_id")
     val accountId = javaUUID("account_id")
     val createdAt = datetime("created_at")
-    val updatedAt = datetime("updated_at")
+    val updatedAt = timestampWithTimeZone("updated_at")
     val deletedAt = datetime("deleted_at").nullable()
     val cascadingWeight = decimal("cascading_weight", precision = 5, scale = 4).default(BigDecimal("0.0000"))
     override val primaryKey = PrimaryKey(id)
@@ -41,7 +49,7 @@ data class GoalRelationship(
     val parentGoalId: UUID,
     val accountId: UUID,
     val createdAt: LocalDateTime,
-    val updatedAt: LocalDateTime,
+    val updatedAt: Instant,
     val deletedAt: LocalDateTime? = null,
     val cascadingWeight: BigDecimal = BigDecimal("0.0000"),
 ) {
@@ -69,7 +77,7 @@ class InMemoryEntityBookmarkStore(private val lockObtainable: Boolean = true) : 
  * A well-behaved [EntitySource] over a fixed list of rows, honouring the ordering, `after` and `upTo` contract.
  */
 class InMemoryEntitySource<E>(private val rows: List<PositionedEntity<E>>) : EntitySource<E>, EntityUpdatedAtStats {
-    override fun getAfter(after: EntityPosition?, upTo: LocalDateTime, batchSize: Int) = rows
+    override fun getAfter(after: EntityPosition?, upTo: Instant, batchSize: Int) = rows
         .sortedBy { it.position }
         .filter { (after == null || it.position > after) && !it.position.updatedAt.isAfter(upTo) }
         .take(batchSize)
