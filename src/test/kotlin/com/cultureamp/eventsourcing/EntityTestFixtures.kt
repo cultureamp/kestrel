@@ -77,9 +77,10 @@ class InMemoryEntityBookmarkStore(private val lockObtainable: Boolean = true) : 
  * A well-behaved [EntitySource] over a fixed list of rows, honouring the ordering, `after` and `upTo` contract.
  */
 class InMemoryEntitySource<E>(private val rows: List<PositionedEntity<E>>) : EntitySource<E>, EntityUpdatedAtStats {
-    override fun getAfter(after: EntityPosition?, upTo: Instant, batchSize: Int) = rows
+    // `isBefore`, not `!isAfter`: the boundary is exclusive, matching RelationalDatabaseEntitySource
+    override fun getAfter(after: EntityPosition?, safeBefore: Instant, batchSize: Int) = rows
         .sortedBy { it.position }
-        .filter { (after == null || it.position > after) && !it.position.updatedAt.isAfter(upTo) }
+        .filter { (after == null || it.position > after) && it.position.updatedAt.isBefore(safeBefore) }
         .take(batchSize)
 
     override fun lastUpdatedAt() = rows.maxByOrNull { it.position }?.position?.updatedAt

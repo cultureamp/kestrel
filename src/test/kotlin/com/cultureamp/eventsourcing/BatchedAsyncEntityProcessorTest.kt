@@ -10,7 +10,7 @@ import java.util.UUID
 
 class BatchedAsyncEntityProcessorTest : DescribeSpec({
     val baseTime = Instant.parse("2026-08-10T09:00:00Z")
-    val wellAfterAnyRow = { baseTime.plus(Duration.ofHours(1)) }
+    val wellAfterAnyRow = SafeBoundary { baseTime.plus(Duration.ofHours(1)) }
     val accountId = UUID.randomUUID()
 
     fun goalRelationship(secondsAfterBase: Int, id: UUID = UUID.randomUUID()) =
@@ -23,17 +23,15 @@ class BatchedAsyncEntityProcessorTest : DescribeSpec({
         processed: MutableList<GoalRelationship>,
         bookmarkStore: EntityBookmarkStore,
         batchSize: Int = 1000,
-        timestampDelayMs: Long = 1000,
-        clock: () -> Instant = wellAfterAnyRow,
+        safeBoundary: SafeBoundary = wellAfterAnyRow,
     ) = BatchedAsyncEntityProcessor(
         entitySource = InMemoryEntitySource(goalRelationships.map(::positioned)),
         entityUpdatedAtStats = InMemoryEntitySource(goalRelationships.map(::positioned)),
         bookmarkStore = bookmarkStore,
         bookmarkName = "goal-relationships",
         entityProcessor = EntityProcessor.from { goalRelationship: GoalRelationship -> processed += goalRelationship },
+        safeBoundary = safeBoundary,
         batchSize = batchSize,
-        timestampDelayMs = timestampDelayMs,
-        clock = clock,
         startLog = {},
         endLog = { _, _ -> },
     )
@@ -82,14 +80,19 @@ class BatchedAsyncEntityProcessorTest : DescribeSpec({
             processed.size shouldBe 5
         }
 
-        it("does not read rows younger than the timestamp delay, and picks them up once they age") {
+        it("does not read rows at or beyond the safe boundary, and picks them up once the boundary passes them") {
             val old = goalRelationship(0)
             val fresh = goalRelationship(10)
             val processed = mutableListOf<GoalRelationship>()
             val bookmarkStore = InMemoryEntityBookmarkStore()
             var now = fresh.updatedAt.plus(Duration.ofMillis(500))
 
-            val processor = processorFor(listOf(old, fresh), processed, bookmarkStore, timestampDelayMs = 1000, clock = { now })
+            val processor = processorFor(
+                listOf(old, fresh),
+                processed,
+                bookmarkStore,
+                safeBoundary = SafeBoundary.unsafeFixedDelay(Duration.ofMillis(1000)) { now },
+            )
 
             processor.processOneBatch()
             processed shouldBe listOf(old)
@@ -97,6 +100,23 @@ class BatchedAsyncEntityProcessorTest : DescribeSpec({
             now = fresh.updatedAt.plus(Duration.ofMillis(1500))
             processor.processOneBatch()
             processed shouldBe listOf(old, fresh)
+        }
+
+        it("withholds a row sitting exactly on the boundary, because that is where an open transaction's rows sit") {
+            val onTheBoundary = goalRelationship(10)
+            val processed = mutableListOf<GoalRelationship>()
+            val bookmarkStore = InMemoryEntityBookmarkStore()
+            val processor = processorFor(
+                listOf(onTheBoundary),
+                processed,
+                bookmarkStore,
+                safeBoundary = SafeBoundary { onTheBoundary.updatedAt },
+            )
+
+            processor.processOneBatch()
+
+            processed shouldBe emptyList()
+            bookmarkStore.saved shouldBe emptyList()
         }
 
         it("returns Continue when a full batch was processed, so the caller comes straight back") {
@@ -128,7 +148,7 @@ class BatchedAsyncEntityProcessorTest : DescribeSpec({
                 bookmarkStore = bookmarkStore,
                 bookmarkName = "goal-relationships",
                 entityProcessor = EntityProcessor.from { _: GoalRelationship -> },
-                clock = wellAfterAnyRow,
+                safeBoundary = wellAfterAnyRow,
                 startLog = {},
                 endLog = { _, _ -> },
             )
@@ -147,7 +167,7 @@ class BatchedAsyncEntityProcessorTest : DescribeSpec({
                 bookmarkStore = InMemoryEntityBookmarkStore(),
                 bookmarkName = "goal-relationships",
                 entityProcessor = EntityProcessor.from { _: GoalRelationship -> },
-                clock = wellAfterAnyRow,
+                safeBoundary = wellAfterAnyRow,
                 startLog = {},
                 endLog = { _, _ -> },
             )
@@ -169,7 +189,7 @@ class BatchedAsyncEntityProcessorTest : DescribeSpec({
                 bookmarkStore = InMemoryEntityBookmarkStore(),
                 bookmarkName = "goal-relationships",
                 entityProcessor = EntityProcessor.from { _: GoalRelationship -> },
-                clock = wellAfterAnyRow,
+                safeBoundary = wellAfterAnyRow,
                 startLog = {},
                 endLog = { _, _ -> },
                 stats = stats,
@@ -195,7 +215,7 @@ class BatchedAsyncEntityProcessorTest : DescribeSpec({
                     EntityProcessor.from { goalRelationship: GoalRelationship -> first += goalRelationship.id },
                     EntityProcessor.from { _: GoalRelationship, position: EntityPosition -> second += position },
                 ),
-                clock = wellAfterAnyRow,
+                safeBoundary = wellAfterAnyRow,
                 startLog = {},
                 endLog = { _, _ -> },
             ).processOneBatch()

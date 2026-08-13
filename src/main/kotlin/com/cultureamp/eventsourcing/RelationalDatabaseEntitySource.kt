@@ -8,7 +8,7 @@ import org.jetbrains.exposed.v1.core.Table
 import org.jetbrains.exposed.v1.core.and
 import org.jetbrains.exposed.v1.core.eq
 import org.jetbrains.exposed.v1.core.greater
-import org.jetbrains.exposed.v1.core.lessEq
+import org.jetbrains.exposed.v1.core.less
 import org.jetbrains.exposed.v1.core.or
 import org.jetbrains.exposed.v1.jdbc.Database
 import org.jetbrains.exposed.v1.jdbc.select
@@ -44,14 +44,17 @@ class RelationalDatabaseEntitySource<E>(
     private val rowToEntity: (ResultRow) -> E,
 ) : EntitySource<E>, EntityUpdatedAtStats {
 
-    override fun getAfter(after: EntityPosition?, upTo: Instant, batchSize: Int): List<PositionedEntity<E>> {
+    override fun getAfter(after: EntityPosition?, safeBefore: Instant, batchSize: Int): List<PositionedEntity<E>> {
         val afterPosition = if (after != null) {
             val afterUpdatedAt = after.updatedAt.utc()
             (updatedAtColumn greater afterUpdatedAt) or ((updatedAtColumn eq afterUpdatedAt) and (idColumn greater after.id))
         } else {
             Op.TRUE
         }
-        val predicate = afterPosition and (updatedAtColumn lessEq upTo.utc()) and filter()
+        // Strictly less than, never `<=`. With `now()`-stamped timestamps every row written by the oldest open
+        // transaction sits at exactly its xact_start, which is exactly the boundary a SafeBoundary reports, so `<=`
+        // would admit that transaction's entire row set rather than excluding it.
+        val predicate = afterPosition and (updatedAtColumn less safeBefore.utc()) and filter()
         return transaction(db) {
             table
                 .selectAll()

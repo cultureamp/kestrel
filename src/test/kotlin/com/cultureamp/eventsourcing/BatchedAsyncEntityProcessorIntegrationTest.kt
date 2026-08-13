@@ -83,7 +83,7 @@ class BatchedAsyncEntityProcessorIntegrationTest : DescribeSpec({
                 bookmarkName = bookmarkName,
                 entityProcessor = EntityProcessor.from { id: UUID -> processed += id },
                 batchSize = 2,
-                clock = { baseTime.plus(Duration.ofHours(1)) },
+                safeBoundary = SafeBoundary { baseTime.plus(Duration.ofHours(1)) },
             )
             val first = insertGoalRelationship(baseTime.plusSeconds(1))
             val second = insertGoalRelationship(baseTime.plusSeconds(2))
@@ -116,7 +116,7 @@ class BatchedAsyncEntityProcessorIntegrationTest : DescribeSpec({
                 bookmarkStore = bookmarkStore,
                 bookmarkName = bookmarkName,
                 entityProcessor = EntityProcessor.from { id: UUID -> processed += id },
-                clock = { baseTime.plus(Duration.ofHours(1)) },
+                safeBoundary = SafeBoundary { baseTime.plus(Duration.ofHours(1)) },
             )
             // 123.456ms past the second: representable in a Postgres `timestamp`, but truncated to 123ms by a
             // millisecond-precision type, which would leave the bookmark behind the row and re-select it forever
@@ -130,7 +130,7 @@ class BatchedAsyncEntityProcessorIntegrationTest : DescribeSpec({
             processed shouldBe listOf(subMillisecond.id)
         }
 
-        it("does not read rows that are within the timestamp delay of now") {
+        it("does not read rows at or beyond the safe boundary") {
             val processed = mutableListOf<UUID>()
             var now = baseTime.plusSeconds(10)
             val processor = BatchedAsyncEntityProcessor(
@@ -139,8 +139,7 @@ class BatchedAsyncEntityProcessorIntegrationTest : DescribeSpec({
                 bookmarkStore = bookmarkStore,
                 bookmarkName = bookmarkName,
                 entityProcessor = EntityProcessor.from { id: UUID -> processed += id },
-                timestampDelayMs = 5_000,
-                clock = { now },
+                safeBoundary = SafeBoundary.unsafeFixedDelay(Duration.ofSeconds(5)) { now },
             )
             val settled = insertGoalRelationship(baseTime.plusSeconds(1))
             val inFlight = insertGoalRelationship(baseTime.plusSeconds(9))
@@ -161,7 +160,7 @@ class BatchedAsyncEntityProcessorIntegrationTest : DescribeSpec({
                 bookmarkName = bookmarkName,
                 entityProcessor = EntityProcessor.from { _: UUID -> },
                 batchSize = 1,
-                clock = { baseTime.plus(Duration.ofHours(1)) },
+                safeBoundary = SafeBoundary { baseTime.plus(Duration.ofHours(1)) },
             )
             insertGoalRelationship(baseTime.plusSeconds(1))
             insertGoalRelationship(baseTime.plusSeconds(11))

@@ -102,3 +102,51 @@ millisecond-precision to avoid re-reading a row forever. `EntitySourceStalledExc
 
 No breaking changes. `BookmarkLock` gains a `tryLock(bookmarkName: String)` overload, which has a default
 implementation delegating to the existing `tryLock(bookmark: Bookmark)`, so existing implementations are unaffected.
+
+# 0.32.0
+
+## Breaking changes
+
+The entity-processor API replaces `BatchedAsyncEntityProcessor`'s `timestampDelayMs` + `clock`
+parameters with a required `safeBoundary: SafeBoundary`, and `EntitySource.getAfter`'s `upTo`
+parameter becomes `safeBefore` and is now **exclusive** (`updated_at < safeBefore`, previously `<=`).
+
+To migrate on Postgres, pass `PostgresXactStartSafeBoundary(db)`. To keep the old
+delay-based behaviour, pass `SafeBoundary.unsafeFixedDelay(Duration.ofMillis(delay))` — named that
+way on purpose, since it is not safe against long-running transactions.
+
+## Why
+
+Positioning rows by an `updated_at` column is unsafe on its own, because that column does not record
+commit order. Postgres `now()` is fixed when a transaction *starts*, so a transaction beginning at
+12:00 and committing at 12:30 makes rows visible half an hour after the timestamp they carry. A
+reader that has meanwhile advanced its bookmark past 12:00 — which ordinary concurrent traffic will
+do for it — never sees those rows again, with no error and nothing to alert on.
+
+The old `timestampDelayMs` hold-back only guarded this probabilistically: it was correct exactly when
+every writing transaction committed within the delay, which nothing enforces. Set it below your
+worst-case transaction and rows are dropped silently.
+
+`PostgresXactStartSafeBoundary` closes the race by construction instead, with no WAL, LSN,
+replication slot or CDC connector: it reads `min(xact_start)` from `pg_stat_activity` and never lets
+the reader past the start time of the oldest transaction that could still commit. `xact_start` is the
+same clock reading `now()` stamps into `updated_at`, so the two are directly comparable.
+
+Two consequences worth knowing before adopting it:
+
+- The boundary must be established *before* the snapshot the rows are read with. The processor gets
+  this by reading it in its own transaction, which commits before the source's read transaction
+  starts. Merging the two to save a round trip looks free and is not — see the `SafeBoundary` KDoc
+  for the arrangements that are subtly wrong, including two statements in one `REPEATABLE READ`
+  transaction and a single CTE.
+- The boundary is not filtered by table, so any long-running transaction in the same database holds
+  the reader up. This is the intended trade — the failure mode moves from silent data loss to a
+  visible stall, which `AsyncEntityProcessorMonitor`'s `latencyMs` reports.
+
+The reader's own clock is no longer involved in deciding what is safe to read: both sides of the
+comparison are now database-generated, so clock skew between the application and the database cannot
+affect correctness.
+
+`safeBefore` becoming exclusive is not cosmetic. With `now()`-stamped timestamps, every row written
+by the oldest open transaction sits at *exactly* its `xact_start`, which is exactly the boundary — so
+`<=` would admit the entire transaction the boundary exists to exclude.

@@ -49,23 +49,28 @@ data class PositionedEntity<out E>(val entity: E, val position: EntityPosition)
  * 1. Return only rows strictly after [after] in `(updatedAt, id)` order, i.e.
  *    `updated_at > after.updatedAt OR (updated_at = after.updatedAt AND id > after.id)`. A null [after] means "from
  *    the very beginning".
- * 2. Return only rows with `updated_at <= upTo`.
+ * 2. Return only rows with `updated_at < safeBefore`. **Strictly** less than: the boundary a [SafeBoundary] reports is
+ *    exclusive, because with `now()`-stamped timestamps the rows most needing to be excluded — those of the oldest open
+ *    transaction — sit on it exactly.
  * 3. Return rows ordered ascending by `(updated_at, id)`, at most [batchSize] of them.
  *
  * An [Instant] round-trips a `timestamp with time zone` column exactly, so a bookmark saved from a row selects strictly
  * past that row next time and there is no precision requirement on the column. A source that breaks the contract above
  * anyway will stall or skip rows, so [BatchedAsyncEntityProcessor] checks each row against the bookmark it is advancing
  * from and fails loudly rather than spinning silently.
+ *
+ * Note that a source must not compute `safeBefore` for itself: the boundary has to be established *before* the snapshot
+ * the rows are read with, which is why [BatchedAsyncEntityProcessor] passes it in. [SafeBoundary] explains why.
  */
 interface EntitySource<out E> {
-    fun getAfter(after: EntityPosition?, upTo: Instant, batchSize: Int = 100): List<PositionedEntity<E>>
+    fun getAfter(after: EntityPosition?, safeBefore: Instant, batchSize: Int = 100): List<PositionedEntity<E>>
 
     companion object {
         /**
          * Builds an [EntitySource] from a repository function that already knows how to position its rows.
          */
         fun <E> from(fetch: (EntityPosition?, Instant, Int) -> List<PositionedEntity<E>>) = object : EntitySource<E> {
-            override fun getAfter(after: EntityPosition?, upTo: Instant, batchSize: Int) = fetch(after, upTo, batchSize)
+            override fun getAfter(after: EntityPosition?, safeBefore: Instant, batchSize: Int) = fetch(after, safeBefore, batchSize)
         }
 
         /**
@@ -73,8 +78,8 @@ interface EntitySource<out E> {
          * position from the entity itself via [positionOf].
          */
         fun <E> from(positionOf: (E) -> EntityPosition, fetch: (EntityPosition?, Instant, Int) -> List<E>) = object : EntitySource<E> {
-            override fun getAfter(after: EntityPosition?, upTo: Instant, batchSize: Int) =
-                fetch(after, upTo, batchSize).map { PositionedEntity(it, positionOf(it)) }
+            override fun getAfter(after: EntityPosition?, safeBefore: Instant, batchSize: Int) =
+                fetch(after, safeBefore, batchSize).map { PositionedEntity(it, positionOf(it)) }
         }
     }
 }

@@ -1,8 +1,6 @@
 package com.cultureamp.eventsourcing
 
 import com.cultureamp.common.Action
-import java.time.Duration
-import java.time.Instant
 import kotlin.random.Random
 
 interface BookmarkedEntityProcessor<E> {
@@ -36,14 +34,11 @@ interface AsyncEntityProcessor<E> : BookmarkedEntityProcessor<E> {
  * ExponentialBackoff(onFailure = { e, _ -> logger.error(e) }).run { asyncEntityProcessor.processOneBatch() }
  * ```
  *
- * @param timestampDelayMs how long to wait after a row's `updated_at` before considering it readable, equivalent to
- * the JDBC connector's `timestamp.delay.interval.ms`. This exists because `updated_at` is typically stamped when a
- * transaction *starts* but only becomes visible when it *commits*, so a row with an earlier `updated_at` can appear
- * after we have already moved the bookmark past it. Only rows with `updated_at <= now - timestampDelayMs` are read,
- * which trades this much processing latency for not silently skipping those rows. Set it comfortably longer than the
- * longest transaction that writes to the table.
- * @param clock the source of "now", exposed for testing. Because positions are [Instant]s there is only one correct
- * answer here, so the default is right for every caller: no time-zone can be got wrong.
+ * @param safeBoundary establishes the timestamp below which rows are safe to read. This is the mechanism that stops a
+ * slow transaction's rows from committing behind the bookmark and being skipped forever; [SafeBoundary] explains why an
+ * `updated_at` column needs one at all, and [PostgresXactStartSafeBoundary] is the implementation to use on Postgres.
+ * It has no default deliberately — there is no value that is safe for every table, so the choice has to be made
+ * explicitly.
  */
 class BatchedAsyncEntityProcessor<E>(
     override val entitySource: EntitySource<E>,
@@ -51,9 +46,8 @@ class BatchedAsyncEntityProcessor<E>(
     override val bookmarkStore: EntityBookmarkStore,
     override val bookmarkName: String,
     override val entityProcessor: EntityProcessor<E>,
+    private val safeBoundary: SafeBoundary,
     private val batchSize: Int = 1000,
-    private val timestampDelayMs: Long = 1000,
-    private val clock: () -> Instant = Instant::now,
     private val startLog: (EntityBookmark) -> Unit = { bookmark ->
         System.out.println("Polling for entities for ${bookmark.name} from position ${bookmark.position}")
     },
@@ -76,10 +70,12 @@ class BatchedAsyncEntityProcessor<E>(
 
         startLog(startBookmark)
 
-        // hold back rows younger than the delay, so that a row committing late can't slip in behind the bookmark
-        val upTo = clock().minus(Duration.ofMillis(timestampDelayMs))
+        // Establish the boundary BEFORE reading rows, and in its own transaction. A row that commits between this call
+        // and the read below is excluded by the boundary rather than skipped: see SafeBoundary for why the ordering
+        // matters, and why merging this into the source's read transaction to save a round trip is not safe.
+        val safeBefore = safeBoundary.safeBefore()
 
-        val (count, finalBookmark) = entitySource.getAfter(startBookmark.position, upTo, batchSize).foldIndexed(
+        val (count, finalBookmark) = entitySource.getAfter(startBookmark.position, safeBefore, batchSize).foldIndexed(
             0 to startBookmark,
         ) { index, (_, bookmark), positionedEntity ->
             validateProgress(bookmark.position, positionedEntity.position)

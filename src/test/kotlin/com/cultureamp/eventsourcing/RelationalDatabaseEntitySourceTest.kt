@@ -87,11 +87,20 @@ class RelationalDatabaseEntitySourceTest : DescribeSpec({
             read.position.updatedAt shouldBe only.updatedAt
         }
 
-        it("excludes rows updated after the upTo cutoff") {
+        it("excludes rows at or after the safe boundary") {
             val old = insertGoalRelationship(baseTime.plusSeconds(1))
             insertGoalRelationship(baseTime.plusSeconds(30))
 
             entitySource.getAfter(null, baseTime.plusSeconds(10)).map { it.entity } shouldBe listOf(old.id)
+        }
+
+        it("excludes a row sitting exactly on the safe boundary") {
+            val onTheBoundary = insertGoalRelationship(baseTime.plusSeconds(10))
+
+            // the boundary is exclusive: with now()-stamped timestamps, every row of the oldest open transaction sits
+            // on exactly this value, so `<=` would admit the whole transaction it is meant to exclude
+            entitySource.getAfter(null, onTheBoundary.updatedAt).map { it.entity } shouldBe emptyList()
+            entitySource.getAfter(null, onTheBoundary.updatedAt.plusNanos(1_000)).map { it.entity } shouldBe listOf(onTheBoundary.id)
         }
 
         it("returns at most batchSize rows") {
