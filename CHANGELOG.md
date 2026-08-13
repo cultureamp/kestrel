@@ -150,3 +150,46 @@ affect correctness.
 `safeBefore` becoming exclusive is not cosmetic. With `now()`-stamped timestamps, every row written
 by the oldest open transaction sits at *exactly* its `xact_start`, which is exactly the boundary — so
 `<=` would admit the entire transaction the boundary exists to exclude.
+
+# 0.33.0
+
+Additive to 0.32.0 — no migration needed unless you want to change the defaults.
+
+`BatchedAsyncEntityProcessor` now throws `SafeBoundaryStalledException` when it has been held back by its
+`SafeBoundary` for longer than `stallThreshold` (default one hour; null disables). `SafeBoundary` gains
+`describeBlockers()`, and `PostgresXactStartSafeBoundary` implements it by naming the oldest open
+transactions — pid, `application_name`, state, how long they have been open — so the thrown message says
+which session to go and close.
+
+## Why
+
+The boundary's one cost is a liveness one: it cannot tell a transaction that will write the polled table
+from one that never will, so any long-running transaction in the same database stops the reader. Nothing
+is lost and it recovers on its own, but a processor that quietly published nothing for hours is the shape
+of problem the boundary exists to remove, and leaving that to be spotted on a graph reintroduces it at
+the operational layer. Thrown into `ExponentialBackoff`'s `onFailure`, it reaches an error tracker with a
+stacktrace, and the backoff spaces repeats out to one per ten minutes for as long as the stall lasts.
+
+## Detecting a stall is not the same as detecting an old boundary
+
+Staleness of the boundary alone is the wrong signal, and using it would break the case people most watch.
+During a first run over a large table the boundary can sit hours in the past — pinned by an unrelated
+transaction — while the processor happily works through millions of rows. Aborting there would kill the
+backfill.
+
+What discriminates is the head of the table against the boundary: reading nothing while the newest row
+sits at or beyond the boundary means there is work the boundary forbids, whereas reading nothing while
+the newest row is behind it means there is nothing to do. Only the former is a stall, and only while it
+holds continuously — any batch containing rows clears the timer.
+
+## `application_name` is a diagnostic, never an input
+
+`describeBlockers()` tags each transaction `[known]` or `[UNRECOGNISED]` against `knownApplicationNames`,
+which is a practical way to tell your own services from somebody's interactive session. It is
+self-reported and trivially spoofable, so it must never reach the boundary predicate: excluding a session
+from `min(xact_start)` because of its name would silently break safety in the case that most deserves
+care, somebody hand-editing rows in production.
+
+`pg_stat_activity.query` is deliberately not reported. For a session idle in transaction that is the last
+statement it ran, which on a write path carries row values — customer data, en route to an error tracker.
+pid, `application_name` and a duration identify the session without any of that.

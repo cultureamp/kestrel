@@ -7,6 +7,7 @@ import io.kotest.matchers.comparables.shouldBeGreaterThanOrEqualTo
 import io.kotest.matchers.comparables.shouldBeLessThan
 import io.kotest.matchers.comparables.shouldBeLessThanOrEqualTo
 import io.kotest.matchers.string.shouldContain
+import io.kotest.matchers.string.shouldNotContain
 import org.jetbrains.exposed.v1.jdbc.Database
 import org.jetbrains.exposed.v1.jdbc.transactions.transaction
 import org.testcontainers.containers.PostgreSQLContainer
@@ -135,6 +136,46 @@ class PostgresXactStartSafeBoundaryTest : DescribeSpec({
             val boundary = withMargin.safeBefore()
 
             boundary shouldBeLessThan databaseNow().minus(margin.dividedBy(2))
+        }
+
+        it("names the open transactions holding it back, tagging ours from anyone else's") {
+            // application_name is how an app distinguishes itself from somebody with a psql session. It is
+            // self-reported, so it is only ever a diagnostic — never an input to the boundary.
+            val connection = DriverManager.getConnection(
+                "${postgres.jdbcUrl}${if (postgres.jdbcUrl.contains('?')) "&" else "?"}ApplicationName=some-service",
+                postgres.username,
+                postgres.password,
+            )
+            try {
+                connection.autoCommit = false
+                connection.createStatement().use { it.executeQuery("SELECT 1").close() }
+
+                PostgresXactStartSafeBoundary(db, knownApplicationNames = setOf("some-service"))
+                    .describeBlockers() shouldContain "application_name='some-service' [known]"
+
+                PostgresXactStartSafeBoundary(db, knownApplicationNames = emptySet())
+                    .describeBlockers() shouldContain "application_name='some-service' [UNRECOGNISED]"
+            } finally {
+                connection.commit()
+                connection.close()
+            }
+        }
+
+        it("does not put query text into the diagnosis, which would carry row data into an error tracker") {
+            val connection = DriverManager.getConnection(postgres.jdbcUrl, postgres.username, postgres.password)
+            try {
+                connection.autoCommit = false
+                connection.createStatement().use { it.executeQuery("SELECT 'sensitive-row-value-42'").close() }
+
+                noMargin.describeBlockers() shouldNotContain "sensitive-row-value-42"
+            } finally {
+                connection.commit()
+                connection.close()
+            }
+        }
+
+        it("says so plainly when nothing is holding it back") {
+            noMargin.describeBlockers() shouldContain "no open transactions found"
         }
 
         it("refuses to report a boundary when pg_stat_activity is hiding backends") {

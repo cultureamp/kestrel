@@ -22,6 +22,16 @@ import java.time.OffsetDateTime
 fun interface SafeBoundary {
     fun safeBefore(): Instant
 
+    /**
+     * A human-readable account of what is currently holding the boundary back, for logs and error reports. Called only
+     * when something has already gone wrong, so it may run an extra query.
+     *
+     * Deliberately a string rather than structured data: the only consumer is a human reading a Sentry issue or a log
+     * line, and keeping it opaque means an implementation can report whatever its database makes available without
+     * every caller having to model it.
+     */
+    fun describeBlockers(): String = "no blocker diagnosis available from this SafeBoundary"
+
     companion object {
         /**
          * A boundary of "now minus a fixed delay", equivalent to the JDBC source connector's
@@ -54,6 +64,21 @@ class SafeBoundaryUnreliableException(message: String) : SafeBoundaryException(m
  * Thrown when the database is configured in a way the boundary cannot reason about.
  */
 class SafeBoundaryUnsupportedException(message: String) : SafeBoundaryException(message)
+
+/**
+ * Thrown when a processor has been unable to make progress for longer than its stall threshold *because* the boundary is
+ * holding it back — there are rows in the table it is forbidden to read, and that has been true for too long.
+ *
+ * This is the loud failure for the one cost the boundary imposes: it cannot distinguish a transaction that will write
+ * the table from one that never will, so any long-running transaction in the same database holds the reader up. No rows
+ * are lost and the processor recovers on its own once that transaction ends, so this is a staleness alarm rather than a
+ * corruption one — but it is thrown rather than logged because "publishing silently stopped hours ago" is precisely the
+ * class of problem the boundary exists to eliminate, and it should not be reintroduced at the operational layer.
+ *
+ * The message carries [SafeBoundary.describeBlockers], so whoever reads the report can see which session to go and
+ * close.
+ */
+class SafeBoundaryStalledException(message: String) : SafeBoundaryException(message)
 
 /**
  * The boundary that closes the commit race, using `pg_stat_activity.xact_start` — the same clock reading that `now()`
@@ -140,7 +165,49 @@ class SafeBoundaryUnsupportedException(message: String) : SafeBoundaryException(
 class PostgresXactStartSafeBoundary(
     private val db: Database,
     private val margin: Duration = Duration.ofSeconds(1),
+    private val knownApplicationNames: Set<String> = emptySet(),
 ) : SafeBoundary {
+
+    /**
+     * Names the oldest open transactions in this database, so whoever reads a [SafeBoundaryStalledException] can see
+     * which session to close rather than starting from "publishing is behind".
+     *
+     * Each is tagged `[known]` or `[UNRECOGNISED]` by whether its `application_name` is in [knownApplicationNames].
+     * That is the practical answer to "was this our application or somebody with a psql session": a client sets its own
+     * `application_name`, so services that set one identify themselves and an interactive session shows up as `psql`,
+     * a GUI client's name, or blank. It cannot be authoritative — a name is self-reported and anyone can pass any value
+     * — which is exactly why it is confined to this diagnostic and never used to decide the boundary. Excluding a
+     * session from `min(xact_start)` on the strength of its name would silently break safety in the case that most
+     * warrants care: somebody hand-editing rows in production.
+     *
+     * Note what is deliberately absent: `pg_stat_activity.query`. For a session idle in transaction that is the last
+     * statement it ran, which for a write path is an INSERT or UPDATE carrying row values — customer data, on its way
+     * into an error tracker. `pid` plus `application_name` plus a duration is enough to find the session without
+     * putting any of it there.
+     */
+    override fun describeBlockers(): String {
+        val blockers = transaction(db) {
+            exec(BLOCKERS_SQL) { rs ->
+                buildList {
+                    while (rs.next()) {
+                        val applicationName = rs.getString("application_name").orEmpty()
+                        val tag = if (applicationName in knownApplicationNames) "known" else "UNRECOGNISED"
+                        add(
+                            "pid=${rs.getInt("pid")} application_name='$applicationName' [$tag] " +
+                                "state='${rs.getString("state").orEmpty()}' " +
+                                "openFor=${Duration.ofMillis((rs.getDouble("open_for_seconds") * 1000).toLong())}",
+                        )
+                    }
+                }
+            }
+        }.orEmpty()
+
+        return if (blockers.isEmpty()) {
+            "no open transactions found, so the boundary is not being held back by one now"
+        } else {
+            "oldest open transactions: ${blockers.joinToString("; ")}"
+        }
+    }
 
     override fun safeBefore(): Instant {
         val observation = transaction(db) {
@@ -197,6 +264,24 @@ class PostgresXactStartSafeBoundary(
                 count(*) FILTER (WHERE backend_type IS NULL),
                 current_setting('max_prepared_transactions')::int
             FROM pg_stat_activity
+        """.trimIndent()
+
+        /**
+         * The same population the boundary is computed from, listed oldest first. `query` is deliberately not selected:
+         * see [describeBlockers].
+         */
+        val BLOCKERS_SQL = """
+            SELECT
+                pid,
+                application_name,
+                state,
+                extract(epoch FROM (clock_timestamp() - xact_start)) AS open_for_seconds
+            FROM pg_stat_activity
+            WHERE datname = current_database()
+              AND xact_start IS NOT NULL
+              AND pid <> pg_backend_pid()
+            ORDER BY xact_start ASC
+            LIMIT 5
         """.trimIndent()
     }
 }

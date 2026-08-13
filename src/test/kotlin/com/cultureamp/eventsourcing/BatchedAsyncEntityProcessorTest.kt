@@ -4,6 +4,7 @@ import com.cultureamp.common.Action
 import io.kotest.assertions.throwables.shouldThrow
 import io.kotest.core.spec.style.DescribeSpec
 import io.kotest.matchers.shouldBe
+import io.kotest.matchers.string.shouldContain
 import java.time.Duration
 import java.time.Instant
 import java.util.UUID
@@ -100,6 +101,90 @@ class BatchedAsyncEntityProcessorTest : DescribeSpec({
             now = fresh.updatedAt.plus(Duration.ofMillis(1500))
             processor.processOneBatch()
             processed shouldBe listOf(old, fresh)
+        }
+
+        it("throws once it has been held back by the boundary for longer than the stall threshold") {
+            val waiting = goalRelationship(10)
+            var now = baseTime
+            val processor = BatchedAsyncEntityProcessor(
+                entitySource = InMemoryEntitySource(listOf(positioned(waiting))),
+                entityUpdatedAtStats = InMemoryEntitySource(listOf(positioned(waiting))),
+                bookmarkStore = InMemoryEntityBookmarkStore(),
+                bookmarkName = "goal-relationships",
+                entityProcessor = EntityProcessor.from { _: GoalRelationship -> },
+                // pinned well before the waiting row, as an open transaction would pin it
+                safeBoundary = object : SafeBoundary {
+                    override fun safeBefore() = baseTime
+                    override fun describeBlockers() = "pid=999 application_name='psql' [UNRECOGNISED]"
+                },
+                stallThreshold = Duration.ofHours(1),
+                clock = { now },
+                startLog = {},
+                endLog = { _, _ -> },
+            )
+
+            // held back, but not yet for long enough to complain about
+            processor.processOneBatch() shouldBe Action.Wait
+            now = baseTime.plus(Duration.ofMinutes(59))
+            processor.processOneBatch() shouldBe Action.Wait
+
+            now = baseTime.plus(Duration.ofMinutes(61))
+            val exception = shouldThrow<SafeBoundaryStalledException> { processor.processOneBatch() }
+
+            // the report has to name the session to go and close, or it just says "publishing is behind"
+            exception.message!! shouldContain "application_name='psql'"
+            exception.message!! shouldContain "goal-relationships"
+        }
+
+        it("does not throw when it has nothing to do, however old the boundary is") {
+            // an idle table is not a stall: everything in it is already behind the boundary
+            val done = goalRelationship(1)
+            val bookmarkStore = InMemoryEntityBookmarkStore()
+            bookmarkStore.save("goal-relationships", done.position)
+            var now = baseTime
+            val processor = BatchedAsyncEntityProcessor(
+                entitySource = InMemoryEntitySource(listOf(positioned(done))),
+                entityUpdatedAtStats = InMemoryEntitySource(listOf(positioned(done))),
+                bookmarkStore = bookmarkStore,
+                bookmarkName = "goal-relationships",
+                entityProcessor = EntityProcessor.from { _: GoalRelationship -> },
+                safeBoundary = SafeBoundary { baseTime.plus(Duration.ofHours(5)) },
+                stallThreshold = Duration.ofHours(1),
+                clock = { now },
+                startLog = {},
+                endLog = { _, _ -> },
+            )
+
+            processor.processOneBatch()
+            now = baseTime.plus(Duration.ofDays(1))
+
+            processor.processOneBatch() shouldBe Action.Wait
+        }
+
+        it("does not throw while it is still making progress, however far behind the boundary is") {
+            // the backfill case: a boundary pinned hours in the past by an unrelated transaction, while millions of
+            // older rows are read perfectly happily. Throwing here would abort exactly the run people are watching.
+            val rows = (1..5).map { goalRelationship(it) }
+            var now = baseTime
+            val processor = BatchedAsyncEntityProcessor(
+                entitySource = InMemoryEntitySource(rows.map(::positioned)),
+                entityUpdatedAtStats = InMemoryEntitySource(rows.map(::positioned)),
+                bookmarkStore = InMemoryEntityBookmarkStore(),
+                bookmarkName = "goal-relationships",
+                entityProcessor = EntityProcessor.from { _: GoalRelationship -> },
+                // above rows 1-3, below rows 4-5, so there is always work waiting beyond the boundary
+                safeBoundary = SafeBoundary { baseTime.plusSeconds(4) },
+                stallThreshold = Duration.ofHours(1),
+                clock = { now },
+                batchSize = 1,
+                startLog = {},
+                endLog = { _, _ -> },
+            )
+
+            repeat(3) {
+                now = now.plus(Duration.ofHours(1))
+                processor.processOneBatch() shouldBe Action.Continue
+            }
         }
 
         it("withholds a row sitting exactly on the boundary, because that is where an open transaction's rows sit") {
