@@ -193,3 +193,64 @@ care, somebody hand-editing rows in production.
 `pg_stat_activity.query` is deliberately not reported. For a session idle in transaction that is the last
 statement it ran, which on a write path carries row values — customer data, en route to an error tracker.
 pid, `application_name` and a duration identify the session without any of that.
+
+# 0.34.0
+
+## Breaking changes
+
+`PostgresXactStartSafeBoundary` no longer takes a `margin`. The boundary is now derived entirely from the
+database with no fudge factor: it returns
+
+```sql
+LEAST(min(xact_start) FILTER (WHERE datname = current_database() AND pid <> pg_backend_pid()),
+      statement_timestamp())
+```
+
+Drop the `margin` argument at your call site. If you were passing `Duration.ZERO`, the new default is
+equivalent and safe; if you were passing a larger value, you lose that much publishing latency and lose
+nothing else.
+
+## Why the margin existed, and why it does not need to
+
+The margin covered the window between a transaction fixing its `transaction_timestamp()` and publishing
+`xact_start` where a reader scanning `pg_stat_activity` might miss it. Sizing that window is guesswork, and
+guesswork was what the boundary replaced in the first place. It can be closed exactly instead.
+
+The property required is that **the boundary must not exceed the instant the `pg_stat_activity` snapshot was
+taken**. Given that, a transaction absent from the snapshot published its `xact_start` after the snapshot,
+and so stamps every row it writes above the boundary. Two facts make it hold:
+
+1. A transaction cannot write before publishing its `xact_start`. `pgstat_report_xact_timestamp()` is called
+   inside `StartTransaction()` (`src/backend/access/transam/xact.c`), which returns before any statement of
+   that transaction runs — including an implicit single-statement transaction with no client `BEGIN`. So a
+   row's `clock_timestamp()` stamp is at or after an `xact_start` that was already visible to readers.
+2. `statement_timestamp()` caps the boundary at the start of the reading statement, and the snapshot is taken
+   during that statement, so snapshot instant >= `statement_timestamp()` >= boundary.
+
+`LEAST` ignores nulls, so the cap also subsumes the previous `COALESCE(..., clock_timestamp())` fallback for
+"no other transaction is open".
+
+## `pg_stat_clear_snapshot()` before reading
+
+Fact 2 needs the snapshot to be taken *during* the reading statement, and that is not automatic.
+`pgstat_read_current_status()` returns early once `localBackendStatusTable` is populated and the snapshot is
+discarded only at transaction end, so a `pg_stat_activity` read is cached for the whole reading transaction.
+A caller that had already read it would compute the boundary from a view that omits every transaction begun
+since — including ones that have already stamped rows below it, which fails in the silent direction.
+
+`safeBefore()` therefore issues `pg_stat_clear_snapshot()` first. It costs a round trip and makes the
+property hold for any caller rather than only for one that reads `pg_stat_activity` exactly once per
+transaction.
+
+## Stamp `GREATEST(clock_timestamp(), transaction_timestamp())`
+
+`clock_timestamp()` reads `CLOCK_REALTIME`, which is corrected rather than monotonic. If it steps backwards
+between `StartTransaction` and a write, fact 1 fails and a row can carry a stamp below its own `xact_start`.
+Stamping `GREATEST(clock_timestamp(), transaction_timestamp())` in the trigger makes that impossible —
+`transaction_timestamp()` *is* the published `xact_start`, read inside the same transaction — and returns
+`clock_timestamp()` unchanged in the ordinary case. This is a recommendation for the trigger on the polled
+column, not a library change.
+
+Note that a margin never addressed clock steps either: time daemons slew offsets below their step threshold
+and step those above it, so any step that actually occurs is larger than the margin that would have covered
+it.

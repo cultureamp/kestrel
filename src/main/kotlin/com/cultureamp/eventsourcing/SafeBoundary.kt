@@ -127,13 +127,57 @@ class SafeBoundaryStalledException(message: String) : SafeBoundaryException(mess
  * **Do not merge the boundary read into the source's read transaction to save a round trip.** It looks like a free
  * optimisation and it removes the guarantee.
  *
- * ## Why a margin is still needed
+ * ## Why there is no margin
  *
- * A transaction fixes its `transaction_timestamp()` and publishes `xact_start` to shared memory as it starts. There is
- * at least a theoretical window in which a reader observes the latter but not the former, so [margin] is subtracted
- * from the boundary. Note how much narrower this job is than a `timestamp.delay.interval.ms`-style hold-back: it guards
- * a sub-millisecond publication window rather than trying to bound how long a transaction might run, so the default is
- * small and does not need tuning against your workload.
+ * Earlier versions subtracted a fixed margin here, to cover the window between a transaction fixing its
+ * `transaction_timestamp()` and publishing `xact_start` where a reader might miss it. That margin is gone, because the
+ * window can be closed exactly instead of estimated. The property actually required is:
+ *
+ * > **The boundary must not exceed the instant at which the `pg_stat_activity` snapshot was taken.**
+ *
+ * Given that, a transaction absent from the snapshot published its `xact_start` *after* the snapshot was taken, and
+ * therefore stamps every row it writes later than the boundary. Two facts make it hold:
+ *
+ * 1. **A transaction cannot write before publishing its `xact_start`.** `pgstat_report_xact_timestamp()` is called
+ *    inside `StartTransaction()` (`src/backend/access/transam/xact.c`), which returns before any statement of that
+ *    transaction executes — including an implicit single-statement transaction with no client `BEGIN`. So a row's
+ *    `clock_timestamp()` stamp is always at or after the `xact_start` that was already visible to readers.
+ * 2. **`statement_timestamp()` caps the boundary at the start of this statement.** The `pg_stat_activity` snapshot is
+ *    taken during the statement that first reads it, so the snapshot instant is at or after `statement_timestamp()`,
+ *    which is at or after the boundary. Combined with 1, any transaction the snapshot missed stamps its rows above the
+ *    boundary, and the exclusive comparison drops them.
+ *
+ * The cap is what makes the fallback case ("no other transaction is open") safe without a clock reading: `LEAST` ignores
+ * nulls, so an empty `min(xact_start)` leaves `statement_timestamp()` as the boundary.
+ *
+ * ### The snapshot must not be stale
+ *
+ * Fact 2 depends on the snapshot being taken *during* this statement, and that is not automatic:
+ * `pgstat_read_current_status()` returns early once `localBackendStatusTable` is populated, and the snapshot is
+ * discarded only at transaction end. A `pg_stat_activity` read is therefore cached for the whole reading transaction —
+ * a second read in the same transaction can be arbitrarily stale, still listing transactions that have since ended and
+ * omitting every transaction that has since begun.
+ *
+ * A stale snapshot breaks safety in the silent direction: the transactions it lists may all have ended, leaving
+ * `min(xact_start)` null and the boundary at `statement_timestamp()`, which is *later* than a transaction that began
+ * after the snapshot and has already stamped rows below it. [safeBefore] therefore issues `pg_stat_clear_snapshot()`
+ * before reading, so the property holds for any caller rather than only for one that happens to read
+ * `pg_stat_activity` exactly once per transaction. It costs a round trip and buys an invariant that would otherwise be
+ * a comment.
+ *
+ * ### The one residual: a backwards step of the system clock
+ *
+ * `clock_timestamp()` reads `CLOCK_REALTIME`, which is corrected rather than monotonic. If it steps backwards between
+ * `StartTransaction` and a write, fact 1 fails and a row can carry a stamp below its own `xact_start`. Stamp
+ * `GREATEST(clock_timestamp(), transaction_timestamp())` in the trigger and it cannot: `transaction_timestamp()` *is*
+ * the published `xact_start`, read inside the same transaction, so the row is at or after it whatever the clock does.
+ * In the ordinary case the `GREATEST` returns `clock_timestamp()` unchanged, so nothing else about the stamping
+ * changes.
+ *
+ * A step after the boundary read remains possible in principle, and requires time sync that slews rather than steps
+ * (AWS Time Sync, `chrony` without `makestep`). Note that a fixed margin never addressed this either: daemons slew
+ * offsets below their step threshold and step those above it, so any step that actually occurs is larger than the
+ * margin that would have covered it.
  *
  * ## What it checks, and why
  *
@@ -160,11 +204,9 @@ class SafeBoundaryStalledException(message: String) : SafeBoundaryException(mess
  *
  * @param db the database to read the boundary from. Must be the same database the [EntitySource] reads, since
  * `xact_start` values are only comparable within one instance.
- * @param margin subtracted from the boundary, guarding the `xact_start` publication window described above.
  */
 class PostgresXactStartSafeBoundary(
     private val db: Database,
-    private val margin: Duration = Duration.ofSeconds(1),
     private val knownApplicationNames: Set<String> = emptySet(),
 ) : SafeBoundary {
 
@@ -211,10 +253,15 @@ class PostgresXactStartSafeBoundary(
 
     override fun safeBefore(): Instant {
         val observation = transaction(db) {
+            // Discard any backend-status snapshot this transaction has already taken, so BOUNDARY_SQL's own read is
+            // the one that populates it and the snapshot instant is therefore at or after its statement_timestamp().
+            // See "The snapshot must not be stale" above: without this the boundary can be computed from a stale view
+            // that omits transactions which have already stamped rows below it.
+            exec("SELECT pg_stat_clear_snapshot()")
             exec(BOUNDARY_SQL) { rs ->
                 if (!rs.next()) throw SafeBoundaryException("Reading the safe boundary returned no row, which pg_stat_activity cannot do")
                 Observation(
-                    oldestOpenOrNow = rs.getObject(1, OffsetDateTime::class.java).toInstant(),
+                    boundary = rs.getObject(1, OffsetDateTime::class.java).toInstant(),
                     redactedBackends = rs.getInt(2),
                     maxPreparedTransactions = rs.getInt(3),
                 )
@@ -237,29 +284,34 @@ class PostgresXactStartSafeBoundary(
             )
         }
 
-        return observation.oldestOpenOrNow.minus(margin)
+        return observation.boundary
     }
 
-    private data class Observation(val oldestOpenOrNow: Instant, val redactedBackends: Int, val maxPreparedTransactions: Int)
+    private data class Observation(val boundary: Instant, val redactedBackends: Int, val maxPreparedTransactions: Int)
 
     private companion object {
         /**
          * One round trip for all three readings.
          *
          * `min(xact_start)` ignores nulls, so idle backends drop out without needing a predicate. Our own backend is
-         * excluded because it cannot be writing the table we are about to read, and including it would peg the boundary
-         * to this query's own start time. `clock_timestamp()` is the fallback for "no other transaction is open", and
-         * is read from the database so that no application clock enters the comparison — the whole point being that
-         * both sides of it are DB-generated.
+         * excluded from it because it cannot be writing the table we are about to read.
+         *
+         * `statement_timestamp()` is a *cap*, not a fallback, and it is what removes the need for a margin: no
+         * transaction that this statement's snapshot could have missed can have stamped a row before this statement
+         * started. `LEAST` ignores nulls, so it doubles as the "no other transaction is open" case without a
+         * `COALESCE` — and it is read from the database, so no application clock enters the comparison. Note that
+         * capping here is equivalent to *not* excluding our own backend from `min(xact_start)`, since a
+         * single-statement transaction's `xact_start` is its `statement_timestamp()`; it is written explicitly because
+         * that equivalence is far too subtle to rely on being noticed.
          *
          * The redaction count deliberately has no `datname` filter: a redacted row has its `datname` nulled too, so
          * filtering by database would hide exactly the rows being counted.
          */
         val BOUNDARY_SQL = """
             SELECT
-                COALESCE(
+                LEAST(
                     min(xact_start) FILTER (WHERE datname = current_database() AND pid <> pg_backend_pid()),
-                    clock_timestamp()
+                    statement_timestamp()
                 ),
                 count(*) FILTER (WHERE backend_type IS NULL),
                 current_setting('max_prepared_transactions')::int

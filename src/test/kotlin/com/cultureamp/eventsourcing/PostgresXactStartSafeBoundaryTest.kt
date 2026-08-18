@@ -4,7 +4,6 @@ import io.kotest.assertions.throwables.shouldThrow
 import io.kotest.core.spec.style.DescribeSpec
 import io.kotest.matchers.booleans.shouldBeTrue
 import io.kotest.matchers.comparables.shouldBeGreaterThanOrEqualTo
-import io.kotest.matchers.comparables.shouldBeLessThan
 import io.kotest.matchers.comparables.shouldBeLessThanOrEqualTo
 import io.kotest.matchers.string.shouldContain
 import io.kotest.matchers.string.shouldNotContain
@@ -13,7 +12,6 @@ import org.jetbrains.exposed.v1.jdbc.transactions.transaction
 import org.testcontainers.containers.PostgreSQLContainer
 import java.sql.Connection
 import java.sql.DriverManager
-import java.time.Duration
 import java.time.Instant
 import java.time.OffsetDateTime
 
@@ -50,7 +48,7 @@ class PostgresXactStartSafeBoundaryTest : DescribeSpec({
         password = postgres.password,
     )
 
-    val noMargin = PostgresXactStartSafeBoundary(db, margin = Duration.ZERO)
+    val safeBoundary = PostgresXactStartSafeBoundary(db)
 
     fun databaseNow(): Instant = transaction(db) {
         exec("SELECT clock_timestamp()") { rs ->
@@ -80,7 +78,7 @@ class PostgresXactStartSafeBoundaryTest : DescribeSpec({
     describe("safeBefore") {
         it("tracks the database clock when nothing else is open") {
             val before = databaseNow()
-            val boundary = noMargin.safeBefore()
+            val boundary = safeBoundary.safeBefore()
             val after = databaseNow()
 
             // nothing else is open, so everything committed is visible and the boundary is simply "now"
@@ -96,13 +94,13 @@ class PostgresXactStartSafeBoundaryTest : DescribeSpec({
                 // stamped at its start time. Equality is the expected result with a zero margin, and is safe because
                 // the boundary is exclusive — an EntitySource compares `updated_at < safeBefore`, so a row stamped at
                 // exactly this transaction's xact_start is still excluded. This is why that comparison must be strict.
-                noMargin.safeBefore() shouldBeLessThanOrEqualTo xactStart
+                safeBoundary.safeBefore() shouldBeLessThanOrEqualTo xactStart
             } finally {
                 connection.commit()
                 connection.close()
             }
 
-            noMargin.safeBefore() shouldBeGreaterThanOrEqualTo xactStart
+            safeBoundary.safeBefore() shouldBeGreaterThanOrEqualTo xactStart
         }
 
         it("holds the boundary at the oldest open transaction, not the newest") {
@@ -111,7 +109,7 @@ class PostgresXactStartSafeBoundaryTest : DescribeSpec({
 
             try {
                 newerXactStart shouldBeGreaterThanOrEqualTo oldestXactStart
-                noMargin.safeBefore() shouldBeLessThanOrEqualTo oldestXactStart
+                safeBoundary.safeBefore() shouldBeLessThanOrEqualTo oldestXactStart
             } finally {
                 listOf(oldest, newer).forEach {
                     it.commit()
@@ -123,19 +121,48 @@ class PostgresXactStartSafeBoundaryTest : DescribeSpec({
         it("ignores the reader's own transaction, so an idle database still advances") {
             // the boundary read is itself a transaction. If it counted itself it could never report a boundary later
             // than its own start, and an otherwise-idle database would sit still.
-            val first = noMargin.safeBefore()
-            val second = noMargin.safeBefore()
+            val first = safeBoundary.safeBefore()
+            val second = safeBoundary.safeBefore()
 
             second shouldBeGreaterThanOrEqualTo first
         }
 
-        it("subtracts the margin") {
-            val margin = Duration.ofSeconds(30)
-            val withMargin = PostgresXactStartSafeBoundary(db, margin = margin)
+        it("caps the boundary at the start of its own read, excluding any transaction it could not have seen") {
+            // This is the structural replacement for the fixed margin that used to be subtracted here. A transaction
+            // beginning after the boundary read may be absent from that read's snapshot of pg_stat_activity; what makes
+            // that safe is that its xact_start — and so every row it stamps, since Postgres publishes xact_start in
+            // StartTransaction before any statement of the transaction runs — is at or after the boundary returned.
+            val boundary = safeBoundary.safeBefore()
+            val (connection, xactStart) = openTransaction()
 
-            val boundary = withMargin.safeBefore()
+            try {
+                xactStart shouldBeGreaterThanOrEqualTo boundary
+            } finally {
+                connection.commit()
+                connection.close()
+            }
+        }
 
-            boundary shouldBeLessThan databaseNow().minus(margin.dividedBy(2))
+        it("is not computed from a stale backend-status snapshot") {
+            // pg_stat_activity is cached for the whole reading transaction: pgstat_read_current_status() returns early
+            // once localBackendStatusTable is populated, and it is discarded only at transaction end. So a caller that
+            // has already read pg_stat_activity would otherwise get a boundary derived from a view that omits every
+            // transaction begun since — including ones that have already stamped rows below it, which is the silent
+            // direction. safeBefore() issues pg_stat_clear_snapshot() for that reason.
+            transaction(db) {
+                // Populate this transaction's snapshot before the transaction below exists. Exposed joins the nested
+                // transaction inside safeBefore() to this one, so the boundary is read with that snapshot in place.
+                exec("SELECT count(*) FROM pg_stat_activity") { rs -> rs.next() }
+
+                val (connection, xactStart) = openTransaction()
+
+                try {
+                    safeBoundary.safeBefore() shouldBeLessThanOrEqualTo xactStart
+                } finally {
+                    connection.commit()
+                    connection.close()
+                }
+            }
         }
 
         it("names the open transactions holding it back, tagging ours from anyone else's") {
@@ -167,7 +194,7 @@ class PostgresXactStartSafeBoundaryTest : DescribeSpec({
                 connection.autoCommit = false
                 connection.createStatement().use { it.executeQuery("SELECT 'sensitive-row-value-42'").close() }
 
-                noMargin.describeBlockers() shouldNotContain "sensitive-row-value-42"
+                safeBoundary.describeBlockers() shouldNotContain "sensitive-row-value-42"
             } finally {
                 connection.commit()
                 connection.close()
@@ -175,7 +202,7 @@ class PostgresXactStartSafeBoundaryTest : DescribeSpec({
         }
 
         it("says so plainly when nothing is holding it back") {
-            noMargin.describeBlockers() shouldContain "no open transactions found"
+            safeBoundary.describeBlockers() shouldContain "no open transactions found"
         }
 
         it("refuses to report a boundary when pg_stat_activity is hiding backends") {
