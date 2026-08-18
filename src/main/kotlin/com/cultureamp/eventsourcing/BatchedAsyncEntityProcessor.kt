@@ -28,7 +28,10 @@ interface AsyncEntityProcessor<E> : BookmarkedEntityProcessor<E> {
  * Reads rows from an [EntitySource] in `(updated_at, id)` order, dispatches them to an [EntityProcessor], and records
  * progress as an [EntityPosition] in an [EntityBookmarkStore]. It is the entity-table equivalent of
  * [BatchedAsyncEventProcessor], and behaves like the "timestamp+incrementing" mode of the Confluent JDBC source
- * connector.
+ * connector: a timestamp column to order by, plus an incrementing column to break ties within one timestamp. See
+ * [Incremental Query Modes](https://docs.confluent.io/kafka-connectors/jdbc/current/source-connector/overview.html#incremental-query-modes) — the `timestamp+incrementing` entry there is the closest description of what
+ * this class does, and its caveats about a timestamp column not being unique are the reason [EntityPosition] carries
+ * an id as well.
  *
  * Run it the same way as a [BatchedAsyncEventProcessor]:
  *

@@ -8,7 +8,8 @@ import java.util.UUID
  * [Event] in the event-store.
  *
  * Because an `updated_at` column is not unique, the entity `id` is used as a tiebreaker, giving a total ordering of
- * `(updatedAt, id)`. This mirrors the "timestamp+incrementing" mode of the Confluent JDBC source connector.
+ * `(updatedAt, id)`. This mirrors the "timestamp+incrementing" mode of the Confluent JDBC source connector
+ * ([Incremental Query Modes](https://docs.confluent.io/kafka-connectors/jdbc/current/source-connector/overview.html#incremental-query-modes)).
  *
  * [updatedAt] is an [Instant], which requires the source column to be a `timestamp with time zone`. That makes a
  * position an absolute moment rather than a wall-clock reading, so comparing two positions — or a position against

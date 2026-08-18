@@ -35,7 +35,7 @@ fun interface SafeBoundary {
     companion object {
         /**
          * A boundary of "now minus a fixed delay", equivalent to the JDBC source connector's
-         * `timestamp.delay.interval.ms`.
+         * [`timestamp.delay.interval.ms`](https://docs.confluent.io/kafka-connectors/jdbc/current/source-connector/source_config_options.html#mode).
          *
          * **This is not safe against long-running transactions**, which is why it is named as it is. It only holds if
          * every transaction that writes the table commits within [delay] of starting, and nothing in the type system or
