@@ -73,6 +73,24 @@ publishing {
                 password = System.getenv('CENTRAL_TOKEN_PASSWORD')
             }
         }
+
+        // BRANCH ONLY (wb/entity-processors, TGI-97). Lets a consumer build resolve an unreleased
+        // version of this branch without publishing anything to Maven Central, which is permanent and
+        // public. Publish a version carrying `version_suffix` here and set that exact version in the
+        // consumer; delete this repository block before merging, since a release goes to Central.
+        //
+        //   SKIP_SIGNING=true ./gradlew publishMavenJavaPublicationToGitHubPackagesRepository
+        //
+        // Needs a token with `write:packages`, SSO-authorized for cultureamp. Signatures are not
+        // required here, hence SKIP_SIGNING.
+        maven {
+            name = "GitHubPackages"
+            url = uri("https://maven.pkg.github.com/cultureamp/kestrel")
+            credentials {
+                username = System.getenv('GITHUB_ACTOR') ?: project.findProperty('gpr.user')
+                password = System.getenv('GITHUB_TOKEN') ?: project.findProperty('gpr.key')
+            }
+        }
     }
     publications {
         mavenJava(MavenPublication) {
