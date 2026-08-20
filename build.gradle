@@ -81,14 +81,28 @@ publishing {
         //
         //   SKIP_SIGNING=true ./gradlew publishMavenJavaPublicationToGitHubPackagesRepository
         //
-        // Needs a token with `write:packages`, SSO-authorized for cultureamp. Signatures are not
-        // required here, hence SKIP_SIGNING.
+        // Needs a token with `write:packages` (plus `repo`, since the target repo is not public),
+        // SSO-authorized for cultureamp. Signatures are not required here, hence SKIP_SIGNING.
+        //
+        // Note the URL deliberately does NOT point at cultureamp/kestrel. A GitHub Packages package
+        // inherits the visibility of the repository it is attached to and this repository is public,
+        // so publishing here would list the prerelease publicly -- and a public package version can
+        // never be deleted once any version exceeds 5000 downloads. cultureamp/goals-service is an
+        // internal repository, so the package is readable by the org and nobody else, and stays
+        // deletable. Attaching it elsewhere costs the consumer nothing: goals-service resolves the
+        // whole com.cultureamp group through a `maven.pkg.github.com/cultureamp/*` wildcard, which
+        // is already how it resolves 60-odd packages that each live in their own repository.
+        // The POM's own url/scm still point at this repository, which is correct and harmless.
         maven {
             name = "GitHubPackages"
-            url = uri("https://maven.pkg.github.com/cultureamp/kestrel")
+            url = uri("https://maven.pkg.github.com/cultureamp/goals-service")
             credentials {
-                username = System.getenv('GITHUB_ACTOR') ?: project.findProperty('gpr.user')
-                password = System.getenv('GITHUB_TOKEN') ?: project.findProperty('gpr.key')
+                // USERNAME/PACKAGE_WRITE_TOKEN matches the convention used by the org's Kotlin
+                // publishing flow (cultureamp/ca-changesets, cultureamp/swag-http-server), so the
+                // workflow that drives this reads the same way those do. The gpr.* fallbacks keep a
+                // local publish working for anyone who has those set.
+                username = System.getenv('USERNAME') ?: project.findProperty('gpr.user')
+                password = System.getenv('PACKAGE_WRITE_TOKEN') ?: project.findProperty('gpr.key')
             }
         }
     }
