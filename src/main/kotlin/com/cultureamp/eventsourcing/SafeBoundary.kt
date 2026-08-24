@@ -181,14 +181,15 @@ class SafeBoundaryStalledException(message: String) : SafeBoundaryException(mess
  *
  * ## What it checks, and why
  *
- * `pg_stat_activity` NULLs its columns for backends belonging to roles the reader is not a member of. If that happens,
+ * `pg_stat_activity` NULLs columns for backends belonging to roles the reader is not a member of. If that happens,
  * `min(xact_start)` silently collapses to the reader's own transactions and the boundary degrades to "now" — **failing
- * open, in exactly the way the original bug did.** Every call therefore also counts backends whose `backend_type` is
- * null, which is the reliable signal: a row the reader can see always has a `backend_type`, and a redacted one never
- * does. (Checking `state IS NULL` instead does not work — background workers legitimately have a null `state`, so it
- * both false-positives and, because `backend_type` is itself redacted, cannot be combined with
- * `backend_type = 'client backend'`.) Grant `pg_read_all_stats` to the reader, or run every writer under a role the
- * reader is a member of.
+ * open, in exactly the way the original bug did.** Every call therefore also counts backends attached to this database
+ * whose `backend_type` is null, which is the reliable signal: a row the reader can see always has a `backend_type`, and
+ * a redacted one never does. (Checking `state IS NULL` instead does not work — background workers legitimately have a
+ * null `state`, so it both false-positives and, because `backend_type` is itself redacted, cannot be combined with
+ * `backend_type = 'client backend'`.) Redaction leaves `datname` intact, which is what makes scoping the count to this
+ * database sound as well as necessary — the boundary SQL's own comment has that argument. Grant `pg_read_all_stats` to
+ * the reader, or run every writer under a role the reader is a member of; both work.
  *
  * A prepared transaction (`PREPARE TRANSACTION`) is no longer an ordinary backend in `pg_stat_activity`, so it would be
  * invisible here. `max_prepared_transactions` is therefore asserted to be `0`, its default.
@@ -278,9 +279,10 @@ class PostgresXactStartSafeBoundary(
 
         if (observation.redactedBackends != 0) {
             throw SafeBoundaryUnreliableException(
-                "${observation.redactedBackends} backend(s) in pg_stat_activity are hidden from this connection, so " +
-                    "min(xact_start) is incomplete and rows committed by those backends could be skipped silently. " +
-                    "Grant pg_read_all_stats to this role, or run every writer under a role this one is a member of.",
+                "${observation.redactedBackends} backend(s) attached to this database are hidden from this connection " +
+                    "in pg_stat_activity, so min(xact_start) is incomplete and rows committed by those backends could " +
+                    "be skipped silently. Grant pg_read_all_stats to this role, or run every writer under a role this " +
+                    "one is a member of.",
             )
         }
 
@@ -299,13 +301,27 @@ class PostgresXactStartSafeBoundary(
          * `statement_timestamp()` is a *cap*, not a fallback, and it is what removes the need for a margin: no
          * transaction that this statement's snapshot could have missed can have stamped a row before this statement
          * started. `LEAST` ignores nulls, so it doubles as the "no other transaction is open" case without a
-         * `COALESCE` — and it is read from the database, so no application clock enters the comparison. Note that
-         * capping here is equivalent to *not* excluding our own backend from `min(xact_start)`, since a
-         * single-statement transaction's `xact_start` is its `statement_timestamp()`; it is written explicitly because
-         * that equivalence is far too subtle to rely on being noticed.
+         * `COALESCE` — and it is read from the database, so no application clock enters the comparison.
          *
-         * The redaction count deliberately has no `datname` filter: a redacted row has its `datname` nulled too, so
-         * filtering by database would hide exactly the rows being counted.
+         * Excluding our own backend from `min(xact_start)` is load-bearing, not tidiness. [safeBefore] clears the
+         * backend-status snapshot first, so this is the *second* statement of its transaction and our own `xact_start`
+         * is strictly earlier than this `statement_timestamp()` — about half a millisecond earlier, measured on
+         * Postgres 14. Counting ourselves would therefore pin the boundary to the reader's own poll and it could never
+         * advance past it, so an otherwise idle database would sit still. Safety is unaffected either way: what the cap
+         * has to satisfy is "no later than the instant the snapshot was taken", and the `statement_timestamp()` of the
+         * statement that takes that snapshot is exactly that.
+         *
+         * The redaction count is scoped to this database, and that scope is exact rather than convenient. Redaction
+         * nulls `state`, `xact_start`, `query` and `backend_type`, but **not** `datname`, `usename` or
+         * `application_name` — verified against Postgres 14 with a deliberately unprivileged role. So a hidden backend
+         * that could matter is still identifiable by database: to write the table being guarded it has to be attached
+         * to this one, and to be missed by the boundary it has to already hold a transaction open, which means its
+         * `datname` is set. Neither group the scope drops can matter. A redacted row with a null `datname` is an
+         * auxiliary process — checkpointer, walwriter, autovacuum launcher — which runs no transaction over a user
+         * table; without `pg_read_all_stats` every one of those is redacted, so counting them would leave this check
+         * permanently unsatisfiable and the other documented remedy, sharing a role with every writer, unable to work
+         * at all. A redacted row in another database cannot write this one. Anything that begins after the snapshot is
+         * excluded by the cap instead, visible or not.
          */
         val BOUNDARY_SQL = """
             SELECT
@@ -313,7 +329,7 @@ class PostgresXactStartSafeBoundary(
                     min(xact_start) FILTER (WHERE datname = current_database() AND pid <> pg_backend_pid()),
                     statement_timestamp()
                 ),
-                count(*) FILTER (WHERE backend_type IS NULL),
+                count(*) FILTER (WHERE backend_type IS NULL AND datname = current_database()),
                 current_setting('max_prepared_transactions')::int
             FROM pg_stat_activity
         """.trimIndent()

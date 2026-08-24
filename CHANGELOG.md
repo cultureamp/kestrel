@@ -254,3 +254,52 @@ column, not a library change.
 Note that a margin never addressed clock steps either: time daemons slew offsets below their step threshold
 and step those above it, so any step that actually occurs is larger than the margin that would have covered
 it.
+
+# 0.35.0
+
+`PostgresXactStartSafeBoundary`'s redaction check is now scoped to the reader's own database, and two
+comments that justified the previous behaviour were wrong. No API change.
+
+## The redaction check was unsatisfiable without `pg_read_all_stats`
+
+The boundary refuses to report when `pg_stat_activity` is hiding backends from it, because a hidden
+backend's `xact_start` is nulled and `min(xact_start)` then collapses to the reader's own transactions
+— failing open, into exactly the bug the boundary exists to close. That check counted every row with a
+null `backend_type`, anywhere on the instance.
+
+Measured against Postgres 14 with a deliberately unprivileged role, that count is never zero. Six rows
+were hidden: five auxiliary processes — checkpointer, walwriter, autovacuum launcher and friends — and
+one genuinely dangerous client backend holding a transaction open in the reader's own database. There
+is no privilege short of `pg_read_all_stats` that reveals the auxiliary processes, so the documented
+alternative of running every writer under a role the reader is a member of could not actually work: the
+boundary would refuse to report regardless.
+
+The count is therefore now `count(*) FILTER (WHERE backend_type IS NULL AND datname =
+current_database())`, which isolated exactly the one dangerous row from the five harmless ones in that
+measurement. The scope is exact rather than convenient:
+
+- To write the table being guarded, a hidden backend has to be attached to this database. A redacted row
+  in another database cannot write this one at all.
+- To be *missed* by the boundary rather than excluded by the `statement_timestamp()` cap, it has to
+  already hold a transaction open at snapshot time, which means it has a `datname`. Anything that begins
+  after the snapshot is handled by the cap, visible or not.
+- An auxiliary process runs no transaction over a user table, and every one of them reports no database.
+
+## Two comments that were wrong
+
+Both described behaviour accurately once and stopped being true; neither affected safety, and both were
+the kind of claim a later change would have been justified in trusting.
+
+The first said the redaction count deliberately had no `datname` filter because "a redacted row has its
+`datname` nulled too". It does not. Redaction nulls `state`, `xact_start`, `query` and `backend_type`,
+but leaves `datname`, `usename` and `application_name` intact — which is what makes the scoping above
+possible.
+
+The second said that capping at `statement_timestamp()` is equivalent to not excluding the reader's own
+backend from `min(xact_start)`, "since a single-statement transaction's `xact_start` is its
+`statement_timestamp()`". That stopped holding in 0.34.0, when `pg_stat_clear_snapshot()` made the
+boundary read the *second* statement of its transaction: its own `xact_start` now precedes its
+`statement_timestamp()` by around half a millisecond. Excluding the reader's own backend is therefore
+required rather than merely equivalent — counting it would pin the boundary to the reader's own poll and
+an idle database would never advance. Safety is unaffected either way, since what the cap must satisfy
+is only "no later than the instant the snapshot was taken".
