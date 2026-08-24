@@ -104,8 +104,8 @@ jobs:
     needs: detect
     if: needs.detect.outputs.should_release == 'true'
     runs-on: ubuntu-latest
-    # Gate the credentials behind a GitHub Environment, so they can be given required
-    # reviewers and restricted to master independently of this file.
+    # Gate the credentials behind a GitHub Environment whose deployment branch rule is limited
+    # to master, so they cannot be read by a job on any other branch.
     environment: maven-central
     permissions:
       contents: write # push the release tag and create the GitHub release

@@ -29,8 +29,7 @@ So to cut a release:
 1. Bump `base_version` in `gradle.properties` (semantic versioning).
 2. Add a `# <version>` section to `CHANGELOG.md` if there are breaking changes. The workflow uses that section
    as the GitHub release notes.
-3. Merge to `master`. If the `maven-central` environment has required reviewers configured, the
-   release job waits for an approval before it can touch the publishing credentials.
+3. Merge to `master`.
 
 The artefacts typically appear on Maven Central within 15-30 minutes. A push that doesn't change
 `base_version` is a no-op, and a version already present on Maven Central is never re-published, so the
@@ -45,9 +44,9 @@ You can verify publication at:
 Kestrel is a **public** repository, and these credentials can publish signed artefacts under
 `com.cultureamp` to an immutable registry. Treat them accordingly.
 
-The release job needs four secrets, ideally attached to a `maven-central` GitHub Environment
-rather than to the repository, so they can be gated. Values come from 1Password,
-Team Develop > Kestrel Sonatype Credentials.
+The release job needs four secrets, attached to the `maven-central` GitHub Environment rather than
+to the repository, so they can only be read by a job running on `master`. Values come from
+1Password, Team Develop > Kestrel Sonatype Credentials.
 
 | Secret | Value |
 | --- | --- |
@@ -62,12 +61,18 @@ signing key has to be revoked on the keyservers and replaced, so it is the more 
 
 Two controls do the real work here, and neither lives in the workflow file:
 
-- **Branch protection on `master` requiring review.** The release job only ever runs on merged
-  code, and GitHub never gives secrets to a pull request from a fork, so outsiders cannot reach
-  these credentials. Anyone who can merge to `master`, however, can write a workflow step that
-  exfiltrates them - so merge review *is* the security boundary.
-- **Required reviewers on the `maven-central` environment**, restricted to the `master` branch.
-  This adds a human approval between a merge and the credentials being decrypted.
+- **Branch protection on `master`**, requiring a pull request with an approving review. The release
+  job only ever runs on merged code, and GitHub never gives secrets to a pull request from a fork,
+  so outsiders cannot reach these credentials. Anyone who can merge to `master`, however, can write
+  a workflow step that exfiltrates them - so merge review *is* the security boundary. Merging is
+  restricted to write access, so only Culture Ampers can trigger a release.
+- **A deployment branch rule on the `maven-central` environment limited to `master`**, so the
+  secrets cannot be read by a job on any other branch even if a future workflow references the
+  environment.
+
+Required reviewers on the environment are deliberately *not* used: the pull request review is
+already an approval of the same change by the same people, so a second gate would only delay
+releases.
 
 The workflow itself runs with `permissions: contents: read` by default, grants `contents: write`
 only to the release job for the tag it pushes, and pins every third-party action to a commit SHA.
