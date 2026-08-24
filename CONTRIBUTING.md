@@ -39,6 +39,31 @@ You can verify publication at:
 - **Central Portal**: https://central.sonatype.com/artifact/com.cultureamp/kestrel
 - **Maven Central Search**: https://search.maven.org/artifact/com.cultureamp/kestrel
 
+### First-time setup
+
+Run this once, from a repo admin account:
+
+```bash
+bin/setup_release_secrets --dry-run   # check everything, change nothing
+bin/setup_release_secrets             # apply
+```
+
+It creates the `maven-central` environment, restricts it to `master`, loads the four secrets,
+publishes your signing key to a keyserver, requires a reviewed pull request on `master`, and
+finishes with a test signature through the same code path CI uses. Secret values are never
+printed and never written to disk. It is safe to re-run.
+
+By default it signs with the key named by `signing.gnupg.keyName` in `~/.gradle/gradle.properties`.
+Prefer a key that isn't tied to one person:
+
+```bash
+bin/setup_release_secrets --new-key your-team-alias@cultureamp.com
+```
+
+That generates a dedicated release-signing key, so releases don't depend on one engineer's
+personal key remaining valid and a leak doesn't force anyone to revoke their own identity key.
+Save the passphrase in 1Password before you run it - it cannot be recovered.
+
 ### Secrets and access control
 
 Kestrel is a **public** repository, and these credentials can publish signed artefacts under
