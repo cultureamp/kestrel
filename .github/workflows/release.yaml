@@ -1,0 +1,172 @@
+name: Release
+
+# Publishes to Maven Central when `base_version` in gradle.properties increases on master.
+#
+# Merging a PR that bumps `base_version` is the release trigger: no manual step, no
+# separately-maintained version file. Pushes that don't change the version are a no-op.
+#
+# Required repository secrets (Settings > Secrets and variables > Actions):
+#   CENTRAL_TOKEN_USERNAME    Sonatype Central Portal token username  (1Password: Team Develop > Kestrel Sonatype Credentials)
+#   CENTRAL_TOKEN_PASSWORD    Sonatype Central Portal token password
+#   GPG_SIGNING_KEY           ASCII-armoured private key: gpg --armor --export-secret-keys <keyid>
+#   GPG_SIGNING_PASSPHRASE    Passphrase for that key
+
+on:
+  push:
+    branches:
+      - master
+  workflow_dispatch:
+    inputs:
+      force:
+        description: "Release the current base_version even if this commit didn't bump it. Still refuses to overwrite an already-published version."
+        type: boolean
+        default: false
+
+# One release at a time. Never cancel one in flight: publishing to Maven Central is not
+# reversible, so a half-finished run must be allowed to finish rather than be killed.
+concurrency:
+  group: release
+  cancel-in-progress: false
+
+# Least privilege by default. The release job re-grants contents:write for the tag it pushes.
+permissions:
+  contents: read
+
+jobs:
+  detect:
+    name: Detect version bump
+    runs-on: ubuntu-latest
+    outputs:
+      should_release: ${{ steps.check.outputs.should_release }}
+      version: ${{ steps.check.outputs.version }}
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          fetch-depth: 0
+          fetch-tags: true
+
+      - id: check
+        env:
+          BEFORE: ${{ github.event.before }}
+          FORCE: ${{ inputs.force }}
+        run: |
+          set -euo pipefail
+
+          read_base_version() { sed -n 's/^base_version=//p' | tr -d '[:space:]'; }
+
+          version="$(read_base_version < gradle.properties)"
+          echo "version=$version" >> "$GITHUB_OUTPUT"
+
+          if [[ ! "$version" =~ ^[0-9]+\.[0-9]+\.[0-9]+$ ]]; then
+            echo "::error::base_version '$version' is not a plain x.y.z version; refusing to release."
+            exit 1
+          fi
+
+          skip() { echo "::notice::$1"; echo "should_release=false" >> "$GITHUB_OUTPUT"; exit 0; }
+
+          # A version already on Maven Central can never be re-published, so this check comes
+          # first: it makes the workflow safe to add to a repo whose current version is released,
+          # and safe to re-run after a partial failure.
+          pom="https://repo1.maven.org/maven2/com/cultureamp/kestrel/$version/kestrel-$version.pom"
+          if curl -sfI --retry 3 "$pom" > /dev/null; then
+            skip "$version is already published to Maven Central. Bump base_version in gradle.properties to release."
+          fi
+
+          if [ -n "$(git tag -l "v$version")" ]; then
+            skip "Tag v$version already exists. Bump base_version in gradle.properties to release."
+          fi
+
+          if [ "$FORCE" = "true" ]; then
+            echo "::notice::Forced release of $version."
+            echo "should_release=true" >> "$GITHUB_OUTPUT"
+            exit 0
+          fi
+
+          # `github.event.before` is master's previous tip. Fall back to the first parent when
+          # it is unavailable (workflow_dispatch, a freshly-created branch, or a rewritten history).
+          previous_ref="HEAD^"
+          if [[ -n "$BEFORE" && ! "$BEFORE" =~ ^0+$ ]] && git cat-file -e "$BEFORE^{commit}" 2>/dev/null; then
+            previous_ref="$BEFORE"
+          fi
+
+          previous_version="$(git show "$previous_ref:gradle.properties" 2>/dev/null | read_base_version || true)"
+          echo "Previous base_version ($previous_ref): ${previous_version:-<unknown>}"
+          echo "Current  base_version (HEAD): $version"
+
+          if [ "$previous_version" = "$version" ]; then
+            skip "base_version unchanged at $version; nothing to release."
+          fi
+
+          echo "should_release=true" >> "$GITHUB_OUTPUT"
+
+  release:
+    name: Publish ${{ needs.detect.outputs.version }}
+    needs: detect
+    if: needs.detect.outputs.should_release == 'true'
+    runs-on: ubuntu-latest
+    # Gate the credentials behind a GitHub Environment, so they can be given required
+    # reviewers and restricted to master independently of this file.
+    environment: maven-central
+    permissions:
+      contents: write # push the release tag and create the GitHub release
+    env:
+      VERSION: ${{ needs.detect.outputs.version }}
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          fetch-depth: 0
+          fetch-tags: true
+
+      - uses: actions/setup-java@b6effb05e454b25005698d916606bdc6ffcbf961 # v5.7.0
+        with:
+          distribution: temurin
+          java-version: "17"
+
+      - uses: gradle/actions/setup-gradle@9c971963bec38e04b3d30dcc455b5382be2fdbfb # v6.3.0
+
+      # Re-run the tests here rather than trusting the PR build: publishing is irreversible,
+      # so the gate belongs immediately before it.
+      - name: Build and test
+        run: ./gradlew build
+
+      - name: Publish to Maven Central
+        env:
+          CENTRAL_TOKEN_USERNAME: ${{ secrets.CENTRAL_TOKEN_USERNAME }}
+          CENTRAL_TOKEN_PASSWORD: ${{ secrets.CENTRAL_TOKEN_PASSWORD }}
+          GPG_SIGNING_KEY: ${{ secrets.GPG_SIGNING_KEY }}
+          GPG_SIGNING_PASSPHRASE: ${{ secrets.GPG_SIGNING_PASSPHRASE }}
+        run: ./gradlew publishToSonatype closeAndReleaseSonatypeStagingRepository
+
+      - name: Tag and create GitHub release
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: |
+          set -euo pipefail
+
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git tag "v$VERSION"
+          git push origin "v$VERSION"
+
+          # CHANGELOG.md sections are `# <version>` headings, and only releases with breaking
+          # changes get one, so an empty extract is normal.
+          notes="$(awk -v heading="# $VERSION" '
+            $0 == heading { found = 1; next }
+            found && /^# / { exit }
+            found { print }
+          ' CHANGELOG.md)"
+
+          if [ -z "${notes//[[:space:]]/}" ]; then
+            notes="See the commit history for the changes in this release."
+          fi
+
+          gh release create "v$VERSION" --title "$VERSION" --notes "$notes"
+
+      - name: Summary
+        run: |
+          {
+            echo "Published \`com.cultureamp:kestrel:$VERSION\` to Maven Central."
+            echo
+            echo "It usually appears within 15-30 minutes at"
+            echo "<https://central.sonatype.com/artifact/com.cultureamp/kestrel/$VERSION>."
+          } >> "$GITHUB_STEP_SUMMARY"

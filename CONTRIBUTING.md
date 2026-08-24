@@ -9,7 +9,8 @@ To compile and run tests
 
 `./gradlew test`
 
-Make sure to increase the `base_version` number in `gradle.properties`
+Make sure to increase the `base_version` number in `gradle.properties`. That bump is what triggers a
+release when your PR is merged - see [Releasing](#releasing).
 
 ### Publishing to maven local
 
@@ -17,8 +18,64 @@ If you need to test your version with another project in your development enviro
 
 `SKIP_SIGNING=true ./gradlew publishToMavenLocal`
 
-## Publishing
-If you're authorized to publish to Maven Central, which is a process done manually by a developer, you'll need access to the Central Portal credentials (details below).
+## Releasing
+
+Releases are automatic. The `.github/workflows/release.yaml` workflow watches pushes to `master`, and when
+`base_version` in `gradle.properties` has increased it builds, tests, signs and publishes the artefacts to
+Maven Central, then tags the commit `v<version>` and creates a GitHub release.
+
+So to cut a release:
+
+1. Bump `base_version` in `gradle.properties` (semantic versioning).
+2. Add a `# <version>` section to `CHANGELOG.md` if there are breaking changes. The workflow uses that section
+   as the GitHub release notes.
+3. Merge to `master`. If the `maven-central` environment has required reviewers configured, the
+   release job waits for an approval before it can touch the publishing credentials.
+
+The artefacts typically appear on Maven Central within 15-30 minutes. A push that doesn't change
+`base_version` is a no-op, and a version already present on Maven Central is never re-published, so the
+workflow is safe to re-run.
+
+You can verify publication at:
+- **Central Portal**: https://central.sonatype.com/artifact/com.cultureamp/kestrel
+- **Maven Central Search**: https://search.maven.org/artifact/com.cultureamp/kestrel
+
+### Secrets and access control
+
+Kestrel is a **public** repository, and these credentials can publish signed artefacts under
+`com.cultureamp` to an immutable registry. Treat them accordingly.
+
+The release job needs four secrets, ideally attached to a `maven-central` GitHub Environment
+rather than to the repository, so they can be gated. Values come from 1Password,
+Team Develop > Kestrel Sonatype Credentials.
+
+| Secret | Value |
+| --- | --- |
+| `CENTRAL_TOKEN_USERNAME` | Central Portal token username |
+| `CENTRAL_TOKEN_PASSWORD` | Central Portal token password |
+| `GPG_SIGNING_KEY` | ASCII-armoured private key: `gpg --armor --export-secret-keys <keyid>` |
+| `GPG_SIGNING_PASSPHRASE` | Passphrase for that key |
+
+The signing key must be published to a keyserver for Maven Central to accept it - see
+[GPG Key](#3-gpg-key) below. A leaked Central Portal token can simply be regenerated; a leaked
+signing key has to be revoked on the keyservers and replaced, so it is the more sensitive of the two.
+
+Two controls do the real work here, and neither lives in the workflow file:
+
+- **Branch protection on `master` requiring review.** The release job only ever runs on merged
+  code, and GitHub never gives secrets to a pull request from a fork, so outsiders cannot reach
+  these credentials. Anyone who can merge to `master`, however, can write a workflow step that
+  exfiltrates them - so merge review *is* the security boundary.
+- **Required reviewers on the `maven-central` environment**, restricted to the `master` branch.
+  This adds a human approval between a merge and the credentials being decrypted.
+
+The workflow itself runs with `permissions: contents: read` by default, grants `contents: write`
+only to the release job for the tag it pushes, and pins every third-party action to a commit SHA.
+
+## Publishing manually
+
+You shouldn't normally need this; it's here for when the workflow is unavailable. If you're publishing to
+Maven Central by hand you'll need access to the Central Portal credentials (details below).
 
 **Note: Sonatype has migrated from OSSRH to Central Portal. The old OSSRH system is deprecated.**
 
