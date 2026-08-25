@@ -103,6 +103,25 @@ releases.
 The workflow itself runs with `permissions: contents: read` by default, grants `contents: write`
 only to the release job for the tag it pushes, and pins every third-party action to a commit SHA.
 
+### Signing key expiry
+
+The release-signing key expires - two years by default, which satisfies the Secrets standard's
+"shortest reasonable lifetime" without making the key a permanent liability. Every release checks
+it: inside the last 90 days you get a warning annotation, and once it has lapsed the release fails
+*before* publishing anything, with the fix printed in the log.
+
+Extending is not the same as rotating, and is all that's needed. The key id, fingerprint and
+identity all stay the same, so nothing downstream is affected and old signatures keep verifying:
+
+```bash
+gpg --edit-key <keyid>          # then: expire, choose a new period, save
+gpg --keyserver keys.openpgp.org --send-keys <keyid>
+gpg --armor --export-secret-keys <keyid> \
+  | gh secret set GPG_SIGNING_KEY --repo cultureamp/kestrel --env maven-central
+```
+
+The last step is needed because the exported block carries the updated self-signature.
+
 ## Publishing manually
 
 You shouldn't normally need this; it's here for when the workflow is unavailable. If you're publishing to

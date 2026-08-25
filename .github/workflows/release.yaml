@@ -126,6 +126,68 @@ jobs:
 
       - uses: gradle/actions/setup-gradle@9c971963bec38e04b3d30dcc455b5382be2fdbfb # v6.3.0
 
+      # Runs before the build so an expired key costs seconds, not a full test suite. Expiry is
+      # a property of the key's self-signature, so it can be extended without generating a new
+      # key - the messages below say how, because nobody will remember in two years.
+      - name: Check the signing key
+        env:
+          GPG_SIGNING_KEY: ${{ secrets.GPG_SIGNING_KEY }}
+          REPO: ${{ github.repository }}
+          WARN_WITHIN_DAYS: "90"
+        run: |
+          set -euo pipefail
+
+          if [ -z "${GPG_SIGNING_KEY:-}" ]; then
+            echo "::error::GPG_SIGNING_KEY is not set on the maven-central environment. Run bin/setup_release_secrets - see CONTRIBUTING.md."
+            exit 1
+          fi
+
+          # Throwaway keyring. Importing needs no passphrase, and nothing outlives this step.
+          GNUPGHOME="$(mktemp -d)"; export GNUPGHOME; chmod 700 "$GNUPGHOME"
+          trap 'rm -rf "$GNUPGHOME"' EXIT
+
+          printf '%s' "$GPG_SIGNING_KEY" | gpg --batch --quiet --import 2>/dev/null || true
+
+          # List *secret* keys, not all keys: a public key imports perfectly happily, so this is
+          # what catches the easy mistake of exporting with --export instead of
+          # --export-secret-keys. The sec record carries the expiry in the same field.
+          read -r keyid expiry < <(gpg --list-secret-keys --with-colons | awk -F: '/^sec:/ { print $5, $7; exit }')
+
+          if [ -z "${keyid:-}" ]; then
+            echo "::error::GPG_SIGNING_KEY does not contain a private key. It is either truncated, or it holds only a public key - the value must come from 'gpg --armor --export-secret-keys <keyid>', not 'gpg --armor --export'. Re-run bin/setup_release_secrets to fix it."
+            exit 1
+          fi
+
+          if [ -z "${expiry:-}" ] || [ "$expiry" = "0" ]; then
+            echo "Signing key $keyid does not expire."
+            exit 0
+          fi
+
+          # GNU date on the runner, BSD date if anyone runs this by hand on a Mac.
+          on="$(date -u -d "@$expiry" +%Y-%m-%d 2>/dev/null || date -u -r "$expiry" +%Y-%m-%d)"
+          now="$(date +%s)"
+          # `days` is for display only. Integer division truncates toward zero, so a key that
+          # lapsed an hour ago also reports 0 - the expired test below compares timestamps.
+          days=$(( (expiry - now) / 86400 ))
+
+          # GitHub annotations are single-line; %0A is how you get a line break into one.
+          remedy="Extend it - this does NOT need a new key, and the key id, fingerprint and identity all stay the same:%0A"
+          remedy+="  gpg --edit-key $keyid     # then type: expire, pick a new period, then save%0A"
+          remedy+="  gpg --keyserver keys.openpgp.org --send-keys $keyid%0A"
+          remedy+="  gpg --armor --export-secret-keys $keyid | gh secret set GPG_SIGNING_KEY --repo $REPO --env maven-central%0A"
+          remedy+="The passphrase is in 1Password (Team Develop). See CONTRIBUTING.md."
+
+          if [ "$expiry" -le "$now" ]; then
+            echo "::error::Signing key $keyid EXPIRED on $on. Maven Central rejects artifacts signed with an expired key, so this release is stopping here rather than publishing something nobody can verify. Nothing has been published, and re-running this workflow once the key is fixed will pick up where it left off.%0A%0A$remedy"
+            exit 1
+          fi
+
+          if [ "$days" -le "$WARN_WITHIN_DAYS" ]; then
+            echo "::warning::Signing key $keyid expires on $on - only $days days away. Once it lapses, every release will fail until it is extended. Doing it now takes about five minutes.%0A%0A$remedy"
+          fi
+
+          echo "Signing key $keyid expires $on ($days days away)."
+
       # Re-run the tests here rather than trusting the PR build: publishing is irreversible,
       # so the gate belongs immediately before it.
       - name: Build and test
