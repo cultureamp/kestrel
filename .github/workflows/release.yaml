@@ -64,37 +64,39 @@ jobs:
 
           skip() { echo "::notice::$1"; echo "should_release=false" >> "$GITHUB_OUTPUT"; exit 0; }
 
-          # A version already on Maven Central can never be re-published, so this check comes
-          # first: it makes the workflow safe to add to a repo whose current version is released,
-          # and safe to re-run after a partial failure.
+          # Did this push bump the version? This is the trigger, and it is answered entirely
+          # from the local clone, so the common case - a push that changes anything other than
+          # the version - costs nothing and contacts no external service.
+          if [ "$FORCE" = "true" ]; then
+            echo "::notice::Forced release requested; skipping the version-bump check."
+          else
+            # `github.event.before` is master's previous tip, which beats HEAD^ when a push
+            # contains several commits. Fall back to the first parent when it is unavailable
+            # (workflow_dispatch, a freshly-created branch, or a rewritten history).
+            previous_ref="HEAD^"
+            if [[ -n "$BEFORE" && ! "$BEFORE" =~ ^0+$ ]] && git cat-file -e "$BEFORE^{commit}" 2>/dev/null; then
+              previous_ref="$BEFORE"
+            fi
+
+            previous_version="$(git show "$previous_ref:gradle.properties" 2>/dev/null | read_base_version || true)"
+            echo "Previous base_version ($previous_ref): ${previous_version:-<unknown>}"
+            echo "Current  base_version (HEAD): $version"
+
+            if [ "$previous_version" = "$version" ]; then
+              skip "base_version unchanged at $version; nothing to release."
+            fi
+          fi
+
+          # Everything below guards the publish itself, so it applies to forced releases too:
+          # a version on Maven Central can never be re-published, whatever triggered the run.
+          # Cheapest check first again - the tag is local, Maven Central is not.
+          if [ -n "$(git tag -l "v$version")" ]; then
+            skip "Tag v$version already exists; $version has already been released."
+          fi
+
           pom="https://repo1.maven.org/maven2/com/cultureamp/kestrel/$version/kestrel-$version.pom"
           if curl -sfI --retry 3 "$pom" > /dev/null; then
             skip "$version is already published to Maven Central. Bump base_version in gradle.properties to release."
-          fi
-
-          if [ -n "$(git tag -l "v$version")" ]; then
-            skip "Tag v$version already exists. Bump base_version in gradle.properties to release."
-          fi
-
-          if [ "$FORCE" = "true" ]; then
-            echo "::notice::Forced release of $version."
-            echo "should_release=true" >> "$GITHUB_OUTPUT"
-            exit 0
-          fi
-
-          # `github.event.before` is master's previous tip. Fall back to the first parent when
-          # it is unavailable (workflow_dispatch, a freshly-created branch, or a rewritten history).
-          previous_ref="HEAD^"
-          if [[ -n "$BEFORE" && ! "$BEFORE" =~ ^0+$ ]] && git cat-file -e "$BEFORE^{commit}" 2>/dev/null; then
-            previous_ref="$BEFORE"
-          fi
-
-          previous_version="$(git show "$previous_ref:gradle.properties" 2>/dev/null | read_base_version || true)"
-          echo "Previous base_version ($previous_ref): ${previous_version:-<unknown>}"
-          echo "Current  base_version (HEAD): $version"
-
-          if [ "$previous_version" = "$version" ]; then
-            skip "base_version unchanged at $version; nothing to release."
           fi
 
           echo "should_release=true" >> "$GITHUB_OUTPUT"
