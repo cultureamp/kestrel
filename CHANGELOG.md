@@ -55,3 +55,32 @@ Notable upgrade steps, all of which apply to consuming code too:
 The one Kestrel API signature this changes is the lock hook: `blockingLockUntilTransactionEnd`
 and `pgAdvisoryXactLock` are now extensions on `JdbcTransaction` rather than `Transaction`,
 because `exec` moved to the JDBC-specific transaction type.
+# 0.31.0
+
+## Dependencies that appear in the public API are now `api` scope
+
+Kestrel exposes types from several of its dependencies in its own public signatures, but declared
+every one of them as `implementation`. Gradle publishes `implementation` as Maven `runtime` scope,
+so those types were missing from the compile classpath of anything depending on Kestrel. Consumers
+had to redeclare the dependency themselves just to compile against Kestrel's API.
+
+The affected types:
+
+- `Database` (`org.jetbrains.exposed.v1.jdbc`) in `RelationalDatabaseBookmarkStore` and
+  `RelationalDatabaseEventStore.create`, and `JdbcTransaction` in `blockingLockUntilTransactionEnd`
+  — from `exposed-jdbc`.
+- `Table`, `Column` and `ResultRow` in the `Events` table and the `jsonBody` hook — from
+  `exposed-core`.
+- `ObjectMapper` (`tools.jackson.databind`) in `RelationalDatabaseEventStore.create` and
+  `defaultObjectMapper` — reachable through `jackson-module-kotlin`.
+- `DateTime` in `Event.createdAt` — from `joda-time`.
+
+These four are now `api`, which the generated POM publishes at `compile` scope. `exposed-jodatime`,
+`exposed-json` and `jackson-datatype-joda` stay `implementation`, because only Kestrel's own
+internals reference them.
+
+This needs the `java-library` plugin rather than `java`, since the plain `java` plugin has no `api`
+configuration.
+
+Nothing is removed or renamed, so this is source and binary compatible. Consumers that already
+declare these dependencies can drop them, but nothing breaks if they keep them.
