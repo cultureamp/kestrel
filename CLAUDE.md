@@ -27,14 +27,18 @@ Kestrel is a Kotlin framework for building event-sourced, CQRS applications. It 
 ```
 
 ### Publishing
+Releases are automatic: bumping `base_version` in `gradle.properties` and merging to `master` makes
+`.github/workflows/release.yaml` publish to Maven Central, tag `v<version>` and cut a GitHub release.
+See CONTRIBUTING.md.
+
 ```bash
 # Local development (no GPG signing required)
 SKIP_SIGNING=true ./gradlew publishToMavenLocal
 
-# Production release (requires GPG key and Sonatype credentials)
-export SONATYPE_USERNAME=<username>
-export SONATYPE_PASSWORD=<password>
-./gradlew clean build publish
+# Manual release, only needed if the workflow is unavailable
+export CENTRAL_TOKEN_USERNAME=<username>
+export CENTRAL_TOKEN_PASSWORD=<password>
+./gradlew publishToSonatype closeAndReleaseSonatypeStagingRepository
 ```
 
 ### Security and CI
@@ -178,12 +182,15 @@ asyncProcessor.start(ExponentialBackoff())
 ## Configuration Management
 
 ### Version Management
-- Update `base_version` in `gradle.properties` for releases
+- Update `base_version` in `gradle.properties` for releases - this bump is the release trigger
 - Follow semantic versioning
-- Update CHANGELOG.md for breaking changes
+- Update CHANGELOG.md for breaking changes, under a `# <version>` heading, which the release
+  workflow uses as the GitHub release notes
 
 ### Environment Variables
-- `SONATYPE_USERNAME` / `SONATYPE_PASSWORD` - Maven Central publishing
+- `CENTRAL_TOKEN_USERNAME` / `CENTRAL_TOKEN_PASSWORD` - Sonatype Central Portal publishing
+- `GPG_SIGNING_KEY` / `GPG_SIGNING_PASSPHRASE` - armoured signing key, used by CI; when unset the
+  build falls back to the local gpg agent via `useGpgCmd()`
 - `SKIP_SIGNING=true` - Bypass GPG signing for local development
 
 ## Testing Strategy

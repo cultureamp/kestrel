@@ -111,7 +111,14 @@ signing {
     def skipSigning = Boolean.valueOf(System.getenv("SKIP_SIGNING"))
     if (!skipSigning)
     {
-        useGpgCmd()
+        // CI has no GPG keyring, so it passes the armoured key in directly. Locally the key
+        // stays in the gpg agent, configured by the signing.gnupg.* properties in ~/.gradle.
+        def signingKey = System.getenv("GPG_SIGNING_KEY")
+        if (signingKey) {
+            useInMemoryPgpKeys(signingKey, System.getenv("GPG_SIGNING_PASSPHRASE"))
+        } else {
+            useGpgCmd()
+        }
         sign publishing.publications.mavenJava
     }
 }
