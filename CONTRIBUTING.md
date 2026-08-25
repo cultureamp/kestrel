@@ -57,12 +57,13 @@ By default it signs with the key named by `signing.gnupg.keyName` in `~/.gradle/
 Prefer a key that isn't tied to one person:
 
 ```bash
-bin/setup_release_secrets --new-key your-team-alias@cultureamp.com
+bin/setup_release_secrets --new-key team_pathfinder@cultureamp.com
 ```
 
-That generates a dedicated release-signing key, so releases don't depend on one engineer's
-personal key remaining valid and a leak doesn't force anyone to revoke their own identity key.
-Save the passphrase in 1Password before you run it - it cannot be recovered.
+That generates a dedicated release-signing key owned by the team (`team_pathfinder@cultureamp.com`),
+so releases don't depend on one engineer's personal key remaining valid and a leak doesn't force
+anyone to revoke their own identity key. Save the passphrase in 1Password before you run it - it
+cannot be recovered.
 
 ### Secrets and access control
 
