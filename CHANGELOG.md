@@ -84,3 +84,57 @@ configuration.
 
 Nothing is removed or renamed, so this is source and binary compatible. Consumers that already
 declare these dependencies can drop them, but nothing breaks if they keep them.
+
+# 0.32.0
+
+## New features
+
+Adds an entity-processor stack, mirroring the event-processor stack for the case where the thing you
+want to project from is rows in a table rather than an event stream. Rows are read in `updated_at`
+order and tiebroken on a `uuid` id, as the Confluent JDBC source connector does in its
+"timestamp+incrementing" mode: see `EntitySource`, `EntityProcessor`, `EntityBookmarkStore`,
+`BatchedAsyncEntityProcessor`, `AsyncEntityProcessorMonitor` and `SafeBoundary`, and the
+[README](README.md#entity-processors-projecting-from-a-table-rather-than-an-event-stream) for how
+they fit together.
+
+Nothing existing changes behaviour. `BookmarkLock` gains a `tryLock(bookmarkName: String)` overload
+with a default implementation delegating to the existing `tryLock(bookmark: Bookmark)`, so existing
+implementations are unaffected. The new stack uses `java.time` rather than joda, so it needs
+`exposed-java-time` alongside the `exposed-jodatime` the event-sourcing side continues to use.
+
+Two things to know before adopting it.
+
+## Positions are naive timestamps holding UTC
+
+An `EntityPosition` carries a `java.time.LocalDateTime`, read from a `timestamp without time zone`
+column and carried around unconverted — the same convention the events table uses for its own
+`created_at`. So a position means whatever the column holds, and the convention is that it holds UTC.
+
+Nothing in the library converts between zones, so a column stamped in local time would be compared
+against a boundary read in UTC and the hold-back would be wrong by the offset. What the library does
+do is make its own defaults consistent: every `clock` parameter defaults to
+`LocalDateTime.now(ZoneOffset.UTC)` rather than `LocalDateTime::now`, and
+`PostgresXactStartSafeBoundary` converts with an explicit `AT TIME ZONE 'UTC'` rather than leaning on
+the session's `TimeZone`, which is connection-pool configuration a reader does not control.
+
+## Reading by `updated_at` needs a safe boundary
+
+That column does not record commit order. Postgres `now()` is fixed when a transaction *starts*, so a
+transaction beginning at 12:00 and committing at 12:30 makes rows visible half an hour after the
+timestamp they carry, and a reader whose bookmark has meanwhile passed 12:00 never sees those rows
+again — with no error and nothing to alert on. A fixed hold-back only makes that unlikely, and only
+while every writing transaction commits inside the delay.
+
+`BatchedAsyncEntityProcessor` therefore requires a `SafeBoundary`, and `EntitySource.getAfter` takes
+its upper bound as an exclusive `safeBefore`. There is no default, because no one value is safe for
+every table. `PostgresXactStartSafeBoundary` closes the race by construction — `min(xact_start)` from
+`pg_stat_activity`, capped at `statement_timestamp()` — so the reader never passes the start of the
+oldest transaction that could still commit, and no application clock is involved in deciding what is
+safe to read.
+
+Its cost is that any long-running transaction in the same database holds the reader up, since the
+boundary cannot tell one that will write the polled table from one that never will. That trades
+silent data loss for a visible stall: `AsyncEntityProcessorMonitor` reports it as latency, and after
+`stallThreshold` (an hour by default) the processor throws `SafeBoundaryStalledException` naming the
+session to go and close. The `SafeBoundary` KDoc carries the rest of the argument, including why the
+boundary must be read in its own transaction and why the comparison has to be strict.

@@ -122,6 +122,11 @@ update a "bookmark" representing the sequence number of the last processed event
 - [**AsyncEventProcessorMonitor**](https://github.com/cultureamp/kotlin-eventsourcing/blob/master/src/main/kotlin/com/cultureamp/eventsourcing/AsyncEventProcessorMonitor.kt) -
 *Provides a mechanism to establish how far `EventProcessor` bookmarks/processing is lagging behind the head of the event
 stream.*
+- [**EntitySource**](https://github.com/cultureamp/kotlin-eventsourcing/blob/master/src/main/kotlin/com/cultureamp/eventsourcing/EntitySource.kt) -
+*Like an `EventSource`, but reads rows from a table in `updated_at` order (tiebreaking on the row's `uuid` id) rather
+than events in sequence order. Along with `EntityProcessor`, `EntityBookmarkStore` and `BatchedAsyncEntityProcessor`,
+this lets you build a projector over a table you don't own. See
+[Entity-processors](#entity-processors-projecting-from-a-table-rather-than-an-event-stream).*
 
 ## Getting Started
 
@@ -436,6 +441,116 @@ thread(start = true, isDaemon = false, name = "eventProcessorMonitor") {
     }
 }
 ```
+
+### Entity-processors (projecting from a table rather than an event stream)
+
+Sometimes the data you want to project isn't an event stream at all — it's rows in a table owned by some other system.
+Kestrel mirrors the whole event-processor stack for that case, reading rows in `updated_at` order and tiebreaking on a
+`uuid` id, the same way the
+[Confluent JDBC source connector](https://docs.confluent.io/kafka-connectors/jdbc/current/overview.html) does in its
+"timestamp+incrementing" mode. Each event-sourcing piece has an entity equivalent:
+
+| Event stream               | Entity table                       | Notes                                                        |
+|----------------------------|------------------------------------|--------------------------------------------------------------|
+| `sequence: Long`           | `EntityPosition(updatedAt, id)`    | Total ordering, with the id as the tiebreaker. A null position is the equivalent of sequence `0` |
+| `SequencedEvent`           | `PositionedEntity`                 |                                                              |
+| `EventSource`              | `EntitySource`                     | A repository call: "give me rows after this position"         |
+| `EventProcessor`           | `EntityProcessor`                  |                                                              |
+| `BookmarkStore`            | `EntityBookmarkStore`              | Bookmarks store `(last_updated_at, last_id)` instead of a sequence |
+| `BatchedAsyncEventProcessor` | `BatchedAsyncEntityProcessor`    |                                                              |
+| `EventsSequenceStats`      | `EntityUpdatedAtStats`             | The head of the stream, i.e. the newest `updated_at`         |
+| `AsyncEventProcessorMonitor` | `AsyncEntityProcessorMonitor`    | Reports lag in milliseconds rather than in sequence numbers   |
+| `Lag`                      | `EntityLag`                        |                                                              |
+
+The source can be any function that takes a position, an exclusive upper bound on `updated_at`, and a batch size:
+
+```kotlin
+val entitySource = EntitySource.from { after, safeBefore, batchSize -> goalRelationshipRepository.updatedAfter(after, safeBefore, batchSize) }
+```
+
+Writing one by hand means honouring the contract documented on `EntitySource`: return only rows strictly after `after`
+and strictly before `safeBefore`, in ascending `(updated_at, id)` order. A source that returns a row its bookmark is
+already on, or returns rows out of order, would silently skip rows or reprocess one forever, so
+`BatchedAsyncEntityProcessor` checks each row as it goes and throws `EntitySourceStalledException` or
+`EntitySourceOrderingException` instead.
+
+Or, for an [Exposed](https://github.com/JetBrains/Exposed) table, use the provided implementation, which doubles as the
+`EntityUpdatedAtStats` used for lag monitoring:
+
+```kotlin
+val entitySource = RelationalDatabaseEntitySource(
+    db = database,
+    table = GoalRelationships,
+    updatedAtColumn = GoalRelationships.updatedAt,
+    idColumn = GoalRelationships.id,
+    rowToEntity = { GoalRelationship(it[GoalRelationships.id], it[GoalRelationships.childGoalId], it[GoalRelationships.updatedAt]) },
+)
+```
+
+The polled column doesn't have to be called `updated_at`; it just has to move forward every time a row changes. See
+[choosing the polled column](#things-to-watch-out-for) below, because getting this wrong silently misses updates.
+
+Wiring it up then looks just like an `AsyncEventProcessor`:
+
+```kotlin
+val bookmarkStore = RelationalDatabaseEntityBookmarkStore(database).also { it.createSchemaIfNotExists() }
+val asyncEntityProcessor = BatchedAsyncEntityProcessor(
+    entitySource = entitySource,
+    entityUpdatedAtStats = entitySource,
+    bookmarkStore = bookmarkStore,
+    bookmarkName = "GoalRelationshipNames",
+    entityProcessor = EntityProcessor.from(goalRelationshipProjector::project),
+    safeBoundary = PostgresXactStartSafeBoundary(database),
+)
+thread(start = true, isDaemon = false, name = asyncEntityProcessor.bookmarkName) {
+    ExponentialBackoff(onFailure = { e, _ -> println(e) }).run {
+        asyncEntityProcessor.processOneBatch()
+    }
+}
+```
+
+And monitoring works the same way, with lag expressed in milliseconds:
+
+```kotlin
+val entityProcessorMonitor = AsyncEntityProcessorMonitor(asyncEntityProcessors) {
+    println("msg='Lag calculation for entity-processor' name='${it.name}' lagMs=${it.lagMs} latencyMs=${it.latencyMs}")
+}
+```
+
+`EntityLag` exposes two numbers, because they fail differently: `lagMs` is how far the bookmark is behind the newest row
+in the table, and `latencyMs` is how stale the bookmark is in wall-clock terms. Prefer alerting on `latencyMs`, since it
+keeps growing when a processor is stuck even if nothing new is being written.
+
+#### Things to watch out for
+
+- **Choosing the polled column.** Whatever you pass as `updatedAtColumn` has to advance on *every* change you care
+  about, because that column is the only thing the processor watches. Polling a `created_at` works fine for
+  insert-only tables, but if rows are later mutated — soft-deleted by stamping a `deleted_at`, say — those changes are
+  invisible, since `created_at` doesn't move. A table without a real `updated_at` needs one adding, or a trigger to
+  maintain it, before a processor over it can see updates rather than just inserts.
+- **`updated_at` doesn't record commit order, which is what `safeBoundary` is for.** Postgres `now()` is fixed when a
+  transaction *starts*, so a transaction beginning at 12:00 and committing at 12:30 makes rows visible half an hour
+  after the timestamp they carry — and a reader whose bookmark has meanwhile passed 12:00 never sees them again, with
+  nothing to alert on. Pass `PostgresXactStartSafeBoundary(database)`, which never lets the reader past the start of the
+  oldest transaction that could still commit. There is no default because no one value is safe for every table:
+  `SafeBoundary.unsafeFixedDelay` is the "now minus a delay" alternative, named for the fact that it holds only while
+  every writing transaction commits inside the delay. The cost of the real boundary is that any long-running
+  transaction in the same database holds the reader up, and after `stallThreshold` (an hour) the processor throws
+  `SafeBoundaryStalledException` naming the session to close. The `SafeBoundary` KDoc has the full argument.
+- **Positions are `java.time.LocalDateTime` holding UTC, not joda `DateTime`** — the opposite of the event-sourcing
+  side, which is joda throughout. A position is read straight out of a `timestamp without time zone` column (map it
+  with Exposed's `datetime`) and carried unconverted, so it means whatever the column holds. Nothing here converts
+  between zones, so a column stamped in local time would be compared against a UTC boundary and be wrong by the
+  offset; stamp it in UTC and every clock in this API agrees with it. Being nanosecond-precision, a `LocalDateTime`
+  round-trips a `timestamp` exactly, so the column needs no particular precision.
+- **Stamp the polled column `GREATEST(clock_timestamp(), transaction_timestamp()) AT TIME ZONE 'UTC'`.** A trigger
+  recommendation, not something the library can do for you. The `GREATEST` keeps a row's stamp at or after its own
+  `xact_start` even if the system clock steps backwards mid-transaction, and returns `clock_timestamp()` unchanged
+  otherwise.
+- **You only ever see current state.** Unlike an event stream, a table exposes the latest version of each row. A row
+  updated twice in quick succession may only be processed once, rows are seen in `updated_at` order rather than
+  creation order, and deletes aren't visible at all unless they're soft deletes. Entity-processors need to be
+  idempotent for the same reasons event-processors do.
 
 ## Resources
 
