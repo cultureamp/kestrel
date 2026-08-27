@@ -521,6 +521,50 @@ val entityProcessorMonitor = AsyncEntityProcessorMonitor(asyncEntityProcessors) 
 in the table, and `latencyMs` is how stale the bookmark is in wall-clock terms. Prefer alerting on `latencyMs`, since it
 keeps growing when a processor is stuck even if nothing new is being written.
 
+#### Maintaining the polled column
+
+Kestrel only ever reads the polled column. Whatever maintains it is yours, and the boundary's correctness depends on
+it, so it is worth getting right in one go. On Postgres:
+
+```sql
+CREATE FUNCTION set_updated_at_clock_utc() RETURNS trigger LANGUAGE plpgsql AS $$
+  BEGIN
+    NEW.updated_at = GREATEST(clock_timestamp(), transaction_timestamp()) AT TIME ZONE 'UTC';
+    RETURN NEW;
+  END;
+$$;
+
+CREATE TRIGGER set_goal_relationships_updated_at BEFORE INSERT OR UPDATE
+  ON goal_relationships FOR EACH ROW EXECUTE PROCEDURE set_updated_at_clock_utc();
+
+CREATE INDEX goal_relationships_updated_at_id ON goal_relationships (updated_at, id);
+```
+
+Each part of that prevents a specific failure:
+
+- **`clock_timestamp()`, not `now()`.** `now()` is `transaction_timestamp()`, fixed when the transaction starts, so a
+  transaction that began earlier but writes later stamps a *smaller* value than the row already had. The column then
+  moves backwards and a row that has already been read is missed. `clock_timestamp()` reads the wall clock at the
+  moment of the write, and because a `BEFORE` trigger runs after the row lock is taken, two transactions updating one
+  row are serialised and the later writer necessarily reads a later clock.
+- **`GREATEST(..., transaction_timestamp())`.** The boundary is the oldest open transaction's `xact_start`, and
+  safety needs every row stamped at or after *its own* `xact_start`. `transaction_timestamp()` is exactly that value,
+  so the `GREATEST` guarantees it even if the system clock steps backwards mid-transaction — `clock_timestamp()` reads
+  `CLOCK_REALTIME`, which is corrected rather than monotonic. In the ordinary case it returns `clock_timestamp()`
+  unchanged.
+- **`AT TIME ZONE 'UTC'`, into a `timestamp without time zone`.** Positions are naive UTC and Kestrel converts the
+  boundary the same explicit way, so neither side depends on the session's `TimeZone`.
+- **`BEFORE INSERT OR UPDATE`, assigning unconditionally, with no column default.** The application must not be able
+  to supply the value, or it can supply one below the boundary or below the row's previous value. Note that an ORM may
+  send a value whether you want it to or not — Exposed needs a `clientDefault` on a non-nullable column to permit a
+  `batchInsert` — and an unconditional trigger is what makes that harmless. A trigger guarded with
+  `WHEN (NEW.updated_at IS NULL)` would let the application's clock win.
+- **An index on `(updated_at, id)`**, which is the order rows are read in. Make it partial if you pass a `filter`, so
+  it serves the filtered read and the head query too.
+
+Worth testing directly, since none of it fails loudly: that a client-supplied value is ignored, that two rows written
+in one transaction get increasing values, and that an update moves the value forward.
+
 #### Things to watch out for
 
 - **Choosing the polled column.** Whatever you pass as `updatedAtColumn` has to advance on *every* change you care
@@ -546,10 +590,6 @@ keeps growing when a processor is stuck even if nothing new is being written.
   between zones, so a column stamped in local time would be compared against a UTC boundary and be wrong by the
   offset; stamp it in UTC and every clock in this API agrees with it. Being nanosecond-precision, a `LocalDateTime`
   round-trips a `timestamp` exactly, so the column needs no particular precision.
-- **Stamp the polled column `GREATEST(clock_timestamp(), transaction_timestamp()) AT TIME ZONE 'UTC'`.** A trigger
-  recommendation, not something the library can do for you. The `GREATEST` keeps a row's stamp at or after its own
-  `xact_start` even if the system clock steps backwards mid-transaction, and returns `clock_timestamp()` unchanged
-  otherwise.
 - **You only ever see current state.** Unlike an event stream, a table exposes the latest version of each row. A row
   updated twice in quick succession may only be processed once, rows are seen in `updated_at` order rather than
   creation order, and deletes aren't visible at all unless they're soft deletes. Entity-processors need to be

@@ -26,7 +26,8 @@ import java.util.UUID
  *
  * @param updatedAtColumn the column that advances whenever a row changes. Rows are read in `(updatedAt, id)` order, so
  * it must never move backwards for a row already read, or that update is missed. Map it with Exposed's `datetime`: it
- * is a `timestamp without time zone` holding UTC, read and written unconverted (see [EntityPosition]).
+ * is a `timestamp without time zone` holding UTC, read and written unconverted (see [EntityPosition]). Kestrel never
+ * writes it — see the README on maintaining it, since what stamps it decides whether [SafeBoundary] can be sound.
  * @param idColumn the tiebreaker column, used to give rows sharing an updated-at value a stable total ordering.
  * @param filter an optional additional predicate, applied to both reads and the [lastUpdatedAt] head calculation.
  * @param rowToEntity maps a row to whatever the [EntityProcessor] wants to consume.
