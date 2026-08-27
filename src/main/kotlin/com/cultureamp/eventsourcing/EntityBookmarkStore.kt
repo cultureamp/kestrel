@@ -86,7 +86,7 @@ class RelationalDatabaseEntityBookmarkStore(
 class EntityBookmarks(tableName: String = defaultEntityBookmarksTableName) : Table(tableName) {
     val name = varchar("name", 160)
 
-    /** Naive, like the source column a position is read from, so a position is stored exactly as it was read. */
+    /** Naive and holding UTC, like every timestamp here and the source column a position is read from. */
     val entityLastUpdatedAt = datetime("entity_last_updated_at")
     val entityLastId = javaUUID("entity_last_id")
     val bookmarkCreatedAt = datetime("bookmark_created_at")

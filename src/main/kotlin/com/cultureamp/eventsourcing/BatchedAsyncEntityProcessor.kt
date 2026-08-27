@@ -96,25 +96,9 @@ class BatchedAsyncEntityProcessor<E>(
         return if (count >= batchSize) Action.Continue else Action.Wait
     }
 
-    /**
-     * How much unreadable work has piled up above the boundary: the head of the table against the start time of the
-     * oldest open transaction. Both sides are database-generated and stamped by the same clock — `xact_start` is the
-     * reading `now()` puts into `updated_at` — so no application clock enters this, and clock skew cannot make a stall
-     * appear or disappear.
-     *
-     * That one comparison is also the whole test. A caught-up processor has its newest row *behind* the boundary, which
-     * makes the span negative; an empty table has no row at all; and a boundary pinned hours back with only minutes of
-     * writes above it is not yet worth reporting. Only a genuine backlog of blocked writes exceeds the threshold.
-     *
-     * Called only when a batch read nothing, so a first run over a large table — happily reading millions of rows below
-     * a boundary that an unrelated transaction has pinned hours back — never trips it.
-     */
     private fun reportIfStalled(boundary: SafeBoundaryReading) {
         if (stallThreshold == null) return
 
-        // A row cannot be stamped after the moment the boundary was read, so `head - safeBefore` can never exceed
-        // `readAt - safeBefore`. When the cheap comparison is under the threshold the expensive one cannot be over it,
-        // which keeps the head query off every idle poll without ever missing a stall.
         if (Duration.between(boundary.safeBefore, boundary.readAt) <= stallThreshold) return
 
         val head = entityUpdatedAtStats.lastUpdatedAt() ?: return
