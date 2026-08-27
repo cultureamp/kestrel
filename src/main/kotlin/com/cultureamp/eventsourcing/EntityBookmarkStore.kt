@@ -31,10 +31,6 @@ interface EntityBookmarkStore {
     fun checkoutBookmark(bookmarkName: String): Either<LockNotObtained, EntityBookmark>
 }
 
-/**
- * Note that bookmark locking shares a key-space with [RelationalDatabaseBookmarkStore], so an entity-bookmark and an
- * event-bookmark of the same name will lock each other out. Give them distinct names.
- */
 class RelationalDatabaseEntityBookmarkStore(
     val db: Database,
     val table: EntityBookmarks = EntityBookmarks(),
@@ -44,7 +40,7 @@ class RelationalDatabaseEntityBookmarkStore(
 
     override fun checkoutBookmark(bookmarkName: String): Either<LockNotObtained, EntityBookmark> =
         bookmarkFor(bookmarkName).let {
-            if (bookmarkLock.tryLock(it.name))
+            if (bookmarkLock.tryLock(lockNamespace + it.name))
                 Right(it)
             else
                 Left(LockNotObtained)
@@ -106,3 +102,16 @@ class EntityBookmarks(tableName: String = defaultEntityBookmarksTableName) : Tab
 data class EntityBookmark(val name: String, val position: EntityPosition?)
 
 private fun nowUtc(): LocalDateTime = LocalDateTime.now(ZoneOffset.UTC)
+
+/**
+ * Keeps entity-bookmark locks out of the event-bookmark key-space. [PGSessionAdvisoryBookmarkLock] hashes the name it
+ * is given into a `pg_try_advisory_lock` key, and advisory locks are one flat per-database space of integers with no
+ * notion of which table a bookmark lives in — so without this, an entity-bookmark and an event-bookmark sharing a name
+ * would compete for one lock. The loser would then get [LockNotObtained] on every poll for the life of the process,
+ * silently, because these locks are session-level and held until the connection closes.
+ *
+ * Only this side is namespaced. Adding a prefix to [RelationalDatabaseBookmarkStore] would change the key an already
+ * deployed event-processor computes, so during a rolling deploy the old and new instances would hold different locks
+ * and both process at once — which is the thing the lock exists to prevent.
+ */
+private const val lockNamespace = "entity:"

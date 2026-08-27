@@ -62,6 +62,20 @@ class RelationalDatabaseEntityBookmarkStoreTest : DescribeSpec({
             )
         }
 
+        it("namespaces the name it locks on, so it cannot lock out an event-bookmark of the same name") {
+            // advisory locks are one flat key-space per database, and the key is a hash of the name alone
+            val locked = mutableListOf<String>()
+            val recordingLock = object : BookmarkLock {
+                override fun tryLock(bookmark: Bookmark) = true
+                override fun tryLock(bookmarkName: String) = true.also { locked += bookmarkName }
+                override fun close() = Unit
+            }
+
+            RelationalDatabaseEntityBookmarkStore(db, store.table, recordingLock).checkoutBookmark("shared-name")
+
+            locked shouldBe listOf("entity:shared-name")
+        }
+
         it("checks out a bookmark, obtaining the lock") {
             val position = EntityPosition(baseTime, UUID.randomUUID())
             store.save("checkout-bookmark", position)

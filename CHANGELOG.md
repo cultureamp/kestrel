@@ -99,7 +99,11 @@ they fit together.
 
 Nothing existing changes behaviour. `BookmarkLock` gains a `tryLock(bookmarkName: String)` overload
 with a default implementation delegating to the existing `tryLock(bookmark: Bookmark)`, so existing
-implementations are unaffected. The new stack uses `java.time` rather than joda, so it needs
+implementations are unaffected. Entity-bookmark locks are namespaced with an `entity:` prefix, so
+they cannot collide with an event-bookmark of the same name — `pg_try_advisory_lock` keys are one
+flat space per database, hashed from the name alone. Event-bookmark keys are deliberately left
+alone, since changing them would let two instances of a deployed event-processor hold different
+locks mid-rollout. The new stack uses `java.time` rather than joda, so it needs
 `exposed-java-time` alongside the `exposed-jodatime` the event-sourcing side continues to use.
 
 Two things to know before adopting it.
