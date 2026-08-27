@@ -559,8 +559,8 @@ Each part of that prevents a specific failure:
   send a value whether you want it to or not — Exposed needs a `clientDefault` on a non-nullable column to permit a
   `batchInsert` — and an unconditional trigger is what makes that harmless. A trigger guarded with
   `WHEN (NEW.updated_at IS NULL)` would let the application's clock win.
-- **An index on `(updated_at, id)`**, which is the order rows are read in. Make it partial if you pass a `filter`, so
-  it serves the filtered read and the head query too.
+- **An index on `(updated_at, id)`**, which is the order rows are read in. If you pass a `filter`, a partial index
+  matching it serves both the read and the head query.
 
 Worth testing directly, since none of it fails loudly: that a client-supplied value is ignored, that two rows written
 in one transaction get increasing values, and that an update moves the value forward.
@@ -594,6 +594,12 @@ in one transaction get increasing values, and that an update moves the value for
   updated twice in quick succession may only be processed once, rows are seen in `updated_at` order rather than
   creation order, and deletes aren't visible at all unless they're soft deletes. Entity-processors need to be
   idempotent for the same reasons event-processors do.
+- **Don't `filter` out soft-deleted rows.** It looks like the obvious use for `filter`, and it is the one thing a
+  published projection must not do: a soft delete is the *only* way a deletion can reach a projection at all, since a
+  hard-deleted row simply stops existing. Filtering the flag out means the row stops being updated rather than being
+  reported as deleted, so a consumer keeps the last value it saw forever, with nothing anywhere recording that the row
+  went away. Read the flag in `rowToEntity` and let the processor decide what a delete means — a tombstone, usually.
+  Keep `filter` for narrowing *which* rows a processor is responsible for, such as one account or one shard.
 
 ## Resources
 

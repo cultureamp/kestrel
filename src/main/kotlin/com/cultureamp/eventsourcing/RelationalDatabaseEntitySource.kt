@@ -29,7 +29,9 @@ import java.util.UUID
  * is a `timestamp without time zone` holding UTC, read and written unconverted (see [EntityPosition]). Kestrel never
  * writes it — see the README on maintaining it, since what stamps it decides whether [SafeBoundary] can be sound.
  * @param idColumn the tiebreaker column, used to give rows sharing an updated-at value a stable total ordering.
- * @param filter an optional additional predicate, applied to both reads and the [lastUpdatedAt] head calculation.
+ * @param filter an optional additional predicate, applied to both reads and the [lastUpdatedAt] head calculation. Note
+ * that a row this excludes does not disappear from the projection, it stops being updated in it — so do not filter on a
+ * soft-delete flag if the projection publishes deletions, because a soft delete is the only way one can be seen at all.
  * @param rowToEntity maps a row to whatever the [EntityProcessor] wants to consume.
  */
 class RelationalDatabaseEntitySource<E>(

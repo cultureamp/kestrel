@@ -3,7 +3,7 @@ package com.cultureamp.eventsourcing
 import io.kotest.core.spec.style.DescribeSpec
 import io.kotest.matchers.shouldBe
 import org.jetbrains.exposed.v1.core.Op
-import org.jetbrains.exposed.v1.core.isNull
+import org.jetbrains.exposed.v1.core.eq
 import org.jetbrains.exposed.v1.jdbc.Database
 import org.jetbrains.exposed.v1.jdbc.SchemaUtils
 import org.jetbrains.exposed.v1.jdbc.insert
@@ -27,8 +27,12 @@ class RelationalDatabaseEntitySourceTest : DescribeSpec({
         rowToEntity = { it[goalRelationships.id] },
     )
 
-    fun insertGoalRelationship(updatedAt: LocalDateTime, deletedAt: LocalDateTime? = null): GoalRelationship {
-        val relationship = GoalRelationship(UUID.randomUUID(), UUID.randomUUID(), UUID.randomUUID(), accountId, baseTime, updatedAt, deletedAt)
+    fun insertGoalRelationship(
+        updatedAt: LocalDateTime,
+        deletedAt: LocalDateTime? = null,
+        inAccount: UUID = accountId,
+    ): GoalRelationship {
+        val relationship = GoalRelationship(UUID.randomUUID(), UUID.randomUUID(), UUID.randomUUID(), inAccount, baseTime, updatedAt, deletedAt)
         transaction(db) {
             goalRelationships.insert {
                 it[goalRelationships.id] = relationship.id
@@ -121,18 +125,18 @@ class RelationalDatabaseEntitySourceTest : DescribeSpec({
         }
 
         it("applies an additional filter") {
-            val live = insertGoalRelationship(baseTime.plusSeconds(1))
-            insertGoalRelationship(baseTime.plusSeconds(2), deletedAt = baseTime.plusSeconds(5))
-            val liveOnly = RelationalDatabaseEntitySource(
+            val ours = insertGoalRelationship(baseTime.plusSeconds(1))
+            insertGoalRelationship(baseTime.plusSeconds(2), inAccount = UUID.randomUUID())
+            val oneAccountOnly = RelationalDatabaseEntitySource(
                 db = db,
                 table = goalRelationships,
                 updatedAtColumn = goalRelationships.updatedAt,
                 idColumn = goalRelationships.id,
-                filter = { goalRelationships.deletedAt.isNull() },
+                filter = { goalRelationships.accountId eq accountId },
                 rowToEntity = { it[goalRelationships.id] },
             )
 
-            liveOnly.getAfter(null, distantFuture).map { it.entity } shouldBe listOf(live.id)
+            oneAccountOnly.getAfter(null, distantFuture).map { it.entity } shouldBe listOf(ours.id)
         }
     }
 
@@ -151,22 +155,22 @@ class RelationalDatabaseEntitySourceTest : DescribeSpec({
 
         it("respects the filter when finding the newest row") {
             insertGoalRelationship(baseTime.plusSeconds(1))
-            insertGoalRelationship(baseTime.plusSeconds(30), deletedAt = baseTime.plusSeconds(40))
-            val liveOnly = RelationalDatabaseEntitySource(
+            insertGoalRelationship(baseTime.plusSeconds(30), inAccount = UUID.randomUUID())
+            val oneAccountOnly = RelationalDatabaseEntitySource(
                 db = db,
                 table = goalRelationships,
                 updatedAtColumn = goalRelationships.updatedAt,
                 idColumn = goalRelationships.id,
-                filter = { goalRelationships.deletedAt.isNull() },
+                filter = { goalRelationships.accountId eq accountId },
                 rowToEntity = { it[goalRelationships.id] },
             )
 
-            liveOnly.lastUpdatedAt() shouldBe baseTime.plusSeconds(1)
+            oneAccountOnly.lastUpdatedAt() shouldBe baseTime.plusSeconds(1)
         }
     }
 
     describe("Op.TRUE default filter") {
-        it("reads everything by default") {
+        it("reads soft-deleted rows too, which is how a deletion reaches a projection at all") {
             val live = insertGoalRelationship(baseTime.plusSeconds(1))
             val deleted = insertGoalRelationship(baseTime.plusSeconds(2), deletedAt = baseTime.plusSeconds(5))
             val unfiltered = RelationalDatabaseEntitySource(
