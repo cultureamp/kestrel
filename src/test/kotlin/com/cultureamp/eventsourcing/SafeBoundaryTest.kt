@@ -4,7 +4,6 @@ import io.kotest.assertions.throwables.shouldThrow
 import io.kotest.core.spec.style.DescribeSpec
 import io.kotest.matchers.shouldBe
 import io.kotest.matchers.string.shouldContain
-import java.time.Duration
 import java.time.LocalDateTime
 
 /**
@@ -49,18 +48,9 @@ class SafeBoundaryTest : DescribeSpec({
         }
     }
 
-    describe("unsafeFixedDelay") {
-        it("holds back by the delay") {
-            val now = boundary.plusSeconds(30)
-
-            val reading = SafeBoundary.unsafeFixedDelay(Duration.ofSeconds(10)) { now }.read()
-
-            reading.safeBefore shouldBe now.minusSeconds(10)
-            reading.readAt shouldBe now
-        }
-
-        it("has no blocker diagnosis to offer") {
-            SafeBoundary.unsafeFixedDelay(Duration.ofSeconds(10)).describeBlockers() shouldContain "no blocker diagnosis"
+    describe("describeBlockers") {
+        it("says it has no diagnosis to offer, rather than implying nothing is blocking") {
+            SafeBoundary { SafeBoundaryReading(boundary, boundary) }.describeBlockers() shouldContain "no blocker diagnosis"
         }
     }
 })

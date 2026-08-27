@@ -134,7 +134,7 @@ class BatchedAsyncEntityProcessorIntegrationTest : DescribeSpec({
                 bookmarkStore = bookmarkStore,
                 bookmarkName = bookmarkName,
                 entityProcessor = EntityProcessor.from { id: UUID -> processed += id },
-                safeBoundary = SafeBoundary.unsafeFixedDelay(Duration.ofSeconds(5)) { now },
+                safeBoundary = SafeBoundary { SafeBoundaryReading(safeBefore = now.minusSeconds(5), readAt = now) },
             )
             val settled = insertGoalRelationship(baseTime.plusSeconds(1))
             val inFlight = insertGoalRelationship(baseTime.plusSeconds(9))

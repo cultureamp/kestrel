@@ -532,10 +532,9 @@ keeps growing when a processor is stuck even if nothing new is being written.
   transaction *starts*, so a transaction beginning at 12:00 and committing at 12:30 makes rows visible half an hour
   after the timestamp they carry — and a reader whose bookmark has meanwhile passed 12:00 never sees them again, with
   nothing to alert on. Pass `PostgresXactStartSafeBoundary(database)`, which never lets the reader past the start of the
-  oldest transaction that could still commit. There is no default because no one value is safe for every table:
-  `SafeBoundary.unsafeFixedDelay` is the "now minus a delay" alternative, named for the fact that it holds only while
-  every writing transaction commits inside the delay. The cost of the real boundary is that any long-running
-  transaction in the same database holds the reader up. That is reported when a poll reads nothing *and* the newest row
+  oldest transaction that could still commit. There is no default, because holding reads back by a fixed delay instead
+  is only probabilistically right — it works while every writing transaction commits inside the delay, which nothing
+  enforces. The cost of the real boundary is that any long-running transaction in the same database holds the reader up. That is reported when a poll reads nothing *and* the newest row
   in the table sits more than `stallThreshold` (an hour) beyond the boundary — both timestamps database-generated, so no
   application clock is involved. The head of the table is only queried when the boundary is old enough for that to be
   possible, which it works out from the `readAt` that comes back with every boundary reading for free. A processor still working through rows below an old boundary is not a stall and says

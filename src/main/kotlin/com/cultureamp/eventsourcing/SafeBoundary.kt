@@ -4,7 +4,6 @@ import org.jetbrains.exposed.v1.jdbc.Database
 import org.jetbrains.exposed.v1.jdbc.transactions.transaction
 import java.time.Duration
 import java.time.LocalDateTime
-import java.time.ZoneOffset
 
 /**
  * Supplies the timestamp below which an [EntitySource]'s rows are safe to read, i.e. the point past which a
@@ -14,6 +13,12 @@ import java.time.ZoneOffset
  * transaction *starts*, so a transaction beginning at 12:00 and committing at 12:30 makes its rows visible half an hour
  * after the timestamp they carry. A reader whose bookmark has meanwhile passed 12:00 — which ordinary concurrent
  * traffic will do for it — never sees those rows again, with no error and nothing to alert on.
+ *
+ * Holding reads back by a fixed delay instead — the JDBC source connector's
+ * [`timestamp.delay.interval.ms`](https://docs.confluent.io/kafka-connectors/jdbc/current/source-connector/source_config_options.html#mode)
+ * — is the tempting alternative, and is only ever probabilistically right: it holds while every transaction that writes
+ * the table commits inside the delay, which nothing enforces. Set it below your worst case and rows are dropped
+ * silently. That is the trade [PostgresXactStartSafeBoundary] exists to remove rather than to tune.
  *
  * The boundary is **exclusive**: only rows with `updated_at < safeBefore` may be read. It is compared directly against
  * the polled column, so it is a UTC [LocalDateTime] like an [EntityPosition], and an implementation reading it from a
@@ -32,24 +37,6 @@ fun interface SafeBoundary {
      */
     fun describeBlockers(): String = "no blocker diagnosis available from this SafeBoundary"
 
-    companion object {
-        /**
-         * A boundary of "now minus a fixed delay", equivalent to the JDBC source connector's
-         * [`timestamp.delay.interval.ms`](https://docs.confluent.io/kafka-connectors/jdbc/current/source-connector/source_config_options.html#mode).
-         *
-         * **Not safe against long-running transactions**, hence the name: it holds only while every transaction that
-         * writes the table commits within [delay], and nothing enforces that — set it too low and rows are dropped
-         * silently. Use it for tests, or for a database with no `pg_stat_activity` equivalent.
-         *
-         * [clock] has to read the same wall-clock that stamps the polled column, so the default reads UTC. The JVM's
-         * zone would offset the hold-back, cancelling it east of UTC and stalling reads for hours west of it.
-         *
-         * The head of a table being written to sits up to [delay] above this boundary, so a
-         * [BatchedAsyncEntityProcessor] using it wants a `stallThreshold` comfortably longer than [delay].
-         */
-        fun unsafeFixedDelay(delay: Duration, clock: () -> LocalDateTime = { LocalDateTime.now(ZoneOffset.UTC) }) =
-            SafeBoundary { clock().let { SafeBoundaryReading(safeBefore = it.minus(delay), readAt = it) } }
-    }
 }
 
 /**

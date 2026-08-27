@@ -121,7 +121,7 @@ class BatchedAsyncEntityProcessorTest : DescribeSpec({
                 listOf(old, fresh),
                 processed,
                 bookmarkStore,
-                safeBoundary = SafeBoundary.unsafeFixedDelay(Duration.ofMillis(1000)) { now },
+                safeBoundary = SafeBoundary { SafeBoundaryReading(safeBefore = now.minus(Duration.ofMillis(1000)), readAt = now) },
             )
 
             processor.processOneBatch()
