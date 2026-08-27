@@ -98,66 +98,29 @@ order and tiebroken on a `uuid` id, as the Confluent JDBC source connector does 
 they fit together.
 
 Nothing existing changes behaviour. `BookmarkLock` gains a `tryLock(bookmarkName: String)` overload
-with a default implementation delegating to the existing `tryLock(bookmark: Bookmark)`, so existing
-implementations are unaffected. Entity-bookmark locks are namespaced with an `entity:` prefix, so
-they cannot collide with an event-bookmark of the same name — `pg_try_advisory_lock` keys are one
-flat space per database, hashed from the name alone. Event-bookmark keys are deliberately left
-alone, since changing them would let two instances of a deployed event-processor hold different
-locks mid-rollout. The new stack uses `java.time` rather than joda, so it needs
-`exposed-java-time` alongside the `exposed-jodatime` the event-sourcing side continues to use.
+with a default implementation, so existing implementations are unaffected.
 
 Two things to know before adopting it.
 
-## Positions are naive timestamps holding UTC
+**Positions are naive timestamps holding UTC.** An `EntityPosition` carries a
+`java.time.LocalDateTime`, read from a `timestamp without time zone` column and carried around
+unconverted, so it means whatever the column holds — and the convention, here as in the events table,
+is that it holds UTC. Nothing in the library converts between zones. Map the column with Exposed's
+`datetime`, which needs `exposed-java-time`.
 
-An `EntityPosition` carries a `java.time.LocalDateTime`, read from a `timestamp without time zone`
-column and carried around unconverted — the same convention the events table uses for its own
-`created_at`. So a position means whatever the column holds, and the convention is that it holds UTC.
+**Reading by `updated_at` needs a `SafeBoundary`.** That column does not record commit order:
+Postgres `now()` is fixed when a transaction *starts*, so a transaction beginning at 12:00 and
+committing at 12:30 makes rows visible half an hour after the timestamp they carry, and a reader
+whose bookmark has meanwhile passed 12:00 never sees them again, with nothing to alert on.
+`BatchedAsyncEntityProcessor` therefore requires one, with no default because no single value is safe
+for every table. Pass `PostgresXactStartSafeBoundary`, which closes the race by construction from
+`pg_stat_activity` rather than probabilistically from a fixed delay.
 
-Nothing in the library converts between zones, so a column stamped in local time would be compared
-against a boundary read in UTC and the hold-back would be wrong by the offset. What the library does
-do is make its own defaults consistent: every `clock` parameter defaults to
-`LocalDateTime.now(ZoneOffset.UTC)` rather than `LocalDateTime::now`, and
-`PostgresXactStartSafeBoundary` converts with an explicit `AT TIME ZONE 'UTC'` rather than leaning on
-the session's `TimeZone`, which is connection-pool configuration a reader does not control.
+Its cost is a liveness one: any long-running transaction in the same database holds the reader up.
+Once rows have been piling up unreadable behind one for longer than `stallThreshold` (an hour by
+default), `BatchedAsyncEntityProcessor` throws `SafeBoundaryStalledException` naming the session to
+go and close — or logs it and keeps polling, if `stallBehaviour` says so.
 
-## Reading by `updated_at` needs a safe boundary
-
-That column does not record commit order. Postgres `now()` is fixed when a transaction *starts*, so a
-transaction beginning at 12:00 and committing at 12:30 makes rows visible half an hour after the
-timestamp they carry, and a reader whose bookmark has meanwhile passed 12:00 never sees those rows
-again — with no error and nothing to alert on. A fixed hold-back only makes that unlikely, and only
-while every writing transaction commits inside the delay.
-
-`BatchedAsyncEntityProcessor` therefore requires a `SafeBoundary`, and `EntitySource.getAfter` takes
-its upper bound as an exclusive `safeBefore`. There is no default, because no one value is safe for
-every table. `PostgresXactStartSafeBoundary` closes the race by construction — `min(xact_start)` from
-`pg_stat_activity`, capped at `statement_timestamp()` — so the reader never passes the start of the
-oldest transaction that could still commit, and no application clock is involved in deciding what is
-safe to read.
-
-Its cost is that any long-running transaction in the same database holds the reader up, since the
-boundary cannot tell one that will write the polled table from one that never will. That trades
-silent data loss for a visible stall: `AsyncEntityProcessorMonitor` reports it as latency, and
-`BatchedAsyncEntityProcessor` reports it directly when a poll reads nothing *and* the newest row in
-the table sits more than `stallThreshold` (an hour by default) beyond the boundary. Both of those
-timestamps come from the database — the head of the table against the oldest open transaction's
-`xact_start` — so no application clock is involved and clock skew cannot make a stall appear or
-disappear. A processor still reading rows below an old boundary is not stalled and reports nothing,
-which keeps a first run over a large table quiet while an unrelated transaction pins the boundary
-hours back.
-
-The head of the table is only queried when the boundary is old enough for a stall to be possible.
-`SafeBoundary.read()` returns both the boundary and the moment it was read — for
-`PostgresXactStartSafeBoundary` both come out of the one query, since `statement_timestamp()` is
-already the cap the boundary is computed against — and a row cannot be stamped after the boundary
-was read, so `head - safeBefore` can never exceed `readAt - safeBefore`. That makes the cheap
-comparison an exact pre-filter rather than a heuristic: at a 100ms poll interval it keeps a query
-per poll off an otherwise idle database without ever missing a stall.
-
-`stallBehaviour` decides what a stall does: `StallBehaviour.Throw`, the default, raises
-`SafeBoundaryStalledException` naming the pid and `application_name` of the sessions to go and
-close; `StallBehaviour.LogAndContinue` reports the same message to a log and keeps polling.
-
-The `SafeBoundary` KDoc carries the rest of the argument, including why the boundary must be read in
-its own transaction and why the comparison has to be strict.
+The `SafeBoundary` KDoc carries the reasoning: why the boundary must be read in its own transaction,
+why the comparison is exclusive, and why it refuses to report at all rather than report a boundary it
+cannot trust.
