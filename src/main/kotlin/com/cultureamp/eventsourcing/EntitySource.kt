@@ -47,9 +47,7 @@ data class PositionedEntity<out E>(val entity: E, val position: EntityPosition)
  * 1. Return only rows strictly after [after] in `(updatedAt, id)` order, i.e.
  *    `updated_at > after.updatedAt OR (updated_at = after.updatedAt AND id > after.id)`. A null [after] means "from
  *    the very beginning".
- * 2. Return only rows with `updated_at < safeBefore`. **Strictly** less than: the boundary a [SafeBoundary] reports is
- *    exclusive, because with `now()`-stamped timestamps the rows most needing to be excluded — those of the oldest open
- *    transaction — sit on it exactly.
+ * 2. Return only rows with `updated_at < safeBefore`. See [SafeBoundary] for more detail on why this is necessary.
  * 3. Return rows ordered ascending by `(updated_at, id)`, at most [batchSize] of them.
  *
  * A [LocalDateTime] is nanosecond-precision, so it round-trips a `timestamp` exactly and a bookmark saved from a row
@@ -67,12 +65,6 @@ interface EntitySource<out E> {
         /** Builds an [EntitySource] from a repository function that already knows how to position its rows. */
         fun <E> from(fetch: (EntityPosition?, LocalDateTime, Int) -> List<PositionedEntity<E>>) = object : EntitySource<E> {
             override fun getAfter(after: EntityPosition?, safeBefore: LocalDateTime, batchSize: Int) = fetch(after, safeBefore, batchSize)
-        }
-
-        /** Builds an [EntitySource] from plain entities, deriving each row's position via [positionOf]. */
-        fun <E> from(positionOf: (E) -> EntityPosition, fetch: (EntityPosition?, LocalDateTime, Int) -> List<E>) = object : EntitySource<E> {
-            override fun getAfter(after: EntityPosition?, safeBefore: LocalDateTime, batchSize: Int) =
-                fetch(after, safeBefore, batchSize).map { PositionedEntity(it, positionOf(it)) }
         }
     }
 }

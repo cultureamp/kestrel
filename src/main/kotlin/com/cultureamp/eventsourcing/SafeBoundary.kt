@@ -43,6 +43,9 @@ fun interface SafeBoundary {
          *
          * [clock] has to read the same wall-clock that stamps the polled column, so the default reads UTC. The JVM's
          * zone would offset the hold-back, cancelling it east of UTC and stalling reads for hours west of it.
+         *
+         * Note that this boundary sits exactly [delay] behind now at all times, so a [BatchedAsyncEntityProcessor]
+         * using it needs a `stallThreshold` longer than [delay] — otherwise every poll reports a stall.
          */
         fun unsafeFixedDelay(delay: Duration, clock: () -> LocalDateTime = { LocalDateTime.now(ZoneOffset.UTC) }) =
             SafeBoundary { clock().minus(delay) }
@@ -153,8 +156,10 @@ class PostgresXactStartSafeBoundary(
         }
     }
 
-    override fun safeBefore(): LocalDateTime {
-        val observation = transaction(db) {
+    override fun safeBefore(): LocalDateTime = observe().validated()
+
+    private fun observe(): Observation {
+        return transaction(db) {
             // A pg_stat_activity read is cached for the whole transaction — pgstat_read_current_status() returns early
             // once the snapshot is populated, and it is discarded only at transaction end. Clearing it first means
             // BOUNDARY_SQL's own read populates it, which is what the statement_timestamp() cap below relies on.
@@ -168,28 +173,35 @@ class PostgresXactStartSafeBoundary(
                 )
             }
         } ?: throw SafeBoundaryException("Reading the safe boundary produced no result")
-
-        if (observation.maxPreparedTransactions != 0) {
-            throw SafeBoundaryUnsupportedException(
-                "max_prepared_transactions is ${observation.maxPreparedTransactions}, but a prepared transaction is not " +
-                    "an ordinary backend in pg_stat_activity and so cannot be seen by this boundary. Set it to 0, or " +
-                    "position rows by commit order instead.",
-            )
-        }
-
-        if (observation.redactedBackends != 0) {
-            throw SafeBoundaryUnreliableException(
-                "${observation.redactedBackends} backend(s) attached to this database are hidden from this connection " +
-                    "in pg_stat_activity, so min(xact_start) is incomplete and rows committed by those backends could " +
-                    "be skipped silently. Grant pg_read_all_stats to this role, or run every writer under a role this " +
-                    "one is a member of.",
-            )
-        }
-
-        return observation.boundary
     }
 
-    private data class Observation(val boundary: LocalDateTime, val redactedBackends: Int, val maxPreparedTransactions: Int)
+    /**
+     * The three readings [BOUNDARY_SQL] returns. Separate from the query so that the two refusals below can be tested
+     * without a database configured to provoke them: `max_prepared_transactions` in particular is a server-level
+     * setting that cannot be changed per session.
+     */
+    internal data class Observation(val boundary: LocalDateTime, val redactedBackends: Int, val maxPreparedTransactions: Int) {
+        fun validated(): LocalDateTime {
+            if (maxPreparedTransactions != 0) {
+                throw SafeBoundaryUnsupportedException(
+                    "max_prepared_transactions is $maxPreparedTransactions, but a prepared transaction is not " +
+                        "an ordinary backend in pg_stat_activity and so cannot be seen by this boundary. Set it to 0, or " +
+                        "position rows by commit order instead.",
+                )
+            }
+
+            if (redactedBackends != 0) {
+                throw SafeBoundaryUnreliableException(
+                    "$redactedBackends backend(s) attached to this database are hidden from this connection " +
+                        "in pg_stat_activity, so min(xact_start) is incomplete and rows committed by those backends could " +
+                        "be skipped silently. Grant pg_read_all_stats to this role, or run every writer under a role this " +
+                        "one is a member of.",
+                )
+            }
+
+            return boundary
+        }
+    }
 
     private companion object {
         /**

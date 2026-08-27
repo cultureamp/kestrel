@@ -456,7 +456,7 @@ Kestrel mirrors the whole event-processor stack for that case, reading rows in `
 | `SequencedEvent`           | `PositionedEntity`                 |                                                              |
 | `EventSource`              | `EntitySource`                     | A repository call: "give me rows after this position"         |
 | `EventProcessor`           | `EntityProcessor`                  |                                                              |
-| `BookmarkStore`            | `EntityBookmarkStore`              | Bookmarks store `(last_updated_at, last_id)` instead of a sequence |
+| `BookmarkStore`            | `EntityBookmarkStore`              | Bookmarks store `(entity_last_updated_at, entity_last_id)` instead of a sequence |
 | `BatchedAsyncEventProcessor` | `BatchedAsyncEntityProcessor`    |                                                              |
 | `EventsSequenceStats`      | `EntityUpdatedAtStats`             | The head of the stream, i.e. the newest `updated_at`         |
 | `AsyncEventProcessorMonitor` | `AsyncEntityProcessorMonitor`    | Reports lag in milliseconds rather than in sequence numbers   |
@@ -535,8 +535,11 @@ keeps growing when a processor is stuck even if nothing new is being written.
   oldest transaction that could still commit. There is no default because no one value is safe for every table:
   `SafeBoundary.unsafeFixedDelay` is the "now minus a delay" alternative, named for the fact that it holds only while
   every writing transaction commits inside the delay. The cost of the real boundary is that any long-running
-  transaction in the same database holds the reader up, and after `stallThreshold` (an hour) the processor throws
-  `SafeBoundaryStalledException` naming the session to close. The `SafeBoundary` KDoc has the full argument.
+  transaction in the same database holds the reader up. Once the oldest open transaction has held the boundary back for
+  longer than `stallThreshold` (an hour), `stallBehaviour` decides what happens: `StallBehaviour.Throw`, the default,
+  raises `SafeBoundaryStalledException` naming the session to close, while `StallBehaviour.LogAndContinue` reports and
+  keeps reading — the right mode for a backfill running behind a legitimately old boundary. The `SafeBoundary` KDoc has
+  the full argument.
 - **Positions are `java.time.LocalDateTime` holding UTC, not joda `DateTime`** — the opposite of the event-sourcing
   side, which is joda throughout. A position is read straight out of a `timestamp without time zone` column (map it
   with Exposed's `datetime`) and carried unconverted, so it means whatever the column holds. Nothing here converts

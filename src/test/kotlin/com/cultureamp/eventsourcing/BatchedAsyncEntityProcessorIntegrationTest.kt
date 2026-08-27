@@ -79,6 +79,7 @@ class BatchedAsyncEntityProcessorIntegrationTest : DescribeSpec({
                 entityProcessor = EntityProcessor.from { id: UUID -> processed += id },
                 batchSize = 2,
                 safeBoundary = SafeBoundary { baseTime.plus(Duration.ofHours(1)) },
+                clock = { baseTime },
             )
             val first = insertGoalRelationship(baseTime.plusSeconds(1))
             val second = insertGoalRelationship(baseTime.plusSeconds(2))
@@ -112,6 +113,7 @@ class BatchedAsyncEntityProcessorIntegrationTest : DescribeSpec({
                 bookmarkName = bookmarkName,
                 entityProcessor = EntityProcessor.from { id: UUID -> processed += id },
                 safeBoundary = SafeBoundary { baseTime.plus(Duration.ofHours(1)) },
+                clock = { baseTime },
             )
             // 123.456ms past the second: representable in a Postgres `timestamp`, but truncated to 123ms by a
             // millisecond-precision type, which would leave the bookmark behind the row and re-select it forever
@@ -135,6 +137,7 @@ class BatchedAsyncEntityProcessorIntegrationTest : DescribeSpec({
                 bookmarkName = bookmarkName,
                 entityProcessor = EntityProcessor.from { id: UUID -> processed += id },
                 safeBoundary = SafeBoundary.unsafeFixedDelay(Duration.ofSeconds(5)) { now },
+                clock = { now },
             )
             val settled = insertGoalRelationship(baseTime.plusSeconds(1))
             val inFlight = insertGoalRelationship(baseTime.plusSeconds(9))
@@ -156,6 +159,7 @@ class BatchedAsyncEntityProcessorIntegrationTest : DescribeSpec({
                 entityProcessor = EntityProcessor.from { _: UUID -> },
                 batchSize = 1,
                 safeBoundary = SafeBoundary { baseTime.plus(Duration.ofHours(1)) },
+                clock = { baseTime },
             )
             insertGoalRelationship(baseTime.plusSeconds(1))
             insertGoalRelationship(baseTime.plusSeconds(11))

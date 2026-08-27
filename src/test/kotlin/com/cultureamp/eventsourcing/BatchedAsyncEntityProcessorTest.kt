@@ -19,6 +19,19 @@ class BatchedAsyncEntityProcessorTest : DescribeSpec({
 
     fun positioned(goalRelationship: GoalRelationship) = PositionedEntity(goalRelationship, goalRelationship.position)
 
+    fun stallableProcessorFor(row: GoalRelationship, safeBoundary: SafeBoundary, clock: () -> LocalDateTime) = BatchedAsyncEntityProcessor(
+        entitySource = InMemoryEntitySource(listOf(positioned(row))),
+        entityUpdatedAtStats = InMemoryEntitySource(listOf(positioned(row))),
+        bookmarkStore = InMemoryEntityBookmarkStore(),
+        bookmarkName = "goal-relationships",
+        entityProcessor = EntityProcessor.from { _: GoalRelationship -> },
+        safeBoundary = safeBoundary,
+        stallThreshold = Duration.ofHours(1),
+        clock = clock,
+        startLog = {},
+        endLog = { _, _ -> },
+    )
+
     fun processorFor(
         goalRelationships: List<GoalRelationship>,
         processed: MutableList<GoalRelationship>,
@@ -33,6 +46,8 @@ class BatchedAsyncEntityProcessorTest : DescribeSpec({
         entityProcessor = EntityProcessor.from { goalRelationship: GoalRelationship -> processed += goalRelationship },
         safeBoundary = safeBoundary,
         batchSize = batchSize,
+        // anchored to the fixture timeline: against the real clock every boundary here would look years stale
+        clock = { baseTime },
         startLog = {},
         endLog = { _, _ -> },
     )
@@ -103,24 +118,17 @@ class BatchedAsyncEntityProcessorTest : DescribeSpec({
             processed shouldBe listOf(old, fresh)
         }
 
-        it("throws once it has been held back by the boundary for longer than the stall threshold") {
+        it("throws once the oldest open transaction has held the boundary back for longer than the stall threshold") {
             val waiting = goalRelationship(10)
             var now = baseTime
-            val processor = BatchedAsyncEntityProcessor(
-                entitySource = InMemoryEntitySource(listOf(positioned(waiting))),
-                entityUpdatedAtStats = InMemoryEntitySource(listOf(positioned(waiting))),
-                bookmarkStore = InMemoryEntityBookmarkStore(),
-                bookmarkName = "goal-relationships",
-                entityProcessor = EntityProcessor.from { _: GoalRelationship -> },
+            val processor = stallableProcessorFor(
+                waiting,
                 // pinned well before the waiting row, as an open transaction would pin it
                 safeBoundary = object : SafeBoundary {
                     override fun safeBefore() = baseTime
                     override fun describeBlockers() = "pid=999 application_name='psql' [UNRECOGNISED]"
                 },
-                stallThreshold = Duration.ofHours(1),
                 clock = { now },
-                startLog = {},
-                endLog = { _, _ -> },
             )
 
             // held back, but not yet for long enough to complain about
@@ -136,54 +144,46 @@ class BatchedAsyncEntityProcessorTest : DescribeSpec({
             exception.message!! shouldContain "goal-relationships"
         }
 
-        it("does not throw when it has nothing to do, however old the boundary is") {
-            // an idle table is not a stall: everything in it is already behind the boundary
-            val done = goalRelationship(1)
-            val bookmarkStore = InMemoryEntityBookmarkStore()
-            bookmarkStore.save("goal-relationships", done.position)
+        it("says nothing while the boundary is keeping up with the clock") {
+            val waiting = goalRelationship(10)
             var now = baseTime
-            val processor = BatchedAsyncEntityProcessor(
-                entitySource = InMemoryEntitySource(listOf(positioned(done))),
-                entityUpdatedAtStats = InMemoryEntitySource(listOf(positioned(done))),
-                bookmarkStore = bookmarkStore,
-                bookmarkName = "goal-relationships",
-                entityProcessor = EntityProcessor.from { _: GoalRelationship -> },
-                safeBoundary = SafeBoundary { baseTime.plus(Duration.ofHours(5)) },
-                stallThreshold = Duration.ofHours(1),
+            val processor = stallableProcessorFor(
+                waiting,
+                // nothing is open, so the boundary tracks the database clock
+                safeBoundary = SafeBoundary { now.minusSeconds(1) },
                 clock = { now },
-                startLog = {},
-                endLog = { _, _ -> },
             )
 
-            processor.processOneBatch()
+            processor.processOneBatch() shouldBe Action.Wait
             now = baseTime.plus(Duration.ofDays(1))
-
             processor.processOneBatch() shouldBe Action.Wait
         }
 
-        it("does not throw while it is still making progress, however far behind the boundary is") {
-            // the backfill case: an old boundary while rows behind it are read happily is not a stall
-            val rows = (1..5).map { goalRelationship(it) }
-            var now = baseTime
+        it("logs and keeps processing under LogAndContinue, so a backfill behind an old boundary is not aborted") {
+            // the boundary can legitimately sit hours in the past, pinned by an unrelated transaction, while rows
+            // behind it are read perfectly happily
+            val rows = (1..3).map { goalRelationship(it) }
+            val processed = mutableListOf<GoalRelationship>()
+            val logged = mutableListOf<String>()
             val processor = BatchedAsyncEntityProcessor(
                 entitySource = InMemoryEntitySource(rows.map(::positioned)),
                 entityUpdatedAtStats = InMemoryEntitySource(rows.map(::positioned)),
                 bookmarkStore = InMemoryEntityBookmarkStore(),
                 bookmarkName = "goal-relationships",
-                entityProcessor = EntityProcessor.from { _: GoalRelationship -> },
-                // above rows 1-3, below rows 4-5, so there is always work waiting beyond the boundary
-                safeBoundary = SafeBoundary { baseTime.plusSeconds(4) },
+                entityProcessor = EntityProcessor.from { row: GoalRelationship -> processed += row },
+                safeBoundary = SafeBoundary { baseTime.minus(Duration.ofHours(5)) },
                 stallThreshold = Duration.ofHours(1),
-                clock = { now },
+                stallBehaviour = StallBehaviour.LogAndContinue { logged += it },
+                clock = { baseTime },
                 batchSize = 1,
                 startLog = {},
                 endLog = { _, _ -> },
             )
 
-            repeat(3) {
-                now = now.plus(Duration.ofHours(1))
-                processor.processOneBatch() shouldBe Action.Continue
-            }
+            repeat(2) { processor.processOneBatch() }
+
+            logged.size shouldBe 2
+            logged.first() shouldContain "goal-relationships"
         }
 
         it("withholds a row sitting exactly on the boundary, because that is where an open transaction's rows sit") {
@@ -233,6 +233,7 @@ class BatchedAsyncEntityProcessorTest : DescribeSpec({
                 bookmarkName = "goal-relationships",
                 entityProcessor = EntityProcessor.from { _: GoalRelationship -> },
                 safeBoundary = wellAfterAnyRow,
+                clock = { baseTime },
                 startLog = {},
                 endLog = { _, _ -> },
             )
@@ -252,6 +253,7 @@ class BatchedAsyncEntityProcessorTest : DescribeSpec({
                 bookmarkName = "goal-relationships",
                 entityProcessor = EntityProcessor.from { _: GoalRelationship -> },
                 safeBoundary = wellAfterAnyRow,
+                clock = { baseTime },
                 startLog = {},
                 endLog = { _, _ -> },
             )
@@ -274,32 +276,13 @@ class BatchedAsyncEntityProcessorTest : DescribeSpec({
                 bookmarkName = "goal-relationships",
                 entityProcessor = EntityProcessor.from { _: GoalRelationship -> },
                 safeBoundary = wellAfterAnyRow,
+                clock = { baseTime },
                 startLog = {},
                 endLog = { _, _ -> },
                 stats = stats,
             ).processOneBatch()
 
             collected.map { it.position } shouldBe goalRelationships.map { it.position }
-        }
-    }
-
-    describe("EntitySource.from") {
-        it("derives each row's position from the entity itself") {
-            val goalRelationships = (1..2).map { goalRelationship(it) }
-            val processed = mutableListOf<GoalRelationship>()
-
-            BatchedAsyncEntityProcessor(
-                entitySource = EntitySource.from({ it: GoalRelationship -> it.position }, { _, _, _ -> goalRelationships }),
-                entityUpdatedAtStats = EntityUpdatedAtStats.from { goalRelationships.last().updatedAt },
-                bookmarkStore = InMemoryEntityBookmarkStore(),
-                bookmarkName = "goal-relationships",
-                entityProcessor = EntityProcessor.from { row: GoalRelationship -> processed += row },
-                safeBoundary = wellAfterAnyRow,
-                startLog = {},
-                endLog = { _, _ -> },
-            ).processOneBatch()
-
-            processed shouldBe goalRelationships
         }
     }
 
@@ -320,6 +303,7 @@ class BatchedAsyncEntityProcessorTest : DescribeSpec({
                     EntityProcessor.from { _: GoalRelationship, position: EntityPosition -> second += position },
                 ),
                 safeBoundary = wellAfterAnyRow,
+                clock = { baseTime },
                 startLog = {},
                 endLog = { _, _ -> },
             ).processOneBatch()

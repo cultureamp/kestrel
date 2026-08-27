@@ -134,7 +134,13 @@ safe to read.
 
 Its cost is that any long-running transaction in the same database holds the reader up, since the
 boundary cannot tell one that will write the polled table from one that never will. That trades
-silent data loss for a visible stall: `AsyncEntityProcessorMonitor` reports it as latency, and after
-`stallThreshold` (an hour by default) the processor throws `SafeBoundaryStalledException` naming the
-session to go and close. The `SafeBoundary` KDoc carries the rest of the argument, including why the
-boundary must be read in its own transaction and why the comparison has to be strict.
+silent data loss for a visible stall: `AsyncEntityProcessorMonitor` reports it as latency, and once
+the oldest open transaction has held the boundary back for longer than `stallThreshold` (an hour by
+default) `stallBehaviour` decides what happens. `StallBehaviour.Throw`, the default, raises
+`SafeBoundaryStalledException` naming the pid and `application_name` of the sessions to go and
+close; `StallBehaviour.LogAndContinue` reports the same message and carries on reading, which is
+what a backfill behind a legitimately old boundary wants. Either way the report comes after the
+batch has been processed and bookmarked, so it never costs progress that was available.
+
+The `SafeBoundary` KDoc carries the rest of the argument, including why the boundary must be read in
+its own transaction and why the comparison has to be strict.

@@ -46,8 +46,6 @@ class RelationalDatabaseEntitySource<E>(
         } else {
             Op.TRUE
         }
-        // Strictly less than, never `<=`: every row of the oldest open transaction sits at exactly its xact_start,
-        // which is exactly the boundary, so `<=` would admit the whole transaction the boundary exists to exclude.
         val predicate = afterPosition and (updatedAtColumn less safeBefore) and filter()
         return transaction(db) {
             table

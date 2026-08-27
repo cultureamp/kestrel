@@ -23,11 +23,6 @@ interface EntityBookmarkStore {
     fun bookmarkFor(bookmarkName: String): EntityBookmark
     fun bookmarksFor(bookmarkNames: Set<String>): Set<EntityBookmark>
 
-    /**
-     * Records progress for a bookmark. Takes a position rather than an [EntityBookmark] because a stored bookmark
-     * always sits on a row it has processed: "nothing processed yet" is the absence of a bookmark, so there is nothing
-     * to save.
-     */
     fun save(bookmarkName: String, position: EntityPosition)
 
     /**
@@ -66,16 +61,16 @@ class RelationalDatabaseEntityBookmarkStore(
         if (!isExists(bookmarkName)) {
             table.insert {
                 it[name] = bookmarkName
-                it[lastUpdatedAt] = position.updatedAt
-                it[lastId] = position.id
-                it[createdAt] = nowUtc()
-                it[updatedAt] = nowUtc()
+                it[entityLastUpdatedAt] = position.updatedAt
+                it[entityLastId] = position.id
+                it[bookmarkCreatedAt] = nowUtc()
+                it[bookmarkUpdatedAt] = nowUtc()
             }
         } else {
             table.update({ table.name eq bookmarkName }) {
-                it[lastUpdatedAt] = position.updatedAt
-                it[lastId] = position.id
-                it[updatedAt] = nowUtc()
+                it[entityLastUpdatedAt] = position.updatedAt
+                it[entityLastId] = position.id
+                it[bookmarkUpdatedAt] = nowUtc()
             }
         }
     }
@@ -86,7 +81,7 @@ class RelationalDatabaseEntityBookmarkStore(
         }
     }
 
-    private fun ResultRow.toPosition() = EntityPosition(this[table.lastUpdatedAt], this[table.lastId])
+    private fun ResultRow.toPosition() = EntityPosition(this[table.entityLastUpdatedAt], this[table.entityLastId])
 
     private fun rowsForBookmarks(bookmarkNames: Set<String>) = table.selectAll().where { table.name.inList(bookmarkNames) }
     private fun isExists(bookmarkName: String) = !rowsForBookmarks(setOf(bookmarkName)).empty()
@@ -96,10 +91,10 @@ class EntityBookmarks(tableName: String = defaultEntityBookmarksTableName) : Tab
     val name = varchar("name", 160)
 
     /** Naive, like the source column a position is read from, so a position is stored exactly as it was read. */
-    val lastUpdatedAt = datetime("last_updated_at")
-    val lastId = javaUUID("last_id")
-    val createdAt = datetime("created_at")
-    val updatedAt = datetime("updated_at")
+    val entityLastUpdatedAt = datetime("entity_last_updated_at")
+    val entityLastId = javaUUID("entity_last_id")
+    val bookmarkCreatedAt = datetime("bookmark_created_at")
+    val bookmarkUpdatedAt = datetime("bookmark_updated_at")
     override val primaryKey = PrimaryKey(name)
 }
 

@@ -40,14 +40,13 @@ interface AsyncEntityProcessor<E> : BookmarkedEntityProcessor<E> {
  * ```
  *
  * @param safeBoundary the timestamp below which rows are safe to read, which is what stops a slow transaction's rows
- * committing behind the bookmark and being skipped forever. [SafeBoundary] explains why an `updated_at` column needs
- * one at all; [PostgresXactStartSafeBoundary] is the implementation to use on Postgres. There is no default because no
- * one value is safe for every table.
- * @param stallThreshold how long the [safeBoundary] may hold this processor back before it throws
- * [SafeBoundaryStalledException] into the caller's [ExponentialBackoff] `onFailure`, and so into error tracking rather
- * than onto a graph nobody is watching. Null disables the check.
- * @param clock used only to measure how long a stall has lasted, never to decide which rows are read — the boundary is
- * database-generated so that no application clock can affect correctness. Reads UTC, like every clock in this API.
+ * committing behind the bookmark and being skipped forever.
+ * @param stallThreshold how long the oldest open transaction may hold the boundary back before [stallBehaviour] is
+ * invoked. Null disables the check.
+ * @param stallBehaviour whether a stall throws or is logged; see [StallBehaviour]. Either way the report comes after
+ * the batch has been processed and bookmarked, so it never costs progress that was available.
+ * @param clock used only to size a stall, never to decide which rows are read — the boundary is database-generated so
+ * that no application clock can affect correctness. Reads UTC, like every clock in this API.
  */
 class BatchedAsyncEntityProcessor<E>(
     override val entitySource: EntitySource<E>,
@@ -58,6 +57,7 @@ class BatchedAsyncEntityProcessor<E>(
     private val safeBoundary: SafeBoundary,
     private val batchSize: Int = 1000,
     private val stallThreshold: Duration? = Duration.ofHours(1),
+    private val stallBehaviour: StallBehaviour = StallBehaviour.Throw,
     private val clock: () -> LocalDateTime = { LocalDateTime.now(ZoneOffset.UTC) },
     private val startLog: (EntityBookmark) -> Unit = { bookmark ->
         System.out.println("Polling for entities for ${bookmark.name} from position ${bookmark.position}")
@@ -81,8 +81,7 @@ class BatchedAsyncEntityProcessor<E>(
 
         startLog(startBookmark)
 
-        // Read the boundary before the rows, in its own transaction, so a row committing in between is excluded rather
-        // than skipped. SafeBoundary has the argument, including why merging the two reads is not safe.
+        // Read the boundary before the rows, in its own transaction, so a row committing in between is excluded rather than skipped
         val safeBefore = safeBoundary.safeBefore()
 
         val (count, finalBookmark) = entitySource.getAfter(startBookmark.position, safeBefore, batchSize).foldIndexed(
@@ -96,42 +95,33 @@ class BatchedAsyncEntityProcessor<E>(
 
         endLog(count, finalBookmark)
 
-        if (count > 0) heldBackSince = null else failIfHeldBackTooLong(safeBefore)
+        reportIfStalled(safeBefore)
 
         return if (count >= batchSize) Action.Continue else Action.Wait
     }
 
-    /** When this processor was first observed making no progress *because of* the boundary. Null when it is not. */
-    private var heldBackSince: LocalDateTime? = null
-
     /**
-     * Tells "held back by the boundary" from "caught up", which is the whole difficulty here. Staleness of the boundary
-     * cannot be the signal: during a first run over a large table it may sit hours in the past, pinned by an unrelated
-     * transaction, while the processor works through millions of rows perfectly happily — throwing there would abort
-     * the backfill. What discriminates is the head of the table against the boundary. Reading nothing while the newest
-     * row sits at or beyond it means there is work the boundary forbids; reading nothing while the newest row is behind
-     * it means there is nothing to do. Only continuously, too: any batch with rows in it clears the timer.
+     * The boundary *is* the start time of the oldest open transaction, or the database's own clock when nothing is
+     * open, so how long that transaction has been holding rows back is just the gap between the boundary and now. No
+     * state to keep and no extra query.
+     *
+     * This is the one place an application clock meets a database timestamp, which the row-reading path deliberately
+     * never does. It only sizes a stall against an hour-scale threshold, where seconds of skew do not matter.
      */
-    private fun failIfHeldBackTooLong(safeBefore: LocalDateTime) {
-        val head = entityUpdatedAtStats.lastUpdatedAt()
-        if (head == null || head < safeBefore) {
-            // caught up: everything in the table is already behind the boundary
-            heldBackSince = null
-            return
-        }
+    private fun reportIfStalled(safeBefore: LocalDateTime) {
+        if (stallThreshold == null) return
+        val heldBackFor = Duration.between(safeBefore, clock())
+        if (heldBackFor <= stallThreshold) return
 
-        val now = clock()
-        val since = heldBackSince ?: now.also { heldBackSince = it }
-        val heldBackFor = Duration.between(since, now)
+        val message = "$bookmarkName's safe boundary is $heldBackFor behind now, which is longer than the " +
+            "$stallThreshold threshold, because the oldest open transaction in this database has been open at least " +
+            "that long. Rows at or after the boundary of $safeBefore cannot be read until it ends. Nothing is lost " +
+            "and this recovers on its own once that happens, so the fix is to end that transaction. " +
+            safeBoundary.describeBlockers()
 
-        if (stallThreshold != null && heldBackFor > stallThreshold) {
-            throw SafeBoundaryStalledException(
-                "$bookmarkName has been held back by its safe boundary for $heldBackFor, which is longer than the " +
-                    "$stallThreshold threshold. Rows are waiting ($head is at or beyond the boundary of $safeBefore) " +
-                    "but cannot be read until the oldest open transaction ends. Nothing is lost and this recovers on " +
-                    "its own once that happens, so the fix is to end that transaction. " +
-                    safeBoundary.describeBlockers(),
-            )
+        when (stallBehaviour) {
+            is StallBehaviour.Throw -> throw SafeBoundaryStalledException(message)
+            is StallBehaviour.LogAndContinue -> stallBehaviour.log(message)
         }
     }
 
@@ -163,6 +153,26 @@ class BatchedAsyncEntityProcessor<E>(
             stats.entityProcessed(this, positionedEntity, System.currentTimeMillis() - startTime)
         } ?: entityProcessor.process(positionedEntity.entity, positionedEntity.position)
     }
+}
+
+/**
+ * What a [BatchedAsyncEntityProcessor] does once its `safeBoundary` has been holding rows back for longer than its
+ * `stallThreshold`. Both modes report the same message, which names the sessions to go and close.
+ */
+sealed interface StallBehaviour {
+    /**
+     * Throw [SafeBoundaryStalledException], so the caller's [ExponentialBackoff] `onFailure` puts it in front of
+     * somebody with a stacktrace. The default: a processor publishing nothing for hours is the problem the boundary
+     * exists to remove, and it should not be left to be noticed on a graph.
+     */
+    object Throw : StallBehaviour
+
+    /**
+     * Report and carry on. The mode for a first run over a large table, where the boundary can legitimately sit hours
+     * in the past — pinned by an unrelated transaction — while millions of rows behind it are read perfectly happily,
+     * and an error every poll would be noise rather than news.
+     */
+    data class LogAndContinue(val log: (String) -> Unit) : StallBehaviour
 }
 
 open class EntitySourceException(message: String) : RuntimeException(message)

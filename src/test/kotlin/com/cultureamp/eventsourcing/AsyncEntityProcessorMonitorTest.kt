@@ -27,6 +27,7 @@ class AsyncEntityProcessorMonitorTest : DescribeSpec({
             entityProcessor = EntityProcessor.from { _: GoalRelationship -> },
             safeBoundary = SafeBoundary { baseTime.plus(Duration.ofHours(1)) },
             batchSize = batchSize,
+            clock = { baseTime },
             startLog = {},
             endLog = { _, _ -> },
         )
