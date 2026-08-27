@@ -19,15 +19,23 @@ class BatchedAsyncEntityProcessorTest : DescribeSpec({
 
     fun positioned(goalRelationship: GoalRelationship) = PositionedEntity(goalRelationship, goalRelationship.position)
 
-    fun stallableProcessorFor(row: GoalRelationship, safeBoundary: SafeBoundary, clock: () -> LocalDateTime) = BatchedAsyncEntityProcessor(
-        entitySource = InMemoryEntitySource(listOf(positioned(row))),
-        entityUpdatedAtStats = InMemoryEntitySource(listOf(positioned(row))),
-        bookmarkStore = InMemoryEntityBookmarkStore(),
+    fun stallableProcessorFor(
+        rows: List<GoalRelationship>,
+        safeBoundary: SafeBoundary,
+        bookmarkStore: EntityBookmarkStore = InMemoryEntityBookmarkStore(),
+        stallBehaviour: StallBehaviour = StallBehaviour.Throw,
+        batchSize: Int = 1000,
+        processed: MutableList<GoalRelationship> = mutableListOf(),
+    ) = BatchedAsyncEntityProcessor(
+        entitySource = InMemoryEntitySource(rows.map(::positioned)),
+        entityUpdatedAtStats = InMemoryEntitySource(rows.map(::positioned)),
+        bookmarkStore = bookmarkStore,
         bookmarkName = "goal-relationships",
-        entityProcessor = EntityProcessor.from { _: GoalRelationship -> },
+        entityProcessor = EntityProcessor.from { row: GoalRelationship -> processed += row },
         safeBoundary = safeBoundary,
         stallThreshold = Duration.ofHours(1),
-        clock = clock,
+        stallBehaviour = stallBehaviour,
+        batchSize = batchSize,
         startLog = {},
         endLog = { _, _ -> },
     )
@@ -46,8 +54,6 @@ class BatchedAsyncEntityProcessorTest : DescribeSpec({
         entityProcessor = EntityProcessor.from { goalRelationship: GoalRelationship -> processed += goalRelationship },
         safeBoundary = safeBoundary,
         batchSize = batchSize,
-        // anchored to the fixture timeline: against the real clock every boundary here would look years stale
-        clock = { baseTime },
         startLog = {},
         endLog = { _, _ -> },
     )
@@ -118,25 +124,17 @@ class BatchedAsyncEntityProcessorTest : DescribeSpec({
             processed shouldBe listOf(old, fresh)
         }
 
-        it("throws once the oldest open transaction has held the boundary back for longer than the stall threshold") {
-            val waiting = goalRelationship(10)
-            var now = baseTime
+        it("throws once the rows it cannot read span more than the stall threshold") {
+            // the boundary pinned at baseTime, as an open transaction started then would pin it, with two hours of
+            // writes stacked up above it
             val processor = stallableProcessorFor(
-                waiting,
-                // pinned well before the waiting row, as an open transaction would pin it
+                listOf(goalRelationship(secondsAfterBase = 2 * 60 * 60)),
                 safeBoundary = object : SafeBoundary {
                     override fun safeBefore() = baseTime
                     override fun describeBlockers() = "pid=999 application_name='psql' [UNRECOGNISED]"
                 },
-                clock = { now },
             )
 
-            // held back, but not yet for long enough to complain about
-            processor.processOneBatch() shouldBe Action.Wait
-            now = baseTime.plus(Duration.ofMinutes(59))
-            processor.processOneBatch() shouldBe Action.Wait
-
-            now = baseTime.plus(Duration.ofMinutes(61))
             val exception = shouldThrow<SafeBoundaryStalledException> { processor.processOneBatch() }
 
             // the report has to name the session to go and close, or it just says "publishing is behind"
@@ -144,46 +142,67 @@ class BatchedAsyncEntityProcessorTest : DescribeSpec({
             exception.message!! shouldContain "goal-relationships"
         }
 
-        it("says nothing while the boundary is keeping up with the clock") {
-            val waiting = goalRelationship(10)
-            var now = baseTime
+        it("says nothing while the rows it cannot read span less than the stall threshold") {
             val processor = stallableProcessorFor(
-                waiting,
-                // nothing is open, so the boundary tracks the database clock
-                safeBoundary = SafeBoundary { now.minusSeconds(1) },
-                clock = { now },
+                listOf(goalRelationship(secondsAfterBase = 59 * 60)),
+                safeBoundary = SafeBoundary { baseTime },
             )
 
-            processor.processOneBatch() shouldBe Action.Wait
-            now = baseTime.plus(Duration.ofDays(1))
             processor.processOneBatch() shouldBe Action.Wait
         }
 
-        it("logs and keeps processing under LogAndContinue, so a backfill behind an old boundary is not aborted") {
-            // the boundary can legitimately sit hours in the past, pinned by an unrelated transaction, while rows
-            // behind it are read perfectly happily
-            val rows = (1..3).map { goalRelationship(it) }
-            val processed = mutableListOf<GoalRelationship>()
-            val logged = mutableListOf<String>()
-            val processor = BatchedAsyncEntityProcessor(
-                entitySource = InMemoryEntitySource(rows.map(::positioned)),
-                entityUpdatedAtStats = InMemoryEntitySource(rows.map(::positioned)),
-                bookmarkStore = InMemoryEntityBookmarkStore(),
-                bookmarkName = "goal-relationships",
-                entityProcessor = EntityProcessor.from { row: GoalRelationship -> processed += row },
-                safeBoundary = SafeBoundary { baseTime.minus(Duration.ofHours(5)) },
-                stallThreshold = Duration.ofHours(1),
-                stallBehaviour = StallBehaviour.LogAndContinue { logged += it },
-                clock = { baseTime },
-                batchSize = 1,
-                startLog = {},
-                endLog = { _, _ -> },
+        it("says nothing when it has nothing to do, however far behind the boundary is") {
+            // an idle table is not a stall: its newest row is behind the boundary, so nothing is being forbidden
+            val done = goalRelationship(1)
+            val bookmarkStore = InMemoryEntityBookmarkStore()
+            bookmarkStore.save("goal-relationships", done.position)
+            val processor = stallableProcessorFor(
+                listOf(done),
+                safeBoundary = SafeBoundary { baseTime.plus(Duration.ofHours(5)) },
+                bookmarkStore = bookmarkStore,
             )
 
-            repeat(2) { processor.processOneBatch() }
+            processor.processOneBatch() shouldBe Action.Wait
+        }
 
-            logged.size shouldBe 2
-            logged.first() shouldContain "goal-relationships"
+        it("says nothing while it is still making progress, however far the head is beyond the boundary") {
+            // the backfill case: rows readable below a boundary an unrelated transaction has pinned hours back. The
+            // state is otherwise identical to a stall, so what discriminates is only whether a batch read anything.
+            val readable = (1..3).map { goalRelationship(it) }
+            val blocked = goalRelationship(secondsAfterBase = 3 * 60 * 60)
+            val processor = stallableProcessorFor(
+                readable + blocked,
+                safeBoundary = SafeBoundary { baseTime.plusSeconds(4) },
+                batchSize = 1,
+            )
+
+            repeat(3) { processor.processOneBatch() shouldBe Action.Continue }
+
+            // and now that there is nothing left below the boundary, the same state does report
+            shouldThrow<SafeBoundaryStalledException> { processor.processOneBatch() }
+        }
+
+        it("logs instead of throwing under LogAndContinue, and picks the rows up once the boundary passes them") {
+            val waiting = goalRelationship(secondsAfterBase = 2 * 60 * 60)
+            val logged = mutableListOf<String>()
+            val processed = mutableListOf<GoalRelationship>()
+            var boundary = baseTime
+            val processor = stallableProcessorFor(
+                listOf(waiting),
+                safeBoundary = SafeBoundary { boundary },
+                stallBehaviour = StallBehaviour.LogAndContinue { logged += it },
+                processed = processed,
+            )
+
+            processor.processOneBatch() shouldBe Action.Wait
+            logged.size shouldBe 1
+            logged.single() shouldContain "goal-relationships"
+
+            boundary = waiting.updatedAt.plusSeconds(1)
+            processor.processOneBatch() shouldBe Action.Wait
+
+            processed shouldBe listOf(waiting)
+            logged.size shouldBe 1
         }
 
         it("withholds a row sitting exactly on the boundary, because that is where an open transaction's rows sit") {
@@ -233,7 +252,6 @@ class BatchedAsyncEntityProcessorTest : DescribeSpec({
                 bookmarkName = "goal-relationships",
                 entityProcessor = EntityProcessor.from { _: GoalRelationship -> },
                 safeBoundary = wellAfterAnyRow,
-                clock = { baseTime },
                 startLog = {},
                 endLog = { _, _ -> },
             )
@@ -253,7 +271,6 @@ class BatchedAsyncEntityProcessorTest : DescribeSpec({
                 bookmarkName = "goal-relationships",
                 entityProcessor = EntityProcessor.from { _: GoalRelationship -> },
                 safeBoundary = wellAfterAnyRow,
-                clock = { baseTime },
                 startLog = {},
                 endLog = { _, _ -> },
             )
@@ -276,7 +293,6 @@ class BatchedAsyncEntityProcessorTest : DescribeSpec({
                 bookmarkName = "goal-relationships",
                 entityProcessor = EntityProcessor.from { _: GoalRelationship -> },
                 safeBoundary = wellAfterAnyRow,
-                clock = { baseTime },
                 startLog = {},
                 endLog = { _, _ -> },
                 stats = stats,
@@ -303,7 +319,6 @@ class BatchedAsyncEntityProcessorTest : DescribeSpec({
                     EntityProcessor.from { _: GoalRelationship, position: EntityPosition -> second += position },
                 ),
                 safeBoundary = wellAfterAnyRow,
-                clock = { baseTime },
                 startLog = {},
                 endLog = { _, _ -> },
             ).processOneBatch()

@@ -44,8 +44,8 @@ fun interface SafeBoundary {
          * [clock] has to read the same wall-clock that stamps the polled column, so the default reads UTC. The JVM's
          * zone would offset the hold-back, cancelling it east of UTC and stalling reads for hours west of it.
          *
-         * Note that this boundary sits exactly [delay] behind now at all times, so a [BatchedAsyncEntityProcessor]
-         * using it needs a `stallThreshold` longer than [delay] — otherwise every poll reports a stall.
+         * The head of a table being written to sits up to [delay] above this boundary, so a
+         * [BatchedAsyncEntityProcessor] using it wants a `stallThreshold` comfortably longer than [delay].
          */
         fun unsafeFixedDelay(delay: Duration, clock: () -> LocalDateTime = { LocalDateTime.now(ZoneOffset.UTC) }) =
             SafeBoundary { clock().minus(delay) }

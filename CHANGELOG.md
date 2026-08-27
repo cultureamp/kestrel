@@ -134,13 +134,18 @@ safe to read.
 
 Its cost is that any long-running transaction in the same database holds the reader up, since the
 boundary cannot tell one that will write the polled table from one that never will. That trades
-silent data loss for a visible stall: `AsyncEntityProcessorMonitor` reports it as latency, and once
-the oldest open transaction has held the boundary back for longer than `stallThreshold` (an hour by
-default) `stallBehaviour` decides what happens. `StallBehaviour.Throw`, the default, raises
+silent data loss for a visible stall: `AsyncEntityProcessorMonitor` reports it as latency, and
+`BatchedAsyncEntityProcessor` reports it directly when a poll reads nothing *and* the newest row in
+the table sits more than `stallThreshold` (an hour by default) beyond the boundary. Both of those
+timestamps come from the database — the head of the table against the oldest open transaction's
+`xact_start` — so no application clock is involved and clock skew cannot make a stall appear or
+disappear. A processor still reading rows below an old boundary is not stalled and reports nothing,
+which keeps a first run over a large table quiet while an unrelated transaction pins the boundary
+hours back.
+
+`stallBehaviour` decides what a stall does: `StallBehaviour.Throw`, the default, raises
 `SafeBoundaryStalledException` naming the pid and `application_name` of the sessions to go and
-close; `StallBehaviour.LogAndContinue` reports the same message and carries on reading, which is
-what a backfill behind a legitimately old boundary wants. Either way the report comes after the
-batch has been processed and bookmarked, so it never costs progress that was available.
+close; `StallBehaviour.LogAndContinue` reports the same message to a log and keeps polling.
 
 The `SafeBoundary` KDoc carries the rest of the argument, including why the boundary must be read in
 its own transaction and why the comparison has to be strict.
