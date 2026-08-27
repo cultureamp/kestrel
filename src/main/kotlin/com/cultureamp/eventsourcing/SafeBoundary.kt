@@ -14,12 +14,6 @@ import java.time.LocalDateTime
  * after the timestamp they carry. A reader whose bookmark has meanwhile passed 12:00 — which ordinary concurrent
  * traffic will do for it — never sees those rows again, with no error and nothing to alert on.
  *
- * Holding reads back by a fixed delay instead — the JDBC source connector's
- * [`timestamp.delay.interval.ms`](https://docs.confluent.io/kafka-connectors/jdbc/current/source-connector/source_config_options.html#mode)
- * — is the tempting alternative, and is only ever probabilistically right: it holds while every transaction that writes
- * the table commits inside the delay, which nothing enforces. Set it below your worst case and rows are dropped
- * silently. That is the trade [PostgresXactStartSafeBoundary] exists to remove rather than to tune.
- *
  * The boundary is **exclusive**: only rows with `updated_at < safeBefore` may be read. It is compared directly against
  * the polled column, so it is a UTC [LocalDateTime] like an [EntityPosition], and an implementation reading it from a
  * database must convert explicitly rather than relying on the session time-zone.

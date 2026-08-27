@@ -114,7 +114,7 @@ committing at 12:30 makes rows visible half an hour after the timestamp they car
 whose bookmark has meanwhile passed 12:00 never sees them again, with nothing to alert on.
 `BatchedAsyncEntityProcessor` therefore requires one, with no default because no single value is safe
 for every table. Pass `PostgresXactStartSafeBoundary`, which closes the race by construction from
-`pg_stat_activity` rather than probabilistically from a fixed delay.
+`pg_stat_activity`, with nothing to tune.
 
 Its cost is a liveness one: any long-running transaction in the same database holds the reader up.
 Once rows have been piling up unreadable behind one for longer than `stallThreshold` (an hour by
