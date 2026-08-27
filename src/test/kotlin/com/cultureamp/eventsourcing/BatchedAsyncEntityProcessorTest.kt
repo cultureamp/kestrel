@@ -11,7 +11,15 @@ import java.util.UUID
 
 class BatchedAsyncEntityProcessorTest : DescribeSpec({
     val baseTime = LocalDateTime.of(2026, 8, 10, 9, 0, 0, 0)
-    val wellAfterAnyRow = SafeBoundary { baseTime.plus(Duration.ofHours(1)) }
+    /**
+     * A boundary pinned at [safeBefore] and read at [readAt]. The gap between them is how long the boundary has been
+     * held back, which is what the processor pre-filters a stall check on, so a spec that wants a stall has to say the
+     * boundary was read well after it was pinned.
+     */
+    fun boundaryOf(safeBefore: LocalDateTime, readAt: LocalDateTime = safeBefore) =
+        SafeBoundary { SafeBoundaryReading(safeBefore, readAt) }
+
+    val wellAfterAnyRow = boundaryOf(baseTime.plus(Duration.ofHours(1)))
     val accountId = UUID.randomUUID()
 
     fun goalRelationship(secondsAfterBase: Int, id: UUID = UUID.randomUUID()) =
@@ -130,7 +138,7 @@ class BatchedAsyncEntityProcessorTest : DescribeSpec({
             val processor = stallableProcessorFor(
                 listOf(goalRelationship(secondsAfterBase = 2 * 60 * 60)),
                 safeBoundary = object : SafeBoundary {
-                    override fun safeBefore() = baseTime
+                    override fun read() = SafeBoundaryReading(safeBefore = baseTime, readAt = baseTime.plusSeconds(3 * 60 * 60))
                     override fun describeBlockers() = "pid=999 application_name='psql' [UNRECOGNISED]"
                 },
             )
@@ -142,10 +150,32 @@ class BatchedAsyncEntityProcessorTest : DescribeSpec({
             exception.message!! shouldContain "goal-relationships"
         }
 
+        it("does not query the head of the table while the boundary is too fresh for a stall to be possible") {
+            // the pre-filter: a row cannot be stamped after the boundary was read, so a boundary read moments after it
+            // was pinned cannot have a threshold's worth of writes above it, whatever the table contains
+            var headReads = 0
+            val waiting = goalRelationship(secondsAfterBase = 2 * 60 * 60)
+            val processor = BatchedAsyncEntityProcessor(
+                entitySource = InMemoryEntitySource(listOf(positioned(waiting))),
+                entityUpdatedAtStats = EntityUpdatedAtStats.from { headReads++; waiting.updatedAt },
+                bookmarkStore = InMemoryEntityBookmarkStore(),
+                bookmarkName = "goal-relationships",
+                entityProcessor = EntityProcessor.from { _: GoalRelationship -> },
+                safeBoundary = boundaryOf(baseTime, readAt = baseTime.plusSeconds(1)),
+                stallThreshold = Duration.ofHours(1),
+                startLog = {},
+                endLog = { _, _ -> },
+            )
+
+            processor.processOneBatch() shouldBe Action.Wait
+
+            headReads shouldBe 0
+        }
+
         it("says nothing while the rows it cannot read span less than the stall threshold") {
             val processor = stallableProcessorFor(
                 listOf(goalRelationship(secondsAfterBase = 59 * 60)),
-                safeBoundary = SafeBoundary { baseTime },
+                safeBoundary = boundaryOf(baseTime, readAt = baseTime.plusSeconds(3 * 60 * 60)),
             )
 
             processor.processOneBatch() shouldBe Action.Wait
@@ -158,7 +188,7 @@ class BatchedAsyncEntityProcessorTest : DescribeSpec({
             bookmarkStore.save("goal-relationships", done.position)
             val processor = stallableProcessorFor(
                 listOf(done),
-                safeBoundary = SafeBoundary { baseTime.plus(Duration.ofHours(5)) },
+                safeBoundary = boundaryOf(baseTime.plus(Duration.ofHours(5)), readAt = baseTime.plus(Duration.ofHours(11))),
                 bookmarkStore = bookmarkStore,
             )
 
@@ -172,7 +202,7 @@ class BatchedAsyncEntityProcessorTest : DescribeSpec({
             val blocked = goalRelationship(secondsAfterBase = 3 * 60 * 60)
             val processor = stallableProcessorFor(
                 readable + blocked,
-                safeBoundary = SafeBoundary { baseTime.plusSeconds(4) },
+                safeBoundary = boundaryOf(baseTime.plusSeconds(4), readAt = baseTime.plus(Duration.ofHours(4))),
                 batchSize = 1,
             )
 
@@ -189,7 +219,7 @@ class BatchedAsyncEntityProcessorTest : DescribeSpec({
             var boundary = baseTime
             val processor = stallableProcessorFor(
                 listOf(waiting),
-                safeBoundary = SafeBoundary { boundary },
+                safeBoundary = SafeBoundary { SafeBoundaryReading(boundary, boundary.plusSeconds(3 * 60 * 60)) },
                 stallBehaviour = StallBehaviour.LogAndContinue { logged += it },
                 processed = processed,
             )
@@ -213,7 +243,7 @@ class BatchedAsyncEntityProcessorTest : DescribeSpec({
                 listOf(onTheBoundary),
                 processed,
                 bookmarkStore,
-                safeBoundary = SafeBoundary { onTheBoundary.updatedAt },
+                safeBoundary = boundaryOf(onTheBoundary.updatedAt),
             )
 
             processor.processOneBatch()

@@ -56,7 +56,7 @@ data class PositionedEntity<out E>(val entity: E, val position: EntityPosition)
  * and fails loudly rather than spinning silently.
  *
  * A source must not compute `safeBefore` for itself: the boundary has to be established before the snapshot the rows
- * are read with, which is why [BatchedAsyncEntityProcessor] passes it in. [SafeBoundary] explains why.
+ * are read with, which is why [BatchedAsyncEntityProcessor] reads it from a [SafeBoundary] and passes it in.
  */
 interface EntitySource<out E> {
     fun getAfter(after: EntityPosition?, safeBefore: LocalDateTime, batchSize: Int = 100): List<PositionedEntity<E>>

@@ -19,7 +19,7 @@ class SafeBoundaryTest : DescribeSpec({
     describe("Observation.validated") {
         it("returns the boundary when nothing is hidden and no prepared transactions are configured") {
             PostgresXactStartSafeBoundary.Observation(boundary, redactedBackends = 0, maxPreparedTransactions = 0)
-                .validated() shouldBe boundary
+                .validated() shouldBe SafeBoundaryReading(boundary, boundary)
         }
 
         it("refuses to report a boundary when prepared transactions are enabled") {
@@ -53,7 +53,10 @@ class SafeBoundaryTest : DescribeSpec({
         it("holds back by the delay") {
             val now = boundary.plusSeconds(30)
 
-            SafeBoundary.unsafeFixedDelay(Duration.ofSeconds(10)) { now }.safeBefore() shouldBe now.minusSeconds(10)
+            val reading = SafeBoundary.unsafeFixedDelay(Duration.ofSeconds(10)) { now }.read()
+
+            reading.safeBefore shouldBe now.minusSeconds(10)
+            reading.readAt shouldBe now
         }
 
         it("has no blocker diagnosis to offer") {

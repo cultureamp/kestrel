@@ -25,7 +25,7 @@ class AsyncEntityProcessorMonitorTest : DescribeSpec({
             bookmarkStore = bookmarkStore,
             bookmarkName = "goal-relationships",
             entityProcessor = EntityProcessor.from { _: GoalRelationship -> },
-            safeBoundary = SafeBoundary { baseTime.plus(Duration.ofHours(1)) },
+            safeBoundary = SafeBoundary { baseTime.plus(Duration.ofHours(1)).let { SafeBoundaryReading(it, it) } },
             batchSize = batchSize,
             startLog = {},
             endLog = { _, _ -> },
@@ -95,7 +95,7 @@ class AsyncEntityProcessorMonitorTest : DescribeSpec({
                     bookmarkStore = InMemoryEntityBookmarkStore(),
                     bookmarkName = name,
                     entityProcessor = EntityProcessor.from { _: GoalRelationship -> },
-                    safeBoundary = SafeBoundary { baseTime.plus(Duration.ofHours(1)) },
+                    safeBoundary = SafeBoundary { baseTime.plus(Duration.ofHours(1)).let { SafeBoundaryReading(it, it) } },
                     startLog = {},
                     endLog = { _, _ -> },
                 )

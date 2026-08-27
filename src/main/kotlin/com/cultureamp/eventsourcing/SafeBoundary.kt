@@ -15,14 +15,14 @@ import java.time.ZoneOffset
  * after the timestamp they carry. A reader whose bookmark has meanwhile passed 12:00 — which ordinary concurrent
  * traffic will do for it — never sees those rows again, with no error and nothing to alert on.
  *
- * The boundary is **exclusive**: only rows with `updated_at < safeBefore()` may be read. It is compared directly
- * against the polled column, so it is a UTC [LocalDateTime] like an [EntityPosition], and an implementation reading it
- * from a database must convert explicitly rather than relying on the session time-zone.
+ * The boundary is **exclusive**: only rows with `updated_at < safeBefore` may be read. It is compared directly against
+ * the polled column, so it is a UTC [LocalDateTime] like an [EntityPosition], and an implementation reading it from a
+ * database must convert explicitly rather than relying on the session time-zone.
  *
  * [PostgresXactStartSafeBoundary] is the implementation to use on Postgres.
  */
 fun interface SafeBoundary {
-    fun safeBefore(): LocalDateTime
+    fun read(): SafeBoundaryReading
 
     /**
      * What is currently holding the boundary back, for a log line or an error report. Called only when something has
@@ -48,9 +48,23 @@ fun interface SafeBoundary {
          * [BatchedAsyncEntityProcessor] using it wants a `stallThreshold` comfortably longer than [delay].
          */
         fun unsafeFixedDelay(delay: Duration, clock: () -> LocalDateTime = { LocalDateTime.now(ZoneOffset.UTC) }) =
-            SafeBoundary { clock().minus(delay) }
+            SafeBoundary { clock().let { SafeBoundaryReading(safeBefore = it.minus(delay), readAt = it) } }
     }
 }
+
+/**
+ * One reading of a [SafeBoundary].
+ *
+ * [readAt] is the moment the reading was taken, from the same clock that produced [safeBefore] — for
+ * [PostgresXactStartSafeBoundary] both come out of one query, so it costs nothing to report. It exists so that
+ * `readAt - safeBefore` gives how long the boundary has been held back without anybody consulting an application clock,
+ * which [BatchedAsyncEntityProcessor] uses to decide whether a stall is even possible before paying for the query that
+ * would confirm one.
+ *
+ * An implementation must not report a [readAt] earlier than its [safeBefore]; a boundary is a point in the past, never
+ * the future.
+ */
+data class SafeBoundaryReading(val safeBefore: LocalDateTime, val readAt: LocalDateTime)
 
 /**
  * Thrown rather than returning a boundary that would let the reader skip rows. [SafeBoundaryUnreliableException] and
@@ -156,7 +170,7 @@ class PostgresXactStartSafeBoundary(
         }
     }
 
-    override fun safeBefore(): LocalDateTime = observe().validated()
+    override fun read(): SafeBoundaryReading = observe().validated()
 
     private fun observe(): Observation {
         return transaction(db) {
@@ -170,6 +184,7 @@ class PostgresXactStartSafeBoundary(
                     boundary = rs.getObject(1, LocalDateTime::class.java),
                     redactedBackends = rs.getInt(2),
                     maxPreparedTransactions = rs.getInt(3),
+                    readAt = rs.getObject(4, LocalDateTime::class.java),
                 )
             }
         } ?: throw SafeBoundaryException("Reading the safe boundary produced no result")
@@ -180,8 +195,13 @@ class PostgresXactStartSafeBoundary(
      * without a database configured to provoke them: `max_prepared_transactions` in particular is a server-level
      * setting that cannot be changed per session.
      */
-    internal data class Observation(val boundary: LocalDateTime, val redactedBackends: Int, val maxPreparedTransactions: Int) {
-        fun validated(): LocalDateTime {
+    internal data class Observation(
+        val boundary: LocalDateTime,
+        val redactedBackends: Int,
+        val maxPreparedTransactions: Int,
+        val readAt: LocalDateTime = boundary,
+    ) {
+        fun validated(): SafeBoundaryReading {
             if (maxPreparedTransactions != 0) {
                 throw SafeBoundaryUnsupportedException(
                     "max_prepared_transactions is $maxPreparedTransactions, but a prepared transaction is not " +
@@ -199,13 +219,16 @@ class PostgresXactStartSafeBoundary(
                 )
             }
 
-            return boundary
+            return SafeBoundaryReading(boundary, readAt)
         }
     }
 
     private companion object {
         /**
-         * One round trip for the boundary, the redaction count and the prepared-transaction setting.
+         * One round trip for the boundary, the redaction count, the prepared-transaction setting and the moment the
+         * reading was taken. That last one is free here and is what lets a caller age the boundary without an
+         * application clock: `statement_timestamp()` is the cap the boundary is already computed against, so returning
+         * it as well costs nothing and is by construction at or after `safeBefore`.
          *
          * `pid <> pg_backend_pid()` excludes our own transaction, which is required rather than tidy: [safeBefore]
          * clears the snapshot first, so this is the *second* statement of its transaction and our own `xact_start`
@@ -238,7 +261,8 @@ class PostgresXactStartSafeBoundary(
                     statement_timestamp()
                 ) AT TIME ZONE 'UTC',
                 count(*) FILTER (WHERE backend_type IS NULL AND datname = current_database()),
-                current_setting('max_prepared_transactions')::int
+                current_setting('max_prepared_transactions')::int,
+                statement_timestamp() AT TIME ZONE 'UTC'
             FROM pg_stat_activity
         """.trimIndent()
 

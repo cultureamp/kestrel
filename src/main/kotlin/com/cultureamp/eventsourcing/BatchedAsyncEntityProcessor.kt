@@ -2,7 +2,6 @@ package com.cultureamp.eventsourcing
 
 import com.cultureamp.common.Action
 import java.time.Duration
-import java.time.LocalDateTime
 import kotlin.random.Random
 
 interface BookmarkedEntityProcessor<E> {
@@ -41,7 +40,9 @@ interface AsyncEntityProcessor<E> : BookmarkedEntityProcessor<E> {
  * @param safeBoundary the timestamp below which rows are safe to read, which is what stops a slow transaction's rows
  * committing behind the bookmark and being skipped forever.
  * @param stallThreshold how far the head of the table may run ahead of the boundary, with nothing readable in between,
- * before [stallBehaviour] is invoked. Null disables the check.
+ * before [stallBehaviour] is invoked. Null disables the check. Note this measures a backlog of blocked writes rather
+ * than elapsed time, so a table that stops being written to stops accruing it — [AsyncEntityProcessorMonitor]'s
+ * `latencyMs` is what keeps growing regardless, and is the better thing to alert on.
  * @param stallBehaviour whether a stall throws or is logged; see [StallBehaviour].
  */
 class BatchedAsyncEntityProcessor<E>(
@@ -77,9 +78,9 @@ class BatchedAsyncEntityProcessor<E>(
         startLog(startBookmark)
 
         // Read the boundary before the rows, in its own transaction, so a row committing in between is excluded rather than skipped
-        val safeBefore = safeBoundary.safeBefore()
+        val boundary = safeBoundary.read()
 
-        val (count, finalBookmark) = entitySource.getAfter(startBookmark.position, safeBefore, batchSize).foldIndexed(
+        val (count, finalBookmark) = entitySource.getAfter(startBookmark.position, boundary.safeBefore, batchSize).foldIndexed(
             0 to startBookmark,
         ) { index, (_, bookmark), positionedEntity ->
             validateProgress(bookmark.position, positionedEntity.position)
@@ -90,7 +91,7 @@ class BatchedAsyncEntityProcessor<E>(
 
         endLog(count, finalBookmark)
 
-        if (count == 0) reportIfStalled(safeBefore)
+        if (count == 0) reportIfStalled(boundary)
 
         return if (count >= batchSize) Action.Continue else Action.Wait
     }
@@ -108,16 +109,22 @@ class BatchedAsyncEntityProcessor<E>(
      * Called only when a batch read nothing, so a first run over a large table — happily reading millions of rows below
      * a boundary that an unrelated transaction has pinned hours back — never trips it.
      */
-    private fun reportIfStalled(safeBefore: LocalDateTime) {
+    private fun reportIfStalled(boundary: SafeBoundaryReading) {
         if (stallThreshold == null) return
+
+        // A row cannot be stamped after the moment the boundary was read, so `head - safeBefore` can never exceed
+        // `readAt - safeBefore`. When the cheap comparison is under the threshold the expensive one cannot be over it,
+        // which keeps the head query off every idle poll without ever missing a stall.
+        if (Duration.between(boundary.safeBefore, boundary.readAt) <= stallThreshold) return
+
         val head = entityUpdatedAtStats.lastUpdatedAt() ?: return
-        val blockedFor = Duration.between(safeBefore, head)
+        val blockedFor = Duration.between(boundary.safeBefore, head)
         if (blockedFor <= stallThreshold) return
 
         val message = "$bookmarkName read nothing and cannot catch up: the newest row in its table ($head) sits " +
-            "$blockedFor beyond the safe boundary of $safeBefore, which is longer than the $stallThreshold threshold. " +
-            "The oldest open transaction in this database is holding the boundary there. Nothing is lost and this " +
-            "recovers on its own once that transaction ends, so the fix is to end it. " +
+            "$blockedFor beyond the safe boundary of ${boundary.safeBefore}, which is longer than the " +
+            "$stallThreshold threshold. The oldest open transaction in this database is holding the boundary there. " +
+            "Nothing is lost and this recovers on its own once that transaction ends, so the fix is to end it. " +
             safeBoundary.describeBlockers()
 
         when (stallBehaviour) {

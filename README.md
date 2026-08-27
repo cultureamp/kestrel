@@ -537,7 +537,8 @@ keeps growing when a processor is stuck even if nothing new is being written.
   every writing transaction commits inside the delay. The cost of the real boundary is that any long-running
   transaction in the same database holds the reader up. That is reported when a poll reads nothing *and* the newest row
   in the table sits more than `stallThreshold` (an hour) beyond the boundary — both timestamps database-generated, so no
-  application clock is involved. A processor still working through rows below an old boundary is not a stall and says
+  application clock is involved. The head of the table is only queried when the boundary is old enough for that to be
+  possible, which it works out from the `readAt` that comes back with every boundary reading for free. A processor still working through rows below an old boundary is not a stall and says
   nothing. `stallBehaviour` decides what a stall does: `StallBehaviour.Throw`, the default, raises
   `SafeBoundaryStalledException` naming the session to close, while `StallBehaviour.LogAndContinue` reports it to a log
   and keeps polling. The `SafeBoundary` KDoc has the full argument.

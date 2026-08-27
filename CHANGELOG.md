@@ -143,6 +143,14 @@ disappear. A processor still reading rows below an old boundary is not stalled a
 which keeps a first run over a large table quiet while an unrelated transaction pins the boundary
 hours back.
 
+The head of the table is only queried when the boundary is old enough for a stall to be possible.
+`SafeBoundary.read()` returns both the boundary and the moment it was read — for
+`PostgresXactStartSafeBoundary` both come out of the one query, since `statement_timestamp()` is
+already the cap the boundary is computed against — and a row cannot be stamped after the boundary
+was read, so `head - safeBefore` can never exceed `readAt - safeBefore`. That makes the cheap
+comparison an exact pre-filter rather than a heuristic: at a 100ms poll interval it keeps a query
+per poll off an otherwise idle database without ever missing a stall.
+
 `stallBehaviour` decides what a stall does: `StallBehaviour.Throw`, the default, raises
 `SafeBoundaryStalledException` naming the pid and `application_name` of the sessions to go and
 close; `StallBehaviour.LogAndContinue` reports the same message to a log and keeps polling.

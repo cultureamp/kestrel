@@ -78,7 +78,7 @@ class BatchedAsyncEntityProcessorIntegrationTest : DescribeSpec({
                 bookmarkName = bookmarkName,
                 entityProcessor = EntityProcessor.from { id: UUID -> processed += id },
                 batchSize = 2,
-                safeBoundary = SafeBoundary { baseTime.plus(Duration.ofHours(1)) },
+                safeBoundary = SafeBoundary { baseTime.plus(Duration.ofHours(1)).let { SafeBoundaryReading(it, it) } },
             )
             val first = insertGoalRelationship(baseTime.plusSeconds(1))
             val second = insertGoalRelationship(baseTime.plusSeconds(2))
@@ -111,7 +111,7 @@ class BatchedAsyncEntityProcessorIntegrationTest : DescribeSpec({
                 bookmarkStore = bookmarkStore,
                 bookmarkName = bookmarkName,
                 entityProcessor = EntityProcessor.from { id: UUID -> processed += id },
-                safeBoundary = SafeBoundary { baseTime.plus(Duration.ofHours(1)) },
+                safeBoundary = SafeBoundary { baseTime.plus(Duration.ofHours(1)).let { SafeBoundaryReading(it, it) } },
             )
             // 123.456ms past the second: representable in a Postgres `timestamp`, but truncated to 123ms by a
             // millisecond-precision type, which would leave the bookmark behind the row and re-select it forever
@@ -155,7 +155,7 @@ class BatchedAsyncEntityProcessorIntegrationTest : DescribeSpec({
                 bookmarkName = bookmarkName,
                 entityProcessor = EntityProcessor.from { _: UUID -> },
                 batchSize = 1,
-                safeBoundary = SafeBoundary { baseTime.plus(Duration.ofHours(1)) },
+                safeBoundary = SafeBoundary { baseTime.plus(Duration.ofHours(1)).let { SafeBoundaryReading(it, it) } },
             )
             insertGoalRelationship(baseTime.plusSeconds(1))
             insertGoalRelationship(baseTime.plusSeconds(11))
