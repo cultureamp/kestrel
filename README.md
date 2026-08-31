@@ -565,6 +565,63 @@ Each part of that prevents a specific failure:
 Worth testing directly, since none of it fails loudly: that a client-supplied value is ignored, that two rows written
 in one transaction get increasing values, and that an update moves the value forward.
 
+#### Deletions have to be soft
+
+A polled table only works if every change stamps the polled column, and a hard `DELETE` stamps nothing. The row simply
+stops existing, so the next poll cannot tell a deleted row from one that was never there. Whatever the projection
+published about that row stands forever, and there is nothing to alert on: the processor is not behind, no bookmark is
+stuck, and no lag metric moves. **Every deletion a projection must report has to be an `UPDATE` that stamps a flag.**
+
+That makes soft deletion a requirement of this design rather than a style preference, which is worth enforcing in the
+database instead of trusting each write path to remember. A `BEFORE DELETE` trigger refuses a delete unless the
+transaction declares itself first:
+
+```sql
+CREATE FUNCTION forbid_hard_delete() RETURNS trigger LANGUAGE plpgsql AS $$
+  BEGIN
+    IF coalesce(current_setting('app.allow_hard_delete', true), 'off') <> 'on' THEN
+      RAISE EXCEPTION 'hard delete of goal_relationships is not allowed'
+        USING HINT = 'stamp deleted_at instead, or SET LOCAL app.allow_hard_delete = ''on''',
+              ERRCODE = 'insufficient_privilege';
+    END IF;
+    RETURN OLD;
+  END;
+$$;
+
+CREATE TRIGGER forbid_hard_delete BEFORE DELETE
+  ON goal_relationships FOR EACH ROW EXECUTE PROCEDURE forbid_hard_delete();
+```
+
+A path that genuinely has to purge rows — account deletion, GDPR erasure, a retention job — opts out inside its own
+transaction:
+
+```sql
+BEGIN;
+SET LOCAL app.allow_hard_delete = 'on';
+DELETE FROM goal_relationships WHERE account_id = $1;
+COMMIT;
+```
+
+Notes on that pattern:
+
+- **`SET LOCAL`, not `SET`.** It reverts at `COMMIT` or `ROLLBACK`, so the exemption cannot leak to the next query on a
+  pooled connection. There is nothing to remember to unset.
+- **Put the opt-out where the delete is, not at the caller.** Anything that joins an already-open transaction sees the
+  setting, so one statement covers a whole nested purge — but a second caller of the same purge has to remember the
+  statement too. Declaring it in the one function that performs the delete is what stops the next caller forgetting.
+- **Match on the `SQLSTATE`, not the message,** in any test asserting the refusal. `insufficient_privilege` is `42501`;
+  the message is easier to change by accident.
+- **It is bypassable on purpose,** with `ALTER TABLE ... DISABLE TRIGGER` or `session_replication_role = 'replica'`.
+  Both are deliberate acts. The target is the accidental delete, not the intentional one.
+- **It fires inside `ON DELETE CASCADE` from a parent table,** so a child table added later cannot quietly delete
+  through the guard.
+
+A row-level trigger costs one plpgsql call per deleted row, which matters only on a bulk purge; move the check to a
+statement-level trigger if it shows up in those timings.
+
+Then read the flag in `rowToEntity` and let the processor turn it into a tombstone. Do not pass it to `filter` — see
+[things to watch out for](#things-to-watch-out-for).
+
 #### Things to watch out for
 
 - **Choosing the polled column.** Whatever you pass as `updatedAtColumn` has to advance on *every* change you care
@@ -592,8 +649,9 @@ in one transaction get increasing values, and that an update moves the value for
   round-trips a `timestamp` exactly, so the column needs no particular precision.
 - **You only ever see current state.** Unlike an event stream, a table exposes the latest version of each row. A row
   updated twice in quick succession may only be processed once, rows are seen in `updated_at` order rather than
-  creation order, and deletes aren't visible at all unless they're soft deletes. Entity-processors need to be
-  idempotent for the same reasons event-processors do.
+  creation order, and deletes aren't visible at all unless they're soft deletes — see
+  [deletions have to be soft](#deletions-have-to-be-soft). Entity-processors need to be idempotent for the same reasons
+  event-processors do.
 - **Don't `filter` out soft-deleted rows.** It looks like the obvious use for `filter`, and it is the one thing a
   published projection must not do: a soft delete is the *only* way a deletion can reach a projection at all, since a
   hard-deleted row simply stops existing. Filtering the flag out means the row stops being updated rather than being
