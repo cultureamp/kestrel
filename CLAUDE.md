@@ -104,7 +104,8 @@ events (
 - **PostgreSQL** (production) / **H2 2.x** (testing) for event storage
 - **Jetbrains Exposed 1.3.1** - Kotlin SQL DSL for database access
 - **Jackson 3.1.0** - JSON serialization with snake_case naming
-- **Joda-Time** - Date/time handling (not java.time)
+- **Joda-Time** - Date/time handling on the event-sourcing side; the entity-processor side uses
+  `java.time.LocalDateTime`, naive and holding UTC
 - **Kotest 4.6.2** - Testing framework with assertions
 - **Testcontainers** - PostgreSQL integration testing
 
@@ -114,7 +115,7 @@ the rest are declared inline in `build.gradle`.
 ### Important Dependencies
 ```kotlin
 // Database
-exposed-core, exposed-jdbc, exposed-jodatime, exposed-json  // 1.3.1
+exposed-core, exposed-jdbc, exposed-jodatime, exposed-java-time, exposed-json  // 1.3.1
 postgresql:42.7.3
 
 // Serialization

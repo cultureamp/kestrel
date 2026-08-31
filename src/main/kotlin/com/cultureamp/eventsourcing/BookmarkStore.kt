@@ -69,7 +69,7 @@ class RelationalDatabaseBookmarkStore(
     private fun isExists(bookmarkName: String) = !rowsForBookmarks(setOf(bookmarkName)).empty()
 }
 
-private fun createPGSessionLock(db: Database) = PGSessionAdvisoryBookmarkLock {
+internal fun createPGSessionLock(db: Database) = PGSessionAdvisoryBookmarkLock {
     db.connector().connection.let {
         it as? Connection ?: throw RuntimeException("Got a connection of an unknown type: $it")
     }
@@ -91,10 +91,17 @@ interface BookmarkLock : Closeable {
      * @return true If the lock is now held (whether it was freshly obtained or not), false otherwise
      */
     fun tryLock(bookmark: Bookmark): Boolean
+
+    /**
+     * Attempts to acquire the lock for the bookmark of this name. Locking only ever cares about the name, so this is
+     * the form used by stores whose bookmarks aren't sequence-based, e.g. [EntityBookmarkStore].
+     */
+    fun tryLock(bookmarkName: String): Boolean = tryLock(Bookmark(bookmarkName, 0))
 }
 
 object NoOpBookmarkLock: BookmarkLock {
     override fun tryLock(bookmark: Bookmark) = true
+    override fun tryLock(bookmarkName: String) = true
     override fun close() = Unit
 }
 

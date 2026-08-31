@@ -84,3 +84,43 @@ configuration.
 
 Nothing is removed or renamed, so this is source and binary compatible. Consumers that already
 declare these dependencies can drop them, but nothing breaks if they keep them.
+
+# 0.32.0
+
+## New features
+
+Adds an entity-processor stack, mirroring the event-processor stack for the case where the thing you
+want to project from is rows in a table rather than an event stream. Rows are read in `updated_at`
+order and tiebroken on a `uuid` id, as the Confluent JDBC source connector does in its
+"timestamp+incrementing" mode: see `EntitySource`, `EntityProcessor`, `EntityBookmarkStore`,
+`BatchedAsyncEntityProcessor`, `AsyncEntityProcessorMonitor` and `SafeBoundary`, and the
+[README](README.md#entity-processors-projecting-from-a-table-rather-than-an-event-stream) for how
+they fit together.
+
+Nothing existing changes behaviour. `BookmarkLock` gains a `tryLock(bookmarkName: String)` overload
+with a default implementation, so existing implementations are unaffected.
+
+Two things to know before adopting it.
+
+**Positions are naive timestamps holding UTC.** An `EntityPosition` carries a
+`java.time.LocalDateTime`, read from a `timestamp without time zone` column and carried around
+unconverted, so it means whatever the column holds — and the convention, here as in the events table,
+is that it holds UTC. Nothing in the library converts between zones. Map the column with Exposed's
+`datetime`, which needs `exposed-java-time`.
+
+**Reading by `updated_at` needs a `SafeBoundary`.** That column does not record commit order:
+Postgres `now()` is fixed when a transaction *starts*, so a transaction beginning at 12:00 and
+committing at 12:30 makes rows visible half an hour after the timestamp they carry, and a reader
+whose bookmark has meanwhile passed 12:00 never sees them again, with nothing to alert on.
+`BatchedAsyncEntityProcessor` therefore requires one, with no default because no single value is safe
+for every table. Pass `PostgresXactStartSafeBoundary`, which closes the race by construction from
+`pg_stat_activity`, with nothing to tune.
+
+Its cost is a liveness one: any long-running transaction in the same database holds the reader up.
+Once rows have been piling up unreadable behind one for longer than `stallThreshold` (an hour by
+default), `BatchedAsyncEntityProcessor` throws `SafeBoundaryStalledException` naming the session to
+go and close — or logs it and keeps polling, if `stallBehaviour` says so.
+
+The `SafeBoundary` KDoc carries the reasoning: why the boundary must be read in its own transaction,
+why the comparison is exclusive, and why it refuses to report at all rather than report a boundary it
+cannot trust.

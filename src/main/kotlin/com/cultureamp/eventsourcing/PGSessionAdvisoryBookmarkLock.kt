@@ -18,15 +18,17 @@ class PGSessionAdvisoryBookmarkLock(
      */
     private var locksHeld = mutableSetOf<String>()
 
-    override fun tryLock(bookmark: Bookmark): Boolean {
+    override fun tryLock(bookmark: Bookmark): Boolean = tryLock(bookmark.name)
+
+    override fun tryLock(bookmarkName: String): Boolean {
         synchronized(mutex) {
             try {
-                return refreshLock(connection, bookmark.name)
+                return refreshLock(connection, bookmarkName)
             } catch (e: SQLException) {
-                logger.info("Failed to refresh session lock for ${bookmark.name}, resetting connection to try again", e)
+                logger.info("Failed to refresh session lock for $bookmarkName, resetting connection to try again", e)
                 close()
                 connection = getConnection()
-                return refreshLock(connection, bookmark.name)
+                return refreshLock(connection, bookmarkName)
             }
         }
     }
