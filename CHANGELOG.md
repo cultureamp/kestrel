@@ -143,13 +143,15 @@ with. Map the column with the new `utcDatetime(...)` so that `rowToEntity` reads
 hand-written `EntitySource` has to bind zone-free itself (see the `EntitySource` contract). The
 bookmark table's schema is unchanged.
 
-**The database clock stepping backwards is tolerated and detected.** A backwards step between
-transactions left every transaction after it stamping rows below the bookmark for the length of the
-step. `BatchedAsyncEntityProcessor` now stays `clockStepTolerance` (one second by default) below the
-boundary, so a step up to that size cannot lose rows, and when it finds the database clock reading
-earlier than the bookmark it rewinds the bookmark to before anything the stepped clock can have
-stamped and reprocesses from there, reporting through `clockStepLog`. The README has the trade-off
-table for choosing the tolerance.
+**The database clock stepping backwards is now covered by the recommended trigger, and reported.**
+A backwards step between transactions left every transaction after it stamping rows below the
+bookmark for the length of the step, with nothing to alert on. The README's trigger now floors each
+stamp at the table's current maximum plus a microsecond, which keeps every new row above every
+bookmark whatever the clock says, and it puts `AT TIME ZONE 'UTC'` on each clock reading rather than
+around the `GREATEST`, since the floor is already naive. Adopt both changes. `BatchedAsyncEntityProcessor`
+reports through a new `clockStepLog` when it finds the database clock reading earlier than its
+bookmark, which is the one sign of a step it can see; with the floor in place that is a pause of the
+step's length, and without it the same pause is a loss.
 
 **`PostgresXactStartSafeBoundary` refuses three more configurations that would fail open.** A
 connection to a standby (`pg_is_in_recovery()`), whose `pg_stat_activity` does not contain the
