@@ -574,6 +574,10 @@ Each part of that prevents a specific failure:
   probe of the `(updated_at, id)` index per written row, a few microseconds; it needs the full index, not a partial
   one matching a `filter`, since the floor must cover every row. The trade is that during a step the column reads as
   a time up to the step's length in the future. On an empty table `max()` is null and `GREATEST` ignores it.
+  Prior art: [graphile-worker stamps its jobs table](https://github.com/graphile/worker/blob/main/sql/000001.sql#L31)
+  with `greatest(now(), old.updated_at + interval '1 millisecond')`, the same shape with the row's own previous value
+  as the floor. That keeps one row's stamp from moving backwards, which is all a per-job reader needs; a bookmark
+  spans rows, so a new row has to clear the whole table's maximum, and the floor here is table-wide.
 - **`AT TIME ZONE 'UTC'` on each clock reading, into a `timestamp without time zone`.** Positions are naive UTC and
   Kestrel converts the boundary the same explicit way, so neither side depends on the session's `TimeZone`. It goes
   on each clock reading rather than around the `GREATEST`, because `max(updated_at)` is already naive and mixing it
