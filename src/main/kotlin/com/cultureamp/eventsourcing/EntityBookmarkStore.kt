@@ -6,7 +6,6 @@ import org.jetbrains.exposed.v1.core.eq
 import org.jetbrains.exposed.v1.core.inList
 import org.jetbrains.exposed.v1.core.java.javaUUID
 import org.jetbrains.exposed.v1.core.vendors.PostgreSQLDialect
-import org.jetbrains.exposed.v1.javatime.datetime
 import org.jetbrains.exposed.v1.jdbc.Database
 import org.jetbrains.exposed.v1.jdbc.SchemaUtils
 import org.jetbrains.exposed.v1.jdbc.insert
@@ -86,11 +85,15 @@ class RelationalDatabaseEntityBookmarkStore(
 class EntityBookmarks(tableName: String = defaultEntityBookmarksTableName) : Table(tableName) {
     val name = varchar("name", 160)
 
-    /** Naive and holding UTC, like every timestamp here and the source column a position is read from. */
-    val entityLastUpdatedAt = datetime("entity_last_updated_at")
+    /**
+     * Naive and holding UTC, like every timestamp here and the source column a position is read from. Mapped with
+     * [utcDatetime] rather than Exposed's `datetime`, which converts through the JVM's default zone and would shift a
+     * position saved in the hour a DST transition skips: see [UtcLocalDateTimeColumnType].
+     */
+    val entityLastUpdatedAt = utcDatetime("entity_last_updated_at")
     val entityLastId = javaUUID("entity_last_id")
-    val bookmarkCreatedAt = datetime("bookmark_created_at")
-    val bookmarkUpdatedAt = datetime("bookmark_updated_at")
+    val bookmarkCreatedAt = utcDatetime("bookmark_created_at")
+    val bookmarkUpdatedAt = utcDatetime("bookmark_updated_at")
     override val primaryKey = PrimaryKey(name)
 }
 
