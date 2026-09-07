@@ -44,6 +44,7 @@ class BatchedAsyncEntityProcessorTest : DescribeSpec({
         stallThreshold = Duration.ofHours(1),
         stallBehaviour = stallBehaviour,
         batchSize = batchSize,
+        clockStepLog = {},
         startLog = {},
         endLog = { _, _ -> },
     )
@@ -62,6 +63,7 @@ class BatchedAsyncEntityProcessorTest : DescribeSpec({
         entityProcessor = EntityProcessor.from { goalRelationship: GoalRelationship -> processed += goalRelationship },
         safeBoundary = safeBoundary,
         batchSize = batchSize,
+        clockStepLog = {},
         startLog = {},
         endLog = { _, _ -> },
     )
@@ -329,6 +331,79 @@ class BatchedAsyncEntityProcessorTest : DescribeSpec({
             ).processOneBatch()
 
             collected.map { it.position } shouldBe goalRelationships.map { it.position }
+        }
+    }
+
+    describe("the database clock stepping backwards") {
+        fun steppableProcessorFor(
+            rows: List<GoalRelationship>,
+            safeBoundary: SafeBoundary,
+            bookmarkStore: EntityBookmarkStore,
+            processed: MutableList<GoalRelationship>,
+            stepLogs: MutableList<String>,
+        ) = BatchedAsyncEntityProcessor(
+            entitySource = InMemoryEntitySource(rows.map(::positioned)),
+            entityUpdatedAtStats = InMemoryEntitySource(rows.map(::positioned)),
+            bookmarkStore = bookmarkStore,
+            bookmarkName = "goal-relationships",
+            entityProcessor = EntityProcessor.from { row: GoalRelationship -> processed += row },
+            safeBoundary = safeBoundary,
+            clockStepLog = { stepLogs += it },
+            startLog = {},
+            endLog = { _, _ -> },
+        )
+
+        it("reports the clock reading earlier than the bookmark, and reads nothing until it has passed it again") {
+            // The bookmark sits at +60s, a stamp the database produced before. The clock now reads +30s: it has been
+            // stepped back at least 30s. The README's trigger stamps a row written meanwhile a microsecond above the
+            // table's maximum rather than at the clock, which is what keeps it above the bookmark.
+            val bookmarkStore = InMemoryEntityBookmarkStore()
+            val bookmarked = goalRelationship(60)
+            bookmarkStore.save("goal-relationships", bookmarked.position)
+            bookmarkStore.saved.clear()
+            val stampedDuringTheStep = GoalRelationship(UUID.randomUUID(), UUID.randomUUID(), UUID.randomUUID(), accountId, fixtureCreatedAt, bookmarked.updatedAt.plusNanos(1_000))
+            val processed = mutableListOf<GoalRelationship>()
+            val stepLogs = mutableListOf<String>()
+            var clock = baseTime.plusSeconds(30)
+            val processor = steppableProcessorFor(
+                listOf(bookmarked, stampedDuringTheStep),
+                safeBoundary = SafeBoundary { SafeBoundaryReading(clock, clock) },
+                bookmarkStore = bookmarkStore,
+                processed = processed,
+                stepLogs = stepLogs,
+            )
+
+            processor.processOneBatch() shouldBe Action.Wait
+
+            processed shouldBe emptyList()
+            bookmarkStore.saved shouldBe emptyList()
+            stepLogs.single() shouldContain "stepped backwards by at least PT30S"
+
+            clock = baseTime.plusSeconds(61)
+            processor.processOneBatch() shouldBe Action.Wait
+
+            processed shouldBe listOf(stampedDuringTheStep)
+            stepLogs.size shouldBe 1
+        }
+
+        it("does not treat a clock that has merely caught up with the bookmark as a step") {
+            val bookmarkStore = InMemoryEntityBookmarkStore()
+            val bookmarked = goalRelationship(60)
+            bookmarkStore.save("goal-relationships", bookmarked.position)
+            bookmarkStore.saved.clear()
+            val stepLogs = mutableListOf<String>()
+            val processor = steppableProcessorFor(
+                listOf(bookmarked),
+                safeBoundary = SafeBoundary { SafeBoundaryReading(bookmarked.updatedAt, bookmarked.updatedAt) },
+                bookmarkStore = bookmarkStore,
+                processed = mutableListOf(),
+                stepLogs = stepLogs,
+            )
+
+            processor.processOneBatch() shouldBe Action.Wait
+
+            stepLogs shouldBe emptyList()
+            bookmarkStore.saved shouldBe emptyList()
         }
     }
 

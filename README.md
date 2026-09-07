@@ -488,7 +488,10 @@ val entitySource = RelationalDatabaseEntitySource(
 ```
 
 The polled column doesn't have to be called `updated_at`; it just has to move forward every time a row changes. See
-[choosing the polled column](#things-to-watch-out-for) below, because getting this wrong silently misses updates.
+[choosing the polled column](#things-to-watch-out-for) below, because getting this wrong silently misses updates. Map it
+in your table with Kestrel's `utcDatetime("updated_at")` rather than Exposed's `datetime`, for the reason given under
+[positions and time zones](#things-to-watch-out-for); Kestrel reads and binds positions zone-free whatever the mapping,
+so `datetime` is not wrong for positions, but `rowToEntity` reading the column would still go through Exposed's type.
 
 Wiring it up then looks just like an `AsyncEventProcessor`:
 
@@ -546,7 +549,10 @@ Each part of that prevents a specific failure:
   transaction that began earlier but writes later stamps a *smaller* value than the row already had. The column then
   moves backwards and a row that has already been read is missed. `clock_timestamp()` reads the wall clock at the
   moment of the write, and because a `BEFORE` trigger runs after the row lock is taken, two transactions updating one
-  row are serialised and the later writer necessarily reads a later clock.
+  row are serialised and the later writer necessarily reads a later clock. It also matters for a table whose rows are
+  never updated: the boundary's cap is the moment its own statement began, and a transaction that took its `now()`
+  just before that but was descheduled before publishing itself is stamped below the cap by `now()`, and above it by
+  `clock_timestamp()`, which cannot read earlier than the write itself.
 - **`GREATEST(..., transaction_timestamp())`.** The boundary is the oldest open transaction's `xact_start`, and
   safety needs every row stamped at or after *its own* `xact_start`. `transaction_timestamp()` is exactly that value,
   so the `GREATEST` guarantees it even if the system clock steps backwards mid-transaction — `clock_timestamp()` reads
@@ -565,6 +571,40 @@ Each part of that prevents a specific failure:
 Worth testing directly, since none of it fails loudly: that a client-supplied value is ignored, that two rows written
 in one transaction get increasing values, and that an update moves the value forward.
 
+#### The database clock stepping backwards
+
+A position is a clock reading, so the one thing the design cannot see is the clock itself going backwards. The stamping
+trigger above keeps every row at or after its own transaction's start, which covers a step *during* a transaction. A
+step *between* transactions is different: the bookmark holds a stamp from before the step, every transaction after it
+starts, stamps and commits below that bookmark for as long as the step lasts, and the boundary agrees with the new
+clock. Nothing errors, and the rows are never selected.
+
+`BatchedAsyncEntityProcessor` handles it in two ways, both controlled by `clockStepTolerance` (one second by default):
+
+- **It stays that far below the boundary**, so the bookmark can never get within `clockStepTolerance` of the clock.
+  A step up to that size therefore cannot put the clock below the bookmark, and nothing is lost. The cost is exactly
+  that much publish latency, always.
+- **It detects anything bigger on the next poll** — the boundary's `readAt` is the database clock, and it reading
+  *earlier* than the bookmark can only mean the clock has stepped — and rewinds the bookmark to before anything the
+  stepped clock can have stamped: now, less the time since the previous poll on the JVM's monotonic clock, less a
+  second. Everything from there is reprocessed, which at-least-once delivery already permits, and the rewind is
+  reported through `clockStepLog`.
+
+What that leaves is a step larger than the tolerance but shorter than the idle poll interval, which can begin and end
+between two polls without a poll landing inside it. So the knob is a trade:
+
+| `clockStepTolerance` | Guarantee |
+|---|---|
+| zero | no hold-back; any step larger than the poll interval is caught and rewound, smaller ones may lose rows |
+| one second (default) | steps up to a second are harmless; larger ones are caught, except one that fits between two idle polls |
+| the idle poll interval plus a batch's duration | every step is either harmless or caught, with no gap |
+
+Slewing is not a step: a slewed clock runs slow but never goes backwards, and `clock_timestamp()` stays monotonic.
+Chrony's default is to step only at startup and slew after that; classic ntpd steps for offsets over 128 ms. What a
+managed database does is worth finding out before choosing the tolerance. A step while the processor is down is
+detected on restart but cannot be bounded, since there was no previous poll to measure from; rows stamped between the
+step and the restart can still be lost.
+
 #### Things to watch out for
 
 - **Choosing the polled column.** Whatever you pass as `updatedAtColumn` has to advance on *every* change you care
@@ -576,7 +616,13 @@ in one transaction get increasing values, and that an update moves the value for
   transaction *starts*, so a transaction beginning at 12:00 and committing at 12:30 makes rows visible half an hour
   after the timestamp they carry — and a reader whose bookmark has meanwhile passed 12:00 never sees them again, with
   nothing to alert on. Pass `PostgresXactStartSafeBoundary(database)`, which never lets the reader past the start of the
-  oldest transaction that could still commit, and needs no tuning — it is derived entirely from database state. Its cost
+  oldest transaction that could still commit, and needs no tuning — it is derived entirely from database state. It
+  has to read the **primary**: `pg_stat_activity` on a standby lists the standby's own sessions and nothing about the
+  primary's writers, so it checks `pg_is_in_recovery()` and refuses with `SafeBoundaryUnsupportedException` rather than
+  fail open. Give the `Database` the writer endpoint, or list the hosts and set pgjdbc's `targetServerType=primary`.
+  It likewise refuses while any session in the database has `track_activities` off, since such a session publishes no
+  `xact_start`, and when called inside a transaction of the caller's own, where Exposed would join it and the rows
+  could be read from a snapshot older than the boundary. Its cost
   is that any long-running transaction in the same database holds the reader up. That is reported when a poll reads nothing *and* the newest row
   in the table sits more than `stallThreshold` (an hour) beyond the boundary — both timestamps database-generated, so no
   application clock is involved. The head of the table is only queried when the boundary is old enough for that to be
@@ -585,11 +631,23 @@ in one transaction get increasing values, and that an update moves the value for
   `SafeBoundaryStalledException` naming the session to close, while `StallBehaviour.LogAndContinue` reports it to a log
   and keeps polling. The `SafeBoundary` KDoc has the full argument.
 - **Positions are `java.time.LocalDateTime` holding UTC, not joda `DateTime`** — the opposite of the event-sourcing
-  side, which is joda throughout. A position is read straight out of a `timestamp without time zone` column (map it
-  with Exposed's `datetime`) and carried unconverted, so it means whatever the column holds. Nothing here converts
-  between zones, so a column stamped in local time would be compared against a UTC boundary and be wrong by the
-  offset; stamp it in UTC and every clock in this API agrees with it. Being nanosecond-precision, a `LocalDateTime`
-  round-trips a `timestamp` exactly, so the column needs no particular precision.
+  side, which is joda throughout. A position is read straight out of a `timestamp without time zone` column and
+  carried unconverted, so it means whatever the column holds. Nothing here converts between zones, so a column stamped
+  in local time would be compared against a UTC boundary and be wrong by the offset; stamp it in UTC and every clock in
+  this API agrees with it. Being nanosecond-precision, a `LocalDateTime` round-trips a `timestamp` exactly, so the
+  column needs no particular precision.
+- **Positions and time zones: map the column with `utcDatetime`, not Exposed's `datetime`.** Exposed's type moves
+  values through `java.sql.Timestamp`, which is an instant, so each read and each bound parameter is converted from
+  wall-clock time to an instant and back through the JVM's default zone. That cancels out except in the hour a DST
+  transition skips, where the wall-clock value does not exist: on a JVM in `Australia/Melbourne`, a column value of
+  `02:30` on the first Sunday of October reads back as `03:30`, and a position of `02:30` reaches Postgres as `03:30`.
+  A bookmark saved from a row in that hour lands an hour ahead of real time, and every row committed in the following
+  hour sits below it and is skipped. `RelationalDatabaseEntitySource` and the bookmark store read and bind positions
+  through Kestrel's `UtcLocalDateTimeColumnType` whatever the column is mapped with, so this cannot happen to them.
+  It can still happen in two places you own: `rowToEntity`, if it reads the column through a `datetime` mapping, and
+  a hand-written `EntitySource`, which binds `after` and `safeBefore` for itself and has to do so with `utcDatetime`,
+  or JDBC's `setObject`/`getObject` with `LocalDateTime`. Running the JVM in UTC avoids the whole class of problem,
+  but is not something a library can see.
 - **You only ever see current state.** Unlike an event stream, a table exposes the latest version of each row. A row
   updated twice in quick succession may only be processed once, rows are seen in `updated_at` order rather than
   creation order, and deletes aren't visible at all unless they're soft deletes. Entity-processors need to be
