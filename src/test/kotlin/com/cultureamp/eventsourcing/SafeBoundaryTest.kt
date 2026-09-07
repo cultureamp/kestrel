@@ -40,6 +40,26 @@ class SafeBoundaryTest : DescribeSpec({
             exception.message!! shouldContain "2 backend(s)"
         }
 
+        it("refuses to report a boundary from a standby, whose pg_stat_activity does not contain the primary's writers") {
+            val exception = shouldThrow<SafeBoundaryUnsupportedException> {
+                PostgresXactStartSafeBoundary.Observation(boundary, redactedBackends = 0, maxPreparedTransactions = 0, inRecovery = true)
+                    .validated()
+            }
+
+            exception.message!! shouldContain "standby"
+            exception.message!! shouldContain "targetServerType=primary"
+        }
+
+        it("refuses to report a boundary when a backend has track_activities off, since it publishes no xact_start") {
+            val exception = shouldThrow<SafeBoundaryUnreliableException> {
+                PostgresXactStartSafeBoundary.Observation(boundary, redactedBackends = 0, maxPreparedTransactions = 0, untrackedBackends = 1)
+                    .validated()
+            }
+
+            exception.message!! shouldContain "1 backend(s)"
+            exception.message!! shouldContain "track_activities"
+        }
+
         it("reports the prepared-transaction problem first, since it cannot be fixed by a grant") {
             shouldThrow<SafeBoundaryUnsupportedException> {
                 PostgresXactStartSafeBoundary.Observation(boundary, redactedBackends = 2, maxPreparedTransactions = 10)

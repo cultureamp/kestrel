@@ -195,23 +195,32 @@ class PostgresXactStartSafeBoundaryTest : DescribeSpec({
             }
         }
 
-        it("is not computed from a stale backend-status snapshot") {
-            // pg_stat_activity is cached for the whole reading transaction, so without the pg_stat_clear_snapshot()
-            // in read() a caller that had already read it would get a boundary from a view missing the
-            // transaction opened below.
-            transaction(db) {
-                // Populate this transaction's snapshot before the transaction below exists. Exposed joins the nested
-                // transaction inside read() to this one, so the boundary is read with that snapshot in place.
-                exec("SELECT count(*) FROM pg_stat_activity") { rs -> rs.next() }
+        it("refuses to be read inside a transaction the caller already has open") {
+            // Exposed would join read()'s transaction to this one, so the rows' snapshot could be taken before the
+            // boundary — under REPEATABLE READ it would be — which is the ordering the boundary exists to rule out.
+            val exception = shouldThrow<SafeBoundaryException> {
+                transaction(db) { safeBoundary.read() }
+            }
 
-                val (connection, xactStart) = openTransaction()
+            exception.message!! shouldContain "transaction of its own"
+        }
 
-                try {
-                    safeBoundary.read().safeBefore shouldBeLessThanOrEqualTo xactStart
-                } finally {
-                    connection.commit()
-                    connection.close()
-                }
+        it("refuses to report a boundary while a session in this database has track_activities off") {
+            // Such a session publishes no xact_start, so its open transaction is simply absent from min(xact_start):
+            // a second way to fail open, and one the redaction count cannot see, because the row is blank rather than
+            // redacted. track_activities is superuser-only, so this case needs a superuser to set it.
+            val connection = DriverManager.getConnection(postgres.jdbcUrl, postgres.username, postgres.password)
+            try {
+                connection.createStatement().use { it.execute("SET track_activities = off") }
+                connection.autoCommit = false
+                connection.createStatement().use { it.executeQuery("SELECT 1").close() }
+
+                val exception = shouldThrow<SafeBoundaryUnreliableException> { safeBoundary.read() }
+
+                exception.message!! shouldContain "track_activities"
+            } finally {
+                connection.rollback()
+                connection.close()
             }
         }
 
