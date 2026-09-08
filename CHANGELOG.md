@@ -161,3 +161,17 @@ and calling `read()` inside a transaction of the caller's own, which Exposed wou
 rows could be read from a snapshot older than the boundary, throws `SafeBoundaryException`. Call
 `processOneBatch()` outside any transaction, as the README example always did.
 
+# Unreleased
+
+## The recommended trigger no longer floors at the table's maximum
+
+Documentation only; no code changed. The `max(updated_at) + 1 microsecond` term that 0.33.0 added to the
+README's trigger is now presented as an option to weigh rather than part of the recommendation, because it
+makes one bad row much worse: a single stamp in the future pins every later stamp a microsecond above it,
+so the whole table sits above the safe boundary, nothing is publishable, and recovery means rewriting every
+stamp rather than one row. Any write that bypasses the trigger can put one there.
+
+`clockStepLog` already fires on exactly the loss condition, so a backwards step is not silent without the
+floor either. Where a republish is idempotent, wiring that report to an alert and recovering with a bookmark
+rewind is the cheaper trade. The floor is still documented, with its cost measured and its failure mode
+stated, for callers who would rather have the pause.
