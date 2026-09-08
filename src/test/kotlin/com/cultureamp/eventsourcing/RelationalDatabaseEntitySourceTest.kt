@@ -10,6 +10,7 @@ import org.jetbrains.exposed.v1.jdbc.insert
 import org.jetbrains.exposed.v1.jdbc.transactions.transaction
 import java.time.Duration
 import java.time.LocalDateTime
+import java.util.TimeZone
 import java.util.UUID
 
 class RelationalDatabaseEntitySourceTest : DescribeSpec({
@@ -183,6 +184,40 @@ class RelationalDatabaseEntitySourceTest : DescribeSpec({
             )
 
             unfiltered.getAfter(null, distantFuture).map { it.entity } shouldBe listOf(live.id, deleted.id)
+        }
+    }
+
+    describe("time zones") {
+        it("reads and binds positions without going through the JVM's default zone") {
+            // 02:30 on 4 October 2026 does not exist on Melbourne's clocks: DST starts at 02:00 that day. A value that
+            // travels through java.sql.Timestamp is built in the default zone, so it comes out as 03:30 on read and
+            // reaches the database as 03:30 on bind — which for a position is an hour of rows skipped. The row is
+            // inserted as a literal so that the column holds exactly 02:30 whatever the fixture's own mapping does.
+            val inTheGap = LocalDateTime.of(2026, 10, 4, 2, 30)
+            val id = UUID.randomUUID()
+            val defaultZone = TimeZone.getDefault()
+            TimeZone.setDefault(TimeZone.getTimeZone("Australia/Melbourne"))
+            try {
+                transaction(db) {
+                    exec(
+                        "INSERT INTO goal_relationships (id, child_goal_id, parent_goal_id, account_id, created_at, updated_at, cascading_weight) " +
+                            "VALUES ('$id', '${UUID.randomUUID()}', '${UUID.randomUUID()}', '$accountId', " +
+                            "TIMESTAMP '2026-10-04 02:00:00', TIMESTAMP '2026-10-04 02:30:00', 0)",
+                    )
+                }
+
+                val read = entitySource.getAfter(null, distantFuture).single()
+                read.position shouldBe EntityPosition(inTheGap, id)
+                entitySource.lastUpdatedAt() shouldBe inTheGap
+
+                // bound the same way: a bookmark on this row selects strictly past it, not an hour past it
+                entitySource.getAfter(read.position, distantFuture) shouldBe emptyList()
+                entitySource.getAfter(EntityPosition(inTheGap.minusNanos(1_000), UUID(0, 0)), distantFuture).single().position shouldBe read.position
+                // and a boundary sitting exactly on it excludes it, rather than admitting an hour of rows beyond it
+                entitySource.getAfter(null, inTheGap) shouldBe emptyList()
+            } finally {
+                TimeZone.setDefault(defaultZone)
+            }
         }
     }
 

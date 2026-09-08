@@ -1,7 +1,9 @@
 package com.cultureamp.eventsourcing
 
 import org.jetbrains.exposed.v1.jdbc.Database
+import org.jetbrains.exposed.v1.jdbc.transactions.currentOrNull
 import org.jetbrains.exposed.v1.jdbc.transactions.transaction
+import org.jetbrains.exposed.v1.jdbc.transactions.transactionManager
 import java.time.Duration
 import java.time.LocalDateTime
 
@@ -82,13 +84,29 @@ class SafeBoundaryStalledException(message: String) : SafeBoundaryException(mess
  * and already gone from `pg_stat_activity` at `B` — neither visible nor excluded, therefore missed. Safety needs
  * `B <= S`.
  *
- * [BatchedAsyncEntityProcessor] gets that by calling [safeBefore] in its own transaction, which commits before the
+ * [BatchedAsyncEntityProcessor] gets that by calling [read] in its own transaction, which commits before the
  * source's read transaction starts, so `B < S` holds whatever the isolation level. **Do not merge the two to save a
  * round trip.** Every merged arrangement is either unsafe or accidentally safe: one statement (CTE, join or subquery)
  * evaluates `B` during execution and so after `S`; two statements in one `REPEATABLE READ` transaction pin `S` at the
  * first, leaving the boundary fresher than the data; `READ COMMITTED`, or a `VOLATILE` plpgsql function wrapping both,
  * is safe only by virtue of an isolation level set in connection-pool configuration by someone with no reason to know
  * this reader depends on it.
+ *
+ * Exposed would quietly produce the merged arrangement for a caller who runs `processOneBatch()` inside a transaction
+ * of their own on the same database, since `transaction(db)` joins an open one rather than starting another. [read]
+ * therefore refuses to run inside a caller's transaction, with a [SafeBoundaryException], rather than depend on that
+ * caller's isolation level.
+ *
+ * ## The connection must be to the primary
+ *
+ * `pg_stat_activity` is a view over one instance's shared memory. On a standby it lists the standby's own sessions
+ * and nothing about the primary's writers, so the boundary would sit at "now" while rows arrive by WAL replay carrying
+ * older stamps — failing open. [read] checks `pg_is_in_recovery()` and throws [SafeBoundaryUnsupportedException] on a
+ * standby. Point both the [EntitySource] and this boundary at the primary; with pgjdbc, listing the hosts and setting
+ * `targetServerType=primary` makes the driver refuse a standby. The same goes for any table populated by logical
+ * replication or a migration tool: the apply worker is visible here, but the rows carry the *publisher's* stamps and
+ * the trigger that would restamp them does not fire under `session_replication_role = replica`. The boundary is only
+ * sound where the polled column was stamped by this instance's clock, inside the transaction that wrote the row.
  *
  * ## Redaction is the failure that most needs detecting
  *
@@ -97,7 +115,10 @@ class SafeBoundaryStalledException(message: String) : SafeBoundaryException(mess
  * bug it exists to close. Every call therefore counts hidden backends and throws [SafeBoundaryUnreliableException]
  * rather than reporting a boundary it cannot trust. Grant `pg_read_all_stats` to the reading role.
  * `max_prepared_transactions` is asserted to be 0 for the same reason: a prepared transaction is not an ordinary
- * backend, so it would be invisible here.
+ * backend, so it would be invisible here. And a session running with `track_activities = off` publishes no
+ * `xact_start` at all — its row is present and unredacted but blank, with `state = 'disabled'` — so its open
+ * transaction is simply absent from `min(xact_start)`. Those are counted too, and throw the same exception. It is a
+ * superuser-only setting, so this is a misconfiguration to correct rather than something a writer does by accident.
  *
  * ## Liveness
  *
@@ -154,10 +175,21 @@ class PostgresXactStartSafeBoundary(
     override fun read(): SafeBoundaryReading = observe().validated()
 
     private fun observe(): Observation {
+        if (db.transactionManager.currentOrNull() != null) {
+            throw SafeBoundaryException(
+                "The safe boundary must be read in a transaction of its own, but this call would join a transaction the " +
+                    "caller already has open on the same database. Under REPEATABLE READ or SERIALIZABLE that " +
+                    "transaction's snapshot predates the boundary, which is the ordering the boundary exists to rule " +
+                    "out. Call read() — and BatchedAsyncEntityProcessor.processOneBatch() — outside any transaction.",
+            )
+        }
+
         return transaction(db) {
             // A pg_stat_activity read is cached for the whole transaction — pgstat_read_current_status() returns early
-            // once the snapshot is populated, and it is discarded only at transaction end. Clearing it first means
-            // BOUNDARY_SQL's own read populates it, which is what the statement_timestamp() cap below relies on.
+            // once the snapshot is populated, and it is discarded only at transaction end. This is a fresh transaction,
+            // so the snapshot is empty and BOUNDARY_SQL's own read populates it, which is what the statement_timestamp()
+            // cap below relies on. Clearing anyway costs one round trip and keeps that true without depending on the
+            // refusal above.
             exec("SELECT pg_stat_clear_snapshot()")
             exec(BOUNDARY_SQL) { rs ->
                 if (!rs.next()) throw SafeBoundaryException("Reading the safe boundary returned no row, which pg_stat_activity cannot do")
@@ -166,23 +198,36 @@ class PostgresXactStartSafeBoundary(
                     redactedBackends = rs.getInt(2),
                     maxPreparedTransactions = rs.getInt(3),
                     readAt = rs.getObject(4, LocalDateTime::class.java),
+                    untrackedBackends = rs.getInt(5),
+                    inRecovery = rs.getBoolean(6),
                 )
             }
         } ?: throw SafeBoundaryException("Reading the safe boundary produced no result")
     }
 
     /**
-     * The three readings [BOUNDARY_SQL] returns. Separate from the query so that the two refusals below can be tested
-     * without a database configured to provoke them: `max_prepared_transactions` in particular is a server-level
-     * setting that cannot be changed per session.
+     * The readings [BOUNDARY_SQL] returns. Separate from the query so that the refusals below can be tested without a
+     * database configured to provoke them: `max_prepared_transactions` is a server-level setting that cannot be changed
+     * per session, and a standby cannot be conjured up in a unit test at all.
      */
     internal data class Observation(
         val boundary: LocalDateTime,
         val redactedBackends: Int,
         val maxPreparedTransactions: Int,
         val readAt: LocalDateTime = boundary,
+        val untrackedBackends: Int = 0,
+        val inRecovery: Boolean = false,
     ) {
         fun validated(): SafeBoundaryReading {
+            if (inRecovery) {
+                throw SafeBoundaryUnsupportedException(
+                    "This connection is to a standby (pg_is_in_recovery() is true). pg_stat_activity there lists the " +
+                        "standby's own sessions, not the primary's writers, so min(xact_start) says nothing about the " +
+                        "transactions that will write this table and the boundary would fail open. Point the " +
+                        "EntitySource and this boundary at the primary; with pgjdbc, targetServerType=primary enforces it.",
+                )
+            }
+
             if (maxPreparedTransactions != 0) {
                 throw SafeBoundaryUnsupportedException(
                     "max_prepared_transactions is $maxPreparedTransactions, but a prepared transaction is not " +
@@ -197,6 +242,14 @@ class PostgresXactStartSafeBoundary(
                         "in pg_stat_activity, so min(xact_start) is incomplete and rows committed by those backends could " +
                         "be skipped silently. Grant pg_read_all_stats to this role, or run every writer under a role this " +
                         "one is a member of.",
+                )
+            }
+
+            if (untrackedBackends != 0) {
+                throw SafeBoundaryUnreliableException(
+                    "$untrackedBackends backend(s) attached to this database have track_activities off, so they " +
+                        "publish no xact_start and min(xact_start) leaves their transactions out; rows they commit " +
+                        "could be skipped silently. Turn track_activities on for every role that writes this table.",
                 )
             }
 
@@ -234,6 +287,11 @@ class PostgresXactStartSafeBoundary(
          * scope drops is auxiliary processes — checkpointer, walwriter, autovacuum launcher — which report no database
          * and run no transaction over a user table. They are redacted from anyone without `pg_read_all_stats`, so
          * counting them would leave this check permanently unsatisfiable.
+         *
+         * The `state = 'disabled'` count is the other way a backend can be present but contribute nothing: a session
+         * with `track_activities` off has its `xact_start` cleared rather than nulled by redaction, so `backend_type`
+         * is intact and the redaction count does not see it. `pg_is_in_recovery()` says whether this is a standby,
+         * whose `pg_stat_activity` does not contain the primary's writers at all.
          */
         val BOUNDARY_SQL = """
             SELECT
@@ -243,7 +301,9 @@ class PostgresXactStartSafeBoundary(
                 ) AT TIME ZONE 'UTC',
                 count(*) FILTER (WHERE backend_type IS NULL AND datname = current_database()),
                 current_setting('max_prepared_transactions')::int,
-                statement_timestamp() AT TIME ZONE 'UTC'
+                statement_timestamp() AT TIME ZONE 'UTC',
+                count(*) FILTER (WHERE state = 'disabled' AND datname = current_database()),
+                pg_is_in_recovery()
             FROM pg_stat_activity
         """.trimIndent()
 

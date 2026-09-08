@@ -31,7 +31,8 @@ interface AsyncEntityProcessor<E> : BookmarkedEntityProcessor<E> {
  * of the Confluent JDBC source connector: a timestamp column to order by, plus an id to break ties within one
  * timestamp, since a timestamp column is not unique.
  *
- * Run it the same way as a [BatchedAsyncEventProcessor]:
+ * Run it the same way as a [BatchedAsyncEventProcessor], and outside any transaction of your own — the boundary
+ * refuses to be read inside one, for the reason given on [SafeBoundary]:
  *
  * ```
  * ExponentialBackoff(onFailure = { e, _ -> logger.error(e) }).run { asyncEntityProcessor.processOneBatch() }
@@ -44,6 +45,10 @@ interface AsyncEntityProcessor<E> : BookmarkedEntityProcessor<E> {
  * than elapsed time, so a table that stops being written to stops accruing it — [AsyncEntityProcessorMonitor]'s
  * `latencyMs` is what keeps growing regardless, and is the better thing to alert on.
  * @param stallBehaviour whether a stall throws or is logged; see [StallBehaviour].
+ * @param clockStepLog where it is reported that the database clock has been found reading earlier than the bookmark,
+ * which means it has been stepped backwards. The processor reads nothing until the clock passes the bookmark again.
+ * Whether rows written in the meantime are lost is decided by the table's trigger, not here: see
+ * [reportIfClockBehindBookmark] and the README on maintaining the polled column.
  */
 class BatchedAsyncEntityProcessor<E>(
     override val entitySource: EntitySource<E>,
@@ -55,6 +60,7 @@ class BatchedAsyncEntityProcessor<E>(
     private val batchSize: Int = 1000,
     private val stallThreshold: Duration? = Duration.ofHours(1),
     private val stallBehaviour: StallBehaviour = StallBehaviour.Throw,
+    private val clockStepLog: (String) -> Unit = { System.out.println(it) },
     private val startLog: (EntityBookmark) -> Unit = { bookmark ->
         System.out.println("Polling for entities for ${bookmark.name} from position ${bookmark.position}")
     },
@@ -79,6 +85,7 @@ class BatchedAsyncEntityProcessor<E>(
 
         // Read the boundary before the rows, in its own transaction, so a row committing in between is excluded rather than skipped
         val boundary = safeBoundary.read()
+        reportIfClockBehindBookmark(startBookmark, boundary)
 
         val (count, finalBookmark) = entitySource.getAfter(startBookmark.position, boundary.safeBefore, batchSize).foldIndexed(
             0 to startBookmark,
@@ -94,6 +101,32 @@ class BatchedAsyncEntityProcessor<E>(
         if (count == 0) reportIfStalled(boundary)
 
         return if (count >= batchSize) Action.Continue else Action.Wait
+    }
+
+    /**
+     * The bookmark is always a stamp the database produced below a boundary it reported earlier, so the database clock
+     * reading *earlier* than the bookmark can mean only one thing: the clock has been stepped backwards since. The
+     * boundary follows the clock, so nothing is readable until it passes the bookmark again — a pause of the step's
+     * length.
+     *
+     * Whether rows written during that pause are *lost* is decided in the table's trigger, not here. Every bookmark is
+     * a committed row's stamp and so at or below the table's maximum; a trigger that stamps every row strictly above
+     * that maximum (see the README) keeps new rows above every bookmark whatever the clock says, and the pause ends
+     * with nothing missed. Without that floor, every row written while the clock is behind sits below the bookmark for
+     * good, and nothing here can tell the two apart — `getAfter` never returns a row below the bookmark, so there is
+     * nothing to check. That is why the floor is a requirement of the polled column and this is a report.
+     */
+    private fun reportIfClockBehindBookmark(bookmark: EntityBookmark, boundary: SafeBoundaryReading) {
+        val position = bookmark.position ?: return
+        if (!boundary.readAt.isBefore(position.updatedAt)) return
+
+        clockStepLog(
+            "$bookmarkName: the database clock reads ${boundary.readAt}, earlier than the bookmark at ${position.updatedAt}, " +
+                "a value it stamped before, so it has been stepped backwards by at least " +
+                "${Duration.between(boundary.readAt, position.updatedAt)}. Nothing is readable until it passes the " +
+                "bookmark again. Rows written meanwhile are safe only if the polled column is stamped at or above the " +
+                "table's maximum, as the README's trigger does; otherwise they sit below the bookmark and will never be read.",
+        )
     }
 
     private fun reportIfStalled(boundary: SafeBoundaryReading) {
@@ -145,6 +178,7 @@ class BatchedAsyncEntityProcessor<E>(
             stats.entityProcessed(this, positionedEntity, System.currentTimeMillis() - startTime)
         } ?: entityProcessor.process(positionedEntity.entity, positionedEntity.position)
     }
+
 }
 
 /**

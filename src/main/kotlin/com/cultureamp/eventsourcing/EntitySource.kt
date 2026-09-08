@@ -14,8 +14,10 @@ import java.util.UUID
  * [updatedAt] is a [LocalDateTime] read from a `timestamp without time zone` column and carried around unconverted, so
  * a position means whatever the column holds. Kestrel's convention, here as in the events table, is that it holds UTC:
  * nothing in this API converts between zones, so a column stamped in local time would be compared against a UTC
- * boundary and every timestamp here would be wrong by the offset. Its natural equality agrees with [compareTo], which
- * is what bookmarks are compared on.
+ * boundary and every timestamp here would be wrong by the offset. "Unconverted" is deliberate and takes some care:
+ * Kestrel reads and binds positions through [UtcLocalDateTimeColumnType], because Exposed's own `datetime` type goes
+ * through the JVM's default zone and shifts any value falling in the hour a DST transition skips. Its natural equality
+ * agrees with [compareTo], which is what bookmarks are compared on.
  *
  * [compareTo] compares `updatedAt`, then `id` as an *unsigned* 128-bit value, matching how Postgres orders the `uuid`
  * type. Databases that order UUIDs as signed (H2, for one) disagree with it for positions sharing an `updatedAt`, which
@@ -49,6 +51,11 @@ data class PositionedEntity<out E>(val entity: E, val position: EntityPosition)
  *    the very beginning".
  * 2. Return only rows with `updated_at < safeBefore`. See [SafeBoundary] for more detail on why this is necessary.
  * 3. Return rows ordered ascending by `(updated_at, id)`, at most [batchSize] of them.
+ * 4. Bind [after] and [safeBefore], and read each row's position, without a time zone: through [utcDatetime] and
+ *    [UtcLocalDateTimeColumnType], or JDBC's `setObject`/`getObject` with `LocalDateTime`. Exposed's `datetime` type
+ *    converts through the JVM's default zone, which turns `02:30` into `03:30` in the hour a DST transition skips and
+ *    so skips an hour of rows once a year on any JVM whose default zone observes DST. [RelationalDatabaseEntitySource]
+ *    does this for any column mapping; a hand-written source has to do it for itself.
  *
  * A [LocalDateTime] is nanosecond-precision, so it round-trips a `timestamp` exactly and a bookmark saved from a row
  * selects strictly past that row next time whatever the column's precision. A source that breaks the contract anyway

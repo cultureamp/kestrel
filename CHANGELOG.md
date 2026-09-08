@@ -124,3 +124,40 @@ go and close — or logs it and keeps polling, if `stallBehaviour` says so.
 The `SafeBoundary` KDoc carries the reasoning: why the boundary must be read in its own transaction,
 why the comparison is exclusive, and why it refuses to report at all rather than report a boundary it
 cannot trust.
+
+# 0.33.0
+
+## Fixes to the entity-processors added in 0.32.0
+
+Each of these closes a way a row change could go unpublished with nothing to alert on. None changes
+the API for a caller using named arguments and defaults.
+
+**Positions no longer pass through the JVM's default time zone.** Exposed's `datetime` type converts
+every read and every bound parameter through `java.sql.Timestamp`, which shifts any value falling in
+the hour a DST transition skips: on a JVM in a zone observing DST, a column value of `02:30` read back
+as `03:30`, and a position of `02:30` reached Postgres as `03:30`, so a bookmark saved from a row in
+that hour jumped an hour ahead of real time and the following hour of rows was skipped.
+`RelationalDatabaseEntitySource` and `RelationalDatabaseEntityBookmarkStore` now read and bind
+positions through the new `UtcLocalDateTimeColumnType`, whatever type the polled column is mapped
+with. Map the column with the new `utcDatetime(...)` so that `rowToEntity` reads it the same way; a
+hand-written `EntitySource` has to bind zone-free itself (see the `EntitySource` contract). The
+bookmark table's schema is unchanged.
+
+**The database clock stepping backwards is now covered by the recommended trigger, and reported.**
+A backwards step between transactions left every transaction after it stamping rows below the
+bookmark for the length of the step, with nothing to alert on. The README's trigger now floors each
+stamp at the table's current maximum plus a microsecond, which keeps every new row above every
+bookmark whatever the clock says, and it puts `AT TIME ZONE 'UTC'` on each clock reading rather than
+around the `GREATEST`, since the floor is already naive. Adopt both changes. `BatchedAsyncEntityProcessor`
+reports through a new `clockStepLog` when it finds the database clock reading earlier than its
+bookmark, which is the one sign of a step it can see; with the floor in place that is a pause of the
+step's length, and without it the same pause is a loss.
+
+**`PostgresXactStartSafeBoundary` refuses three more configurations that would fail open.** A
+connection to a standby (`pg_is_in_recovery()`), whose `pg_stat_activity` does not contain the
+primary's writers, throws `SafeBoundaryUnsupportedException`; a session in the database running with
+`track_activities = off`, which publishes no `xact_start`, throws `SafeBoundaryUnreliableException`;
+and calling `read()` inside a transaction of the caller's own, which Exposed would join so that the
+rows could be read from a snapshot older than the boundary, throws `SafeBoundaryException`. Call
+`processOneBatch()` outside any transaction, as the README example always did.
+

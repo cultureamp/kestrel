@@ -7,6 +7,7 @@ import org.jetbrains.exposed.v1.jdbc.SchemaUtils
 import org.jetbrains.exposed.v1.jdbc.transactions.transaction
 import java.time.Duration
 import java.time.LocalDateTime
+import java.util.TimeZone
 import java.util.UUID
 
 class RelationalDatabaseEntityBookmarkStoreTest : DescribeSpec({
@@ -74,6 +75,21 @@ class RelationalDatabaseEntityBookmarkStoreTest : DescribeSpec({
             RelationalDatabaseEntityBookmarkStore(db, store.table, recordingLock).checkoutBookmark("shared-name")
 
             locked shouldBe listOf("entity:shared-name")
+        }
+
+        it("stores a position in the hour a DST transition skips exactly, whatever the JVM's default zone") {
+            // Exposed's datetime type would save 02:30 as 03:30 here, an hour ahead of the row it came from, and every
+            // row stamped in that hour would then sit below the bookmark
+            val inTheGap = EntityPosition(LocalDateTime.of(2026, 10, 4, 2, 30), UUID.randomUUID())
+            val defaultZone = TimeZone.getDefault()
+            TimeZone.setDefault(TimeZone.getTimeZone("Australia/Melbourne"))
+            try {
+                store.save("gap-bookmark", inTheGap)
+
+                store.bookmarkFor("gap-bookmark") shouldBe EntityBookmark("gap-bookmark", inTheGap)
+            } finally {
+                TimeZone.setDefault(defaultZone)
+            }
         }
 
         it("checks out a bookmark, obtaining the lock") {
