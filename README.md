@@ -532,11 +532,7 @@ it, so it is worth getting right in one go. On Postgres:
 ```sql
 CREATE FUNCTION set_updated_at_clock_utc() RETURNS trigger LANGUAGE plpgsql AS $$
   BEGIN
-    NEW.updated_at = GREATEST(
-      clock_timestamp() AT TIME ZONE 'UTC',
-      transaction_timestamp() AT TIME ZONE 'UTC',
-      (SELECT max(updated_at) FROM goal_relationships) + interval '1 microsecond'
-    );
+    NEW.updated_at = GREATEST(clock_timestamp(), transaction_timestamp()) AT TIME ZONE 'UTC';
     RETURN NEW;
   END;
 $$;
@@ -562,26 +558,40 @@ Each part of that prevents a specific failure:
   so the `GREATEST` guarantees it even if the system clock steps backwards mid-transaction — `clock_timestamp()` reads
   `CLOCK_REALTIME`, which is corrected rather than monotonic. In the ordinary case it returns `clock_timestamp()`
   unchanged.
-- **`GREATEST(..., max(updated_at) + 1 microsecond)`.** The two clock readings above agree with each other, but a
-  clock stepped *backwards between* transactions agrees with nothing: the bookmark holds a stamp from before the step,
-  and every transaction after it would stamp and commit below that bookmark for as long as the step lasts, with the
-  boundary following the new clock and nothing to alert on. Every bookmark is a committed row's stamp, so it is at or
-  below the table's maximum; stamping each row strictly above that maximum keeps new rows above every bookmark
-  whatever the clock says. During a step the stamps count up from the old maximum a microsecond per write until the
-  clock catches up, and the processor, held below the clock by the boundary, reads nothing until the clock passes the
-  bookmark — a pause of the step's length, not a loss, and one `clockStepLog` reports. Without this floor those rows
-  are lost silently, and Kestrel cannot tell, since nothing below the bookmark is ever selected. The subquery is one
-  probe of the `(updated_at, id)` index per written row, a few microseconds; it needs the full index, not a partial
-  one matching a `filter`, since the floor must cover every row. The trade is that during a step the column reads as
-  a time up to the step's length in the future. On an empty table `max()` is null and `GREATEST` ignores it.
+- **Optionally, `GREATEST(..., max(updated_at) + 1 microsecond)`.** The two clock readings above agree with each
+  other, but a clock stepped *backwards between* transactions agrees with nothing: the bookmark holds a stamp from
+  before the step, and every transaction after it stamps and commits below that bookmark for as long as the step
+  lasts, with the boundary following the new clock. Every bookmark is a committed row's stamp, so it is at or below
+  the table's maximum; stamping each row strictly above that maximum keeps new rows above every bookmark whatever the
+  clock says, and turns the step into a pause of its own length rather than a loss. It costs one probe of the
+  `(updated_at, id)` index per written row — measured at 50k rows, an insert went from 177ms to 368ms and an update
+  from 309ms to 435ms, so about 3 microseconds — and it needs the full index, not a partial one matching a `filter`,
+  since the floor must cover every row. On an empty table `max()` is null and `GREATEST` ignores it.
+
+  **Weigh it rather than adopting it by default, because it makes one bad row much worse.** A single row carrying a
+  stamp in the future pins every later stamp a microsecond above it, permanently: the whole table then sits above the
+  boundary, nothing is publishable, and recovery means rewriting every stamp in the table rather than the one row. A
+  stamp can get there by any write that bypasses the trigger — `DISABLE TRIGGER`, `session_replication_role`, a
+  restore, or logical replication carrying a publisher's stamps. Without the floor, a bad row is one row that is
+  never published.
+
+  Against that, `clockStepLog` already fires on exactly the loss condition, so the step is not silent either way: a
+  step of `S` puts a row below a bookmark that is `lag` behind the clock only when `S > lag`, which is when the report
+  fires. If that report is wired to something that pages, and re-publishing is idempotent — full state keyed by the
+  row id, on a compacted topic — then recovery from a step is moving the bookmark back and sweeping again, and the
+  floor is buying a pause instead of an alert plus a rewind. Managed Postgres makes the step unlikely to begin with:
+  AWS's Time Sync Service slews and smears leap seconds rather than stepping.
+
   Prior art: [graphile-worker stamps its jobs table](https://github.com/graphile/worker/blob/main/sql/000001.sql#L31)
-  with `greatest(now(), old.updated_at + interval '1 millisecond')`, the same shape with the row's own previous value
-  as the floor. That keeps one row's stamp from moving backwards, which is all a per-job reader needs; a bookmark
-  spans rows, so a new row has to clear the whole table's maximum, and the floor here is table-wide.
-- **`AT TIME ZONE 'UTC'` on each clock reading, into a `timestamp without time zone`.** Positions are naive UTC and
-  Kestrel converts the boundary the same explicit way, so neither side depends on the session's `TimeZone`. It goes
-  on each clock reading rather than around the `GREATEST`, because `max(updated_at)` is already naive and mixing it
-  with `timestamptz` values would coerce it through the session zone.
+  with `greatest(now(), old.updated_at + interval '1 millisecond')`, using the row's own previous value as the floor
+  rather than the table's. That keeps one row's stamp from moving backwards, which is all a per-job reader needs, and
+  it does not have the failure above, because one bad row poisons only itself. A bookmark spans rows, so a table-wide
+  floor is what would be needed here — which is exactly why it carries the extra risk.
+
+- **`AT TIME ZONE 'UTC'`, into a `timestamp without time zone`.** Positions are naive UTC and Kestrel converts the
+  boundary the same explicit way, so neither side depends on the session's `TimeZone`. If you add the floor above,
+  move the `AT TIME ZONE 'UTC'` onto each clock reading instead of around the `GREATEST`: `max(updated_at)` is
+  already naive, and mixing it with `timestamptz` values would coerce it through the session zone.
 - **`BEFORE INSERT OR UPDATE`, assigning unconditionally, with no column default.** The application must not be able
   to supply the value, or it can supply one below the boundary or below the row's previous value. Note that an ORM may
   send a value whether you want it to or not — Exposed needs a `clientDefault` on a non-nullable column to permit a
@@ -591,19 +601,26 @@ Each part of that prevents a specific failure:
   matching it serves both the read and the head query.
 
 Worth testing directly, since none of it fails loudly: that a client-supplied value is ignored, that two rows written
-in one transaction get increasing values, that an update moves the value forward, and that a row written while the
-table holds a stamp in the future (put there with the trigger disabled) lands above that stamp.
+in one transaction get increasing values, and that an update moves the value forward. If you adopted the floor, also
+test that a row written while the table holds a stamp in the future (put there with the trigger disabled) lands above
+that stamp — and read that test as the cost of the floor rather than a feature of it, since it is the behaviour that
+makes one bad row stop the whole table.
 
 #### The database clock stepping backwards
 
-A position is a clock reading, so the one thing the design cannot see is the clock going backwards. The trigger above
-covers it: `transaction_timestamp()` keeps a row at or after its own transaction's start, which handles a step during a
-transaction, and the `max(updated_at)` floor keeps every row above every bookmark, which handles a step between
-transactions and a step while the processor is down. What `BatchedAsyncEntityProcessor` adds is a report: the
-boundary's `readAt` is the database clock, and when it reads earlier than the bookmark the clock has stepped. The
-processor reads nothing until the clock passes the bookmark again, and says so through `clockStepLog` on each poll
-until it does. That message is worth an alert if you see it, because it is also the only sign you would get on a table
-whose trigger lacks the floor, where the same pause is a loss.
+A position is a clock reading, so the one thing the design cannot see is the clock going backwards.
+`transaction_timestamp()` keeps a row at or after its own transaction's start, which handles a step *during* a
+transaction. A step *between* transactions is the gap, and you close it either by prevention or by detection.
+
+`BatchedAsyncEntityProcessor` gives you the detection: the boundary's `readAt` is the database clock, and when it reads
+earlier than the bookmark the clock has stepped. The processor reads nothing until the clock passes the bookmark again,
+and says so through `clockStepLog` on each poll until it does. **Wire that to something that pages.** Its condition is
+the loss condition — a step of `S` puts a row below a bookmark that is `lag` behind the clock only when `S > lag` —
+so it fires exactly when rows are being skipped, and recovery is to move the bookmark back and sweep again, which is
+safe wherever a republish is idempotent.
+
+The optional `max(updated_at)` floor is the prevention, and turns that loss into a pause instead. It is a trade, not a
+default: see the bullet above for the failure it introduces.
 
 Slewing is not a step: a slewed clock runs slow but never goes backwards, and `clock_timestamp()` stays monotonic.
 Chrony's default is to step only at startup and slew after that; classic ntpd steps for offsets over 128 ms.
