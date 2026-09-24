@@ -1,0 +1,236 @@
+name: Release
+
+# Publishes to Maven Central when `base_version` in gradle.properties increases on master.
+#
+# Merging a PR that bumps `base_version` is the release trigger: no manual step, no
+# separately-maintained version file. Pushes that don't change the version are a no-op.
+#
+# Required repository secrets (Settings > Secrets and variables > Actions):
+#   CENTRAL_TOKEN_USERNAME    Sonatype Central Portal token username  (1Password: Team Develop > Kestrel Sonatype Credentials)
+#   CENTRAL_TOKEN_PASSWORD    Sonatype Central Portal token password
+#   GPG_SIGNING_KEY           ASCII-armoured private key: gpg --armor --export-secret-keys <keyid>
+#   GPG_SIGNING_PASSPHRASE    Passphrase for that key
+
+on:
+  push:
+    branches:
+      - master
+  workflow_dispatch:
+    inputs:
+      force:
+        description: "Release the current base_version even if this commit didn't bump it. Still refuses to overwrite an already-published version."
+        type: boolean
+        default: false
+
+# One release at a time. Never cancel one in flight: publishing to Maven Central is not
+# reversible, so a half-finished run must be allowed to finish rather than be killed.
+concurrency:
+  group: release
+  cancel-in-progress: false
+
+# Least privilege by default. The release job re-grants contents:write for the tag it pushes.
+permissions:
+  contents: read
+
+jobs:
+  detect:
+    name: Detect version bump
+    runs-on: ubuntu-latest
+    outputs:
+      should_release: ${{ steps.check.outputs.should_release }}
+      version: ${{ steps.check.outputs.version }}
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          fetch-depth: 0
+          fetch-tags: true
+
+      - id: check
+        env:
+          BEFORE: ${{ github.event.before }}
+          FORCE: ${{ inputs.force }}
+        run: |
+          set -euo pipefail
+
+          read_base_version() { sed -n 's/^base_version=//p' | tr -d '[:space:]'; }
+
+          version="$(read_base_version < gradle.properties)"
+          echo "version=$version" >> "$GITHUB_OUTPUT"
+
+          if [[ ! "$version" =~ ^[0-9]+\.[0-9]+\.[0-9]+$ ]]; then
+            echo "::error::base_version '$version' is not a plain x.y.z version; refusing to release."
+            exit 1
+          fi
+
+          skip() { echo "::notice::$1"; echo "should_release=false" >> "$GITHUB_OUTPUT"; exit 0; }
+
+          # Did this push bump the version? This is the trigger, and it is answered entirely
+          # from the local clone, so the common case - a push that changes anything other than
+          # the version - costs nothing and contacts no external service.
+          if [ "$FORCE" = "true" ]; then
+            echo "::notice::Forced release requested; skipping the version-bump check."
+          else
+            # `github.event.before` is master's previous tip, which beats HEAD^ when a push
+            # contains several commits. Fall back to the first parent when it is unavailable
+            # (workflow_dispatch, a freshly-created branch, or a rewritten history).
+            previous_ref="HEAD^"
+            if [[ -n "$BEFORE" && ! "$BEFORE" =~ ^0+$ ]] && git cat-file -e "$BEFORE^{commit}" 2>/dev/null; then
+              previous_ref="$BEFORE"
+            fi
+
+            previous_version="$(git show "$previous_ref:gradle.properties" 2>/dev/null | read_base_version || true)"
+            echo "Previous base_version ($previous_ref): ${previous_version:-<unknown>}"
+            echo "Current  base_version (HEAD): $version"
+
+            if [ "$previous_version" = "$version" ]; then
+              skip "base_version unchanged at $version; nothing to release."
+            fi
+          fi
+
+          # Everything below guards the publish itself, so it applies to forced releases too:
+          # a version on Maven Central can never be re-published, whatever triggered the run.
+          # Cheapest check first again - the tag is local, Maven Central is not.
+          if [ -n "$(git tag -l "v$version")" ]; then
+            skip "Tag v$version already exists; $version has already been released."
+          fi
+
+          pom="https://repo1.maven.org/maven2/com/cultureamp/kestrel/$version/kestrel-$version.pom"
+          if curl -sfI --retry 3 "$pom" > /dev/null; then
+            skip "$version is already published to Maven Central. Bump base_version in gradle.properties to release."
+          fi
+
+          echo "should_release=true" >> "$GITHUB_OUTPUT"
+
+  release:
+    name: Publish ${{ needs.detect.outputs.version }}
+    needs: detect
+    if: needs.detect.outputs.should_release == 'true'
+    runs-on: ubuntu-latest
+    # Gate the credentials behind a GitHub Environment whose deployment branch rule is limited
+    # to master, so they cannot be read by a job on any other branch.
+    environment: maven-central
+    permissions:
+      contents: write # push the release tag and create the GitHub release
+    env:
+      VERSION: ${{ needs.detect.outputs.version }}
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          fetch-depth: 0
+          fetch-tags: true
+
+      - uses: actions/setup-java@b6effb05e454b25005698d916606bdc6ffcbf961 # v5.7.0
+        with:
+          distribution: temurin
+          java-version: "17"
+
+      - uses: gradle/actions/setup-gradle@9c971963bec38e04b3d30dcc455b5382be2fdbfb # v6.3.0
+
+      # Runs before the build so an expired key costs seconds, not a full test suite. Expiry is
+      # a property of the key's self-signature, so it can be extended without generating a new
+      # key - the messages below say how, because nobody will remember in two years.
+      - name: Check the signing key
+        env:
+          GPG_SIGNING_KEY: ${{ secrets.GPG_SIGNING_KEY }}
+          REPO: ${{ github.repository }}
+          WARN_WITHIN_DAYS: "90"
+        run: |
+          set -euo pipefail
+
+          if [ -z "${GPG_SIGNING_KEY:-}" ]; then
+            echo "::error::GPG_SIGNING_KEY is not set on the maven-central environment. Run bin/setup_release_secrets - see CONTRIBUTING.md."
+            exit 1
+          fi
+
+          # Throwaway keyring. Importing needs no passphrase, and nothing outlives this step.
+          GNUPGHOME="$(mktemp -d)"; export GNUPGHOME; chmod 700 "$GNUPGHOME"
+          trap 'rm -rf "$GNUPGHOME"' EXIT
+
+          printf '%s' "$GPG_SIGNING_KEY" | gpg --batch --quiet --import 2>/dev/null || true
+
+          # List *secret* keys, not all keys: a public key imports perfectly happily, so this is
+          # what catches the easy mistake of exporting with --export instead of
+          # --export-secret-keys. The sec record carries the expiry in the same field.
+          read -r keyid expiry < <(gpg --list-secret-keys --with-colons | awk -F: '/^sec:/ { print $5, $7; exit }')
+
+          if [ -z "${keyid:-}" ]; then
+            echo "::error::GPG_SIGNING_KEY does not contain a private key. It is either truncated, or it holds only a public key - the value must come from 'gpg --armor --export-secret-keys <keyid>', not 'gpg --armor --export'. Re-run bin/setup_release_secrets to fix it."
+            exit 1
+          fi
+
+          if [ -z "${expiry:-}" ] || [ "$expiry" = "0" ]; then
+            echo "Signing key $keyid does not expire."
+            exit 0
+          fi
+
+          # GNU date on the runner, BSD date if anyone runs this by hand on a Mac.
+          on="$(date -u -d "@$expiry" +%Y-%m-%d 2>/dev/null || date -u -r "$expiry" +%Y-%m-%d)"
+          now="$(date +%s)"
+          # `days` is for display only. Integer division truncates toward zero, so a key that
+          # lapsed an hour ago also reports 0 - the expired test below compares timestamps.
+          days=$(( (expiry - now) / 86400 ))
+
+          # GitHub annotations are single-line; %0A is how you get a line break into one.
+          remedy="Extend it - this does NOT need a new key, and the key id, fingerprint and identity all stay the same:%0A"
+          remedy+="  gpg --edit-key $keyid     # then type: expire, pick a new period, then save%0A"
+          remedy+="  gpg --keyserver keys.openpgp.org --send-keys $keyid%0A"
+          remedy+="  gpg --armor --export-secret-keys $keyid | gh secret set GPG_SIGNING_KEY --repo $REPO --env maven-central%0A"
+          remedy+="The passphrase is in 1Password (Team Develop). See CONTRIBUTING.md."
+
+          if [ "$expiry" -le "$now" ]; then
+            echo "::error::Signing key $keyid EXPIRED on $on. Maven Central rejects artifacts signed with an expired key, so this release is stopping here rather than publishing something nobody can verify. Nothing has been published, and re-running this workflow once the key is fixed will pick up where it left off.%0A%0A$remedy"
+            exit 1
+          fi
+
+          if [ "$days" -le "$WARN_WITHIN_DAYS" ]; then
+            echo "::warning::Signing key $keyid expires on $on - only $days days away. Once it lapses, every release will fail until it is extended. Doing it now takes about five minutes.%0A%0A$remedy"
+          fi
+
+          echo "Signing key $keyid expires $on ($days days away)."
+
+      # Re-run the tests here rather than trusting the PR build: publishing is irreversible,
+      # so the gate belongs immediately before it.
+      - name: Build and test
+        run: ./gradlew build
+
+      - name: Publish to Maven Central
+        env:
+          CENTRAL_TOKEN_USERNAME: ${{ secrets.CENTRAL_TOKEN_USERNAME }}
+          CENTRAL_TOKEN_PASSWORD: ${{ secrets.CENTRAL_TOKEN_PASSWORD }}
+          GPG_SIGNING_KEY: ${{ secrets.GPG_SIGNING_KEY }}
+          GPG_SIGNING_PASSPHRASE: ${{ secrets.GPG_SIGNING_PASSPHRASE }}
+        run: ./gradlew publishToSonatype closeAndReleaseSonatypeStagingRepository
+
+      - name: Tag and create GitHub release
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: |
+          set -euo pipefail
+
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git tag "v$VERSION"
+          git push origin "v$VERSION"
+
+          # CHANGELOG.md sections are `# <version>` headings, and only releases with breaking
+          # changes get one, so an empty extract is normal.
+          notes="$(awk -v heading="# $VERSION" '
+            $0 == heading { found = 1; next }
+            found && /^# / { exit }
+            found { print }
+          ' CHANGELOG.md)"
+
+          if [ -z "${notes//[[:space:]]/}" ]; then
+            notes="See the commit history for the changes in this release."
+          fi
+
+          gh release create "v$VERSION" --title "$VERSION" --notes "$notes"
+
+      - name: Summary
+        run: |
+          {
+            echo "Published \`com.cultureamp:kestrel:$VERSION\` to Maven Central."
+            echo
+            echo "It usually appears within 15-30 minutes at"
+            echo "<https://central.sonatype.com/artifact/com.cultureamp/kestrel/$VERSION>."
+          } >> "$GITHUB_STEP_SUMMARY"

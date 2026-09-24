@@ -9,7 +9,8 @@ To compile and run tests
 
 `./gradlew test`
 
-Make sure to increase the `base_version` number in `gradle.properties`
+Make sure to increase the `base_version` number in `gradle.properties`. That bump is what triggers a
+release when your PR is merged - see [Releasing](#releasing).
 
 ### Publishing to maven local
 
@@ -17,8 +18,114 @@ If you need to test your version with another project in your development enviro
 
 `SKIP_SIGNING=true ./gradlew publishToMavenLocal`
 
-## Publishing
-If you're authorized to publish to Maven Central, which is a process done manually by a developer, you'll need access to the Central Portal credentials (details below).
+## Releasing
+
+Releases are automatic. The `.github/workflows/release.yaml` workflow watches pushes to `master`, and when
+`base_version` in `gradle.properties` has increased it builds, tests, signs and publishes the artefacts to
+Maven Central, then tags the commit `v<version>` and creates a GitHub release.
+
+So to cut a release:
+
+1. Bump `base_version` in `gradle.properties` (semantic versioning).
+2. Add a `# <version>` section to `CHANGELOG.md` if there are breaking changes. The workflow uses that section
+   as the GitHub release notes.
+3. Merge to `master`.
+
+The artefacts typically appear on Maven Central within 15-30 minutes. A push that doesn't change
+`base_version` is a no-op, and a version already present on Maven Central is never re-published, so the
+workflow is safe to re-run.
+
+You can verify publication at:
+- **Central Portal**: https://central.sonatype.com/artifact/com.cultureamp/kestrel
+- **Maven Central Search**: https://search.maven.org/artifact/com.cultureamp/kestrel
+
+### First-time setup
+
+Run this once, from a repo admin account:
+
+```bash
+bin/setup_release_secrets --dry-run   # check everything, change nothing
+bin/setup_release_secrets             # apply
+```
+
+It creates the `maven-central` environment, restricts it to `master`, loads the four secrets,
+publishes your signing key to a keyserver, requires a reviewed pull request on `master`, and
+finishes with a test signature through the same code path CI uses. Secret values are never
+printed and never written to disk. It is safe to re-run.
+
+By default it signs with the key named by `signing.gnupg.keyName` in `~/.gradle/gradle.properties`.
+Prefer a key that isn't tied to one person:
+
+```bash
+bin/setup_release_secrets --new-key team_pathfinder@cultureamp.com
+```
+
+That generates a dedicated release-signing key owned by the team (`team_pathfinder@cultureamp.com`),
+so releases don't depend on one engineer's personal key remaining valid and a leak doesn't force
+anyone to revoke their own identity key. Save the passphrase in 1Password before you run it - it
+cannot be recovered.
+
+### Secrets and access control
+
+Kestrel is a **public** repository, and these credentials can publish signed artefacts under
+`com.cultureamp` to an immutable registry. Treat them accordingly.
+
+The release job needs four secrets, attached to the `maven-central` GitHub Environment rather than
+to the repository, so they can only be read by a job running on `master`. Values come from
+1Password, Team Develop > Kestrel Sonatype Credentials.
+
+| Secret | Value |
+| --- | --- |
+| `CENTRAL_TOKEN_USERNAME` | Central Portal token username |
+| `CENTRAL_TOKEN_PASSWORD` | Central Portal token password |
+| `GPG_SIGNING_KEY` | ASCII-armoured private key: `gpg --armor --export-secret-keys <keyid>` |
+| `GPG_SIGNING_PASSPHRASE` | Passphrase for that key |
+
+The signing key must be published to a keyserver for Maven Central to accept it - see
+[GPG Key](#3-gpg-key) below. A leaked Central Portal token can simply be regenerated; a leaked
+signing key has to be revoked on the keyservers and replaced, so it is the more sensitive of the two.
+
+Two controls do the real work here, and neither lives in the workflow file:
+
+- **Branch protection on `master`**, requiring a pull request with an approving review. The release
+  job only ever runs on merged code, and GitHub never gives secrets to a pull request from a fork,
+  so outsiders cannot reach these credentials. Anyone who can merge to `master`, however, can write
+  a workflow step that exfiltrates them - so merge review *is* the security boundary. Merging is
+  restricted to write access, so only Culture Ampers can trigger a release.
+- **A deployment branch rule on the `maven-central` environment limited to `master`**, so the
+  secrets cannot be read by a job on any other branch even if a future workflow references the
+  environment.
+
+Required reviewers on the environment are deliberately *not* used: the pull request review is
+already an approval of the same change by the same people, so a second gate would only delay
+releases.
+
+The workflow itself runs with `permissions: contents: read` by default, grants `contents: write`
+only to the release job for the tag it pushes, and pins every third-party action to a commit SHA.
+
+### Signing key expiry
+
+The release-signing key expires - two years by default, which satisfies the Secrets standard's
+"shortest reasonable lifetime" without making the key a permanent liability. Every release checks
+it: inside the last 90 days you get a warning annotation, and once it has lapsed the release fails
+*before* publishing anything, with the fix printed in the log.
+
+Extending is not the same as rotating, and is all that's needed. The key id, fingerprint and
+identity all stay the same, so nothing downstream is affected and old signatures keep verifying:
+
+```bash
+gpg --edit-key <keyid>          # then: expire, choose a new period, save
+gpg --keyserver keys.openpgp.org --send-keys <keyid>
+gpg --armor --export-secret-keys <keyid> \
+  | gh secret set GPG_SIGNING_KEY --repo cultureamp/kestrel --env maven-central
+```
+
+The last step is needed because the exported block carries the updated self-signature.
+
+## Publishing manually
+
+You shouldn't normally need this; it's here for when the workflow is unavailable. If you're publishing to
+Maven Central by hand you'll need access to the Central Portal credentials (details below).
 
 **Note: Sonatype has migrated from OSSRH to Central Portal. The old OSSRH system is deprecated.**
 
