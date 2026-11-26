@@ -1,0 +1,20 @@
+apiVersion: backstage.io/v1alpha1
+kind: Component
+metadata:
+  name: kestrel
+  description: Kotlin Framework for running event-sourced services
+  links:
+    - title: Source
+      url: https://github.com/cultureamp/kestrel
+  tags:
+    - asset-criticality-moderate
+    - camp-enso
+    - data-classification-internal-use-only
+  annotations:
+    github.com/project-slug: cultureamp/kestrel
+    github.com/team-slug: cultureamp/enso-perform-integrations
+    buildkite.com/project-slug: culture-amp/kestrel
+spec:
+  type: library
+  lifecycle: production
+  owner: enso-perform-integrations
